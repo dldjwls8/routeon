@@ -23,7 +23,7 @@
 | DB | PostgreSQL 16 + TimescaleDB, Redis |
 | 지도 | 카카오맵 SDK (관리자 웹), 카카오 모빌리티 API (경로 최적화) |
 | 최적화 | Google OR-Tools (TSP) |
-| 인프라 | Docker Compose, Nginx, Synology NAS |
+| 인프라 | Docker Compose, Nginx, Oracle Cloud |
 | 앱 | Android Studio (Kotlin) |
 | 관리자 웹 | HTML/JS (바닐라) |
 
@@ -33,12 +33,12 @@
 
 | 항목 | 값 |
 |------|-----|
-| NAS 도메인 | `swc.ddns.net` |
-| FastAPI | `http://swc.ddns.net:8000` |
-| Swagger | `http://swc.ddns.net:8000/docs` |
-| 관리자 웹 | `http://swc.ddns.net:3000` |
-| code-server | `http://swc.ddns.net:8443` |
-| 프로젝트 경로 | `/volume1/docker/routeon/` |
+| 서버 IP | `168.138.45.63` |
+| FastAPI | `http://168.138.45.63:8000` |
+| Swagger | `http://168.138.45.63:8000/docs` |
+| 관리자 웹 | `http://168.138.45.63:3000` |
+| code-server | `http://168.138.45.63:8443` |
+| 프로젝트 경로 | `/opt/routeon/` |
 
 ---
 
@@ -48,9 +48,11 @@
 routeon/
 ├── Claude.md
 ├── DB_SCHEMA.md
+├── CHANGELOG.md
 ├── docker-compose.yml
 ├── nginx.conf
 ├── .env
+├── .env.example
 ├── docs/
 │   └── Rest.txt
 ├── backend/
@@ -60,26 +62,29 @@ routeon/
 │   ├── models.py           DB 테이블
 │   ├── requirements.txt
 │   ├── Dockerfile
+│   ├── uploads/            기업 등록 서류 업로드 저장소
 │   ├── services/
 │   │   ├── kakao_mobility.py      카카오 모빌리티 API + TTL 캐시 + find_best_rest_stop
 │   │   ├── optimizer.py           OR-Tools TSP
+│   │   ├── email_service.py       기업 승인/반려 이메일 알림
 │   │   └── rest_stop_inserter.py  법정 휴게 규정 기반 휴게소 자동 삽입 (async)
 │   └── seeds/
 │       ├── seed_rest_stops.py     졸음쉼터 CSV → DB 삽입 (253건 완료)
 │       ├── inspect_files.py       파일 컬럼 확인
 │       └── 한국도로공사_졸음쉼터_20260225.csv
 └── frontend/
-    ├── index.html          관리자 대시보드 (카카오맵 + 실시간 위치 + 경로선)
+    ├── index.html          랜딩 페이지
+    ├── intro.html          서비스 소개
     ├── login.html
-    ├── register.html       전화번호 + 조직코드 포함
-    └── intro.html
+    ├── register.html       기업 등록 (사업자등록증 업로드 포함)
+    ├── dashboard.html      관리자 대시보드 (카카오맵 + 실시간 위치 + 경로선)
+    └── superadmin.html     슈퍼 관리자 (기업 심사)
 ```
 
 ### 컨테이너
-
 | 컨테이너 | 포트 | 설명 |
 |---------|------|------|
-| routeon-db | 5433 | PostgreSQL + TimescaleDB |
+| routeon-db | 5432 | PostgreSQL + TimescaleDB |
 | routeon-api | 8000 | FastAPI 백엔드 |
 | routeon-redis | 6379 | Redis (GPS TTL 5분) |
 | routeon-frontend | 3000 | Nginx + 관리자 웹 |
@@ -163,34 +168,77 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 | `completed` | 운행 완료 | PATCH /trips/{id}/status?status=completed |
 | `cancelled` | 취소 | PATCH /trips/{id}/status?status=cancelled |
 
+### 기업(Organization) 상태 값
+| 값 | 의미 |
+|----|------|
+| `pending_review` | 등록 후 슈퍼 관리자 심사 대기 |
+| `approved` | 승인 완료 — 서비스 이용 가능 |
+| `rejected` | 반려 (reject_reason 참고) |
+
 ---
 
 ## API 전체 목록
 
+### 공통
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
 | `GET /health` | 없음 | 서버 상태 |
 | `GET /config` | 없음 | 카카오 JS 키 반환 |
-| `POST /auth/register` | 없음 | 계정 생성 (phone, org_code 필수) |
+
+### 인증
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
+| `POST /auth/register` | 없음 | 기사 가입 (조직코드 필수, pending 처리) |
 | `POST /auth/login` | 없음 | 로그인 → JWT |
 | `GET /auth/me` | 로그인 | 내 정보 |
 | `PATCH /auth/me` | 로그인 | 전화번호/비밀번호 변경 |
-| `GET /users?role=driver` | 관리자 | 유저 목록 |
+| `GET /auth/check-username` | 없음 | 아이디 중복 확인 |
+| `POST /auth/approve/{id}` | 관리자 | 같은 기업 기사 승인 |
+
+### 유저/차량
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
+| `GET /users?role=driver` | 관리자 | 같은 기업 유저 목록 |
 | `DELETE /users/{id}` | 관리자 | 유저 삭제 |
 | `GET /vehicles` | 관리자 | 차량 목록 |
 | `POST /vehicles` | 관리자 | 차량 등록 |
 | `DELETE /vehicles/{id}` | 관리자 | 차량 비활성화 |
+
+### 기업(Organizations)
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
+| `POST /organizations` | 없음 | 기업 등록 + 관리자 계정 생성 (사업자서류 첨부 필수) |
+| `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 조회 |
+| `POST /organizations/regen-code` | 관리자 | 조직코드 재발급 |
+| `GET /organizations/lookup?org_code=` | 없음 | 조직코드로 기업명 조회 |
+
+### 슈퍼 관리자 (superadmin)
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
+| `GET /superadmin/organizations` | 슈퍼관리자 | 전체 기업 목록 (?status=pending_review\|approved\|rejected) |
+| `GET /superadmin/organizations/{id}/doc` | 슈퍼관리자 | 기업 첨부 서류 다운로드 |
+| `POST /superadmin/organizations/{id}/approve` | 슈퍼관리자 | 기업 승인 + 이메일 알림 |
+| `POST /superadmin/organizations/{id}/reject` | 슈퍼관리자 | 기업 반려 + 사유 저장 + 이메일 알림 |
+| `POST /superadmin/create-account` | 슈퍼관리자 | 계정 직접 생성 |
+
+### 운행/경로
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
 | `GET /rest-stops` | 없음 | 휴게소 목록 |
 | `POST /rest-stops` | 관리자 | 휴게소 등록 |
 | `DELETE /rest-stops/{id}` | 관리자 | 휴게소 비활성화 |
-| `GET /trips?driver_id=&status=` | 로그인 | 운행 목록 (기사: 본인만) |
+| `GET /trips?driver_id=&status=` | 로그인 | 운행 목록 (기사: 본인만, 관리자: 같은 기업) |
 | `POST /trips` | 관리자 | 운행 생성 |
 | `GET /trips/{id}` | 로그인 | 운행 상세 |
 | `GET /trips/{id}/polyline` | 로그인 | 실제 도로 경로선 좌표 |
 | `PATCH /trips/{id}/waypoints` | 관리자 | 경유지 추가 + 앱에 재경로 알림 |
-| `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 처리 (?status=completed\|cancelled) |
+| `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 (?status=completed\|cancelled) |
 | `POST /optimize` | 로그인 | 경로 최적화 (extra_stops, route_mode 지원) |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로 |
+
+### 배송/위치
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
 | `POST /deliveries` | 관리자 | 배송지 단건 등록 |
 | `POST /deliveries/batch` | 관리자 | 배송지 일괄 등록 |
 | `PATCH /deliveries/{id}/assign` | 관리자 | 기사 배정 |
@@ -211,7 +259,6 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 ```
 - 좌표: lon 사용 (lng 금지). rest_stops만 latitude/longitude 예외
 - bcrypt==4.0.1 고정 (4.2+는 passlib 1.7.4 호환 문제)
-- NAS PostgreSQL 5432 점유 → 컨테이너 5433 사용
 - SQLAlchemy 비동기: db.query() 금지 → await db.execute(select())
 - build_time_matrix() → (time_matrix, dist_matrix) 튜플 반환
 - insert_rest_stops() → async, 반드시 await
@@ -219,6 +266,8 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 - 카카오 API Key 프론트엔드 하드코딩 금지 → /config 엔드포인트 경유
 - Nginx: /api/* → FastAPI, /ws/* → WebSocket 프록시
 - GPS 전송 주기: 5초 (앱 설정)
+- 기업 등록 서류: backend/uploads/{org_id}/ 에 저장
+- 슈퍼관리자 계정은 superadmin/create-account로 직접 생성
 ```
 
 ---
@@ -245,7 +294,9 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 - [x] PATCH /trips/{id}/waypoints 원격 배차
 - [x] PATCH /trips/{id}/status 운행 완료/취소
 - [x] 앱 연동 확인
-- [x] 통합 테스트 완료
+- [x] 다중 기업(organizations) 구조
+- [x] 슈퍼 관리자 기업 심사 (승인/반려 + 이메일 알림)
+- [x] Oracle Cloud 서버 마이그레이션
 - [ ] 앱 WS replan_requested 수신 → 자동 replan (팀원 A)
 - [ ] 관리자 웹 운행 생성 UI
 - [ ] 발표 준비

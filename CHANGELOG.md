@@ -66,28 +66,9 @@
   - 기사 관리 모달 (승인 대기 / 승인된 기사)
   - 운행 완료/취소 버튼
 
-### 앱 연동 완료
+**앱 연동 완료**
 - `POST /location-logs` GPS 전송 (5초 주기)
 - WS `replan_requested` 수신 → 자동 replan
-
-
----
-
-## v0.2.1 (2026-04-13)
-
-### 신규 API 추가
-
-**백엔드**
-- `GET /organizations/lookup?org_code=` — 조직코드로 기업명 조회 (인증 불필요)
-  - 기사 앱 가입 화면에서 코드 입력 시 기업명 미리 표시 용도
-- `GET /auth/check-username?username=` — 아이디 중복 확인 (인증 불필요)
-  - 가입 전 사용 가능 여부 확인
-
----
-
-## 예정 작업
-
-- [ ] v0.2 — 다중 기업(organizations) 구조 구현
 
 ---
 
@@ -97,15 +78,26 @@
 
 **DB 변경**
 - `organizations` 테이블 추가
-  - id, name, org_code(unique), created_at
+  - id, name, org_code(unique), status(pending_review/approved/rejected)
+  - doc_filename, doc_path — 사업자등록증 등 첨부파일
+  - reject_reason, reviewed_at
 - `users` 테이블 변경
   - `organization_id` 컬럼 추가 (FK → organizations)
-  - `license_number` 컬럼 — 조직코드 저장 역할 종료 (organization_id로 대체)
+  - `email` 컬럼 추가 (승인/반려 이메일 알림용)
 
 **백엔드 신규 API**
-- `POST /organizations` — 기업 등록 + 관리자 계정 동시 생성, 조직코드 자동 발급
+- `POST /organizations` — 기업 등록 + 관리자 계정 동시 생성 (사업자서류 첨부 필수)
 - `GET /organizations/me` — 내 기업 정보 + 조직코드 조회
 - `POST /organizations/regen-code` — 조직코드 재발급
+- `GET /organizations/lookup?org_code=` — 조직코드로 기업명 조회 (인증 불필요)
+- `GET /auth/check-username` — 아이디 중복 확인 (인증 불필요)
+
+**슈퍼 관리자 신규 API**
+- `GET /superadmin/organizations` — 전체 기업 목록 + 상태 필터
+- `GET /superadmin/organizations/{id}/doc` — 첨부 서류 다운로드
+- `POST /superadmin/organizations/{id}/approve` — 기업 승인 + 이메일 알림
+- `POST /superadmin/organizations/{id}/reject` — 기업 반려 + 사유 + 이메일 알림
+- `POST /superadmin/create-account` — 계정 직접 생성
 
 **백엔드 수정 API**
 - `POST /auth/register` — 조직코드로 기업 확인 후 가입 (기사: pending, 관리자: admin)
@@ -114,17 +106,12 @@
 - `GET /trips` — 같은 기업 기사의 운행만 조회
 
 **프론트엔드**
-- `register.html` 전면 수정
-  - 기업명 입력 추가
-  - 조직코드 입력란 제거 (서버 자동 발급)
-  - 가입 완료 시 발급된 조직코드 알림창 표시
-- `dashboard.html` 수정
-  - 조직코드 조회/복사/재발급 → 새 API 연동
-  - 헤더에 기업명 자동 표시
+- `register.html` 전면 수정 — 기업명 + 사업자서류 업로드 포함
+- `dashboard.html` 수정 — 조직코드 조회/복사/재발급 → 새 API 연동, 헤더에 기업명 표시
+- `superadmin.html` 추가 — 슈퍼 관리자 기업 심사 화면
 
-### 버전 관리 시작
+**버전 관리 시작**
 - `CHANGELOG.md` 생성
-
 
 ---
 
@@ -132,15 +119,26 @@
 
 ### 신규 API 추가
 
-**백엔드**
-- `GET /organizations/lookup?org_code=` — 조직코드로 기업명 조회 (인증 불필요)
-  - 기사 앱 가입 화면에서 코드 입력 시 기업명 미리 표시 용도
-- `GET /auth/check-username?username=` — 아이디 중복 확인 (인증 불필요)
-  - 가입 전 사용 가능 여부 확인
+- `GET /organizations/lookup?org_code=` — 조직코드로 기업명 조회 (v0.2에 통합)
+- `GET /auth/check-username?username=` — 아이디 중복 확인 (v0.2에 통합)
+
+---
+
+## v0.3 (2026-04-23)
+
+### Oracle Cloud 서버 마이그레이션
+
+**인프라**
+- 서버 이전: Synology NAS (`swc.ddns.net`) → Oracle Cloud (`168.138.45.63`)
+- 프로젝트 경로: `/volume1/docker/routeon/` → `/opt/routeon/`
+- DB 포트: `5433` → `5432` (Oracle Cloud는 5432 미점유)
+- GitHub 저장소 신규 생성: `github.com/dldjwls8/routeon`
+- `.gitignore` / `.env.example` 추가
 
 ---
 
 ## 예정 작업
 
-- [ ] v0.3 — 통합 테스트 (다중 기업 환경)
-- [ ] v0.3 — 발표 준비
+- [ ] 앱 WS replan_requested 수신 → 자동 replan (팀원 A)
+- [ ] 관리자 웹 운행 생성 UI
+- [ ] 발표 준비

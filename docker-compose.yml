@@ -6,8 +6,7 @@ services:
     container_name: routeon-db
     restart: unless-stopped
     ports:
-      - "5433:5433"
-    command: postgres -p 5433
+      - "5432:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -31,7 +30,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_HOST=db
-      - POSTGRES_PORT=5433
+      - POSTGRES_PORT=5432
       - JWT_SECRET=${JWT_SECRET}
     volumes:
       - ./backend:/app
@@ -72,7 +71,7 @@ services:
     ports:
       - "8443:8080"
     volumes:
-      - /volume1/docker/routeon:/home/coder/project
+      - /opt/routeon:/home/coder/project
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD}
     user: "0"

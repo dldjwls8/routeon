@@ -11,6 +11,7 @@
 | ENUM | 값 |
 |------|----|
 | `userrole` | `admin`, `driver` |
+| `orgstatus` | `pending_review`, `approved`, `rejected` |
 | `tripstatus` | `scheduled`, `in_progress`, `completed`, `cancelled` |
 | `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual` |
 | `reststoptype` | `highway_rest`, `drowsy_shelter`, `depot`, `custom` |
@@ -18,6 +19,24 @@
 ---
 
 ## 테이블 구조
+
+### `organizations`
+
+기업 단위. 슈퍼 관리자 심사 후 승인 시 서비스 이용 가능.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `id` | INTEGER | PK AUTOINCREMENT | |
+| `name` | VARCHAR(100) | NOT NULL | 기업명 |
+| `org_code` | VARCHAR(20) | UNIQUE NOT NULL | `RT-XXXXXX` 형식 자동 발급 |
+| `status` | orgstatus | NOT NULL DEFAULT 'pending_review' | 심사 상태 |
+| `doc_filename` | VARCHAR(255) | | 첨부 서류 원본 파일명 |
+| `doc_path` | VARCHAR(512) | | 서버 저장 경로 (`backend/uploads/{id}/`) |
+| `reject_reason` | TEXT | | 반려 사유 |
+| `reviewed_at` | DATETIME | | 심사 완료 시각 |
+| `created_at` | DATETIME | NOT NULL | |
+
+---
 
 ### `users`
 
@@ -27,8 +46,10 @@
 | `username` | VARCHAR(50) | UNIQUE NOT NULL | 로그인 ID |
 | `password_hash` | VARCHAR(255) | NOT NULL | bcrypt 해시 |
 | `role` | userrole | NOT NULL DEFAULT 'driver' | `admin` / `driver` |
+| `email` | VARCHAR(255) | | 승인/반려 이메일 알림용 |
 | `phone` | VARCHAR(20) | | 연락처 |
-| `license_number` | VARCHAR(50) | | 조직코드 저장 |
+| `license_number` | VARCHAR(50) | | 운전면허번호 |
+| `organization_id` | INTEGER | FK → organizations.id | 소속 기업 |
 | `created_at` | DATETIME | NOT NULL | |
 
 ---
@@ -160,10 +181,10 @@ GPS 이동 이력. TimescaleDB hypertable (7일 retention).
 ## 관계 다이어그램
 
 ```
-users ──────── trips ──────── deliveries
- (1:N)          (1:N)
-                │
-             vehicles (N:1)
+organizations ──── users ──────── trips ──────── deliveries
+     (1:N)          (1:N)          (1:N)
+                                   │
+                                vehicles (N:1)
 
 users ──────── locations (1:N, GPS 이력)
 
