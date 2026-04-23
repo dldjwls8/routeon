@@ -128,19 +128,6 @@ class LatLng(BaseModel):
     lon: float
     name: Optional[str] = None
 
-class RouteRequest(BaseModel):
-    origin: LatLng
-    destination: LatLng
-    waypoints: list[LatLng] = []
-    vehicle_type: str = "car"
-    optimize: bool = True
-
-class OptimizeRequest(BaseModel):
-    stops: list[LatLng]
-    vehicle_type: str = "car"
-    rest_interval: int = 5
-    max_drive_minutes: int = 60
-
 class RestSearchRequest(BaseModel):
     lat: float
     lon: float
@@ -1198,70 +1185,6 @@ async def approve_driver(
     await db.refresh(user)
 
     return {"id": str(user.id), "username": user.username, "role": user.role}
-    """계정 생성.
-    - role=admin: 관리자 웹 가입 페이지에서 호출. 즉시 admin으로 생성.
-    - role=driver: 기사 앱에서 호출. pending으로 생성 후 관리자 승인 필요.
-    """
-    if req.role not in ("driver", "admin"):
-        raise HTTPException(400, "role은 'driver' 또는 'admin'이어야 합니다.")
-    if not req.phone:
-        raise HTTPException(400, "전화번호는 필수입니다.")
-
-    _r = await db.execute(select(User).where(User.username == req.username))
-    if _r.scalar_one_or_none():
-        raise HTTPException(409, f"이미 존재하는 아이디입니다: {req.username}")
-
-    # 기사 가입 시 pending으로 저장 (관리자 승인 필요)
-    actual_role = UserRole.admin if req.role == "admin" else UserRole.pending
-
-    # 조직코드 자동 생성 (미전달 시)
-    import random, string
-    org_code = req.org_code or "RT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-
-    user = User(
-        username       = req.username,
-        password_hash  = hash_password(req.password),
-        role           = actual_role,
-        phone          = req.phone,
-        license_number = org_code,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
-    return {
-        "id":         str(user.id),
-        "username":   user.username,
-        "role":       user.role,
-        "org_code":   user.license_number,  # 자동 생성된 조직코드
-        "created_at": user.created_at,
-    }
-
-
-@app.post("/auth/approve/{user_id}")
-async def approve_driver(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
-    """관리자: pending 기사를 승인하여 driver로 변경"""
-    import uuid as uuid_lib
-    _r = await db.execute(select(User).where(User.id == uuid_lib.UUID(user_id)))
-    user = _r.scalar_one_or_none()
-    if not user:
-        raise HTTPException(404, "유저를 찾을 수 없습니다.")
-    if user.role != UserRole.pending:
-        raise HTTPException(400, "승인 대기 중인 계정이 아닙니다.")
-
-    user.role = UserRole.driver
-    await db.commit()
-    await db.refresh(user)
-
-    return {
-        "id":       str(user.id),
-        "username": user.username,
-        "role":     user.role,
-    }
 
 
 @app.post("/auth/reissue-org-code")
