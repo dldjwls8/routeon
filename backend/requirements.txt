@@ -1,0 +1,26 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+httpx==0.27.0
+pydantic==2.7.1
+python-dotenv==1.0.1
+
+# DB (비동기)
+sqlalchemy[asyncio]==2.0.30
+asyncpg==0.29.0
+redis==5.0.4
+
+# 인증
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# 경로 최적화
+ortools==9.10.4067
+
+# 이메일
+aiosmtplib==3.0.1
+
+# 시드 스크립트용
+openpyxl==3.1.2
+xlrd==2.0.1
+cachetools==5.3.3

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>루트온 — 화물차 경로 최적화</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --yellow: #FFE812;
+      --yellow-dark: #e5cf00;
+      --black: #111111;
+      --gray-dark: #222222;
+      --gray: #444444;
+      --gray-light: #888888;
+      --bg: #f8f8f6;
+      --white: #ffffff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--black); overflow-x: hidden; }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 64px;
+      background: rgba(248,248,246,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700;
+      color: var(--black); text-decoration: none;
+    }
+    .nav-logo .dot { width: 10px; height: 10px; background: var(--yellow); border-radius: 50%; display: inline-block; }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { font-size: 14px; font-weight: 500; color: var(--gray); text-decoration: none; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--black); }
+    .nav-cta { background: var(--black); color: var(--white) !important; padding: 10px 22px; border-radius: 6px; font-weight: 700 !important; }
+    .nav-cta:hover { background: var(--gray-dark) !important; }
+
+    .hero {
+      min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+      padding: 120px 48px 80px; position: relative; overflow: hidden;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--yellow); color: var(--black);
+      font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 20px;
+      margin-bottom: 32px; width: fit-content;
+      font-family: 'Space Mono', monospace; letter-spacing: 0.05em;
+    }
+    .hero-title { font-size: clamp(48px, 7vw, 96px); font-weight: 900; line-height: 1.05; letter-spacing: -0.03em; max-width: 900px; margin-bottom: 28px; }
+    .hero-title .accent { position: relative; display: inline-block; }
+    .hero-title .accent::after { content: ''; position: absolute; left: 0; bottom: 4px; width: 100%; height: 12px; background: var(--yellow); z-index: -1; border-radius: 2px; }
+    .hero-desc { font-size: 18px; color: var(--gray); line-height: 1.7; max-width: 540px; margin-bottom: 48px; }
+    .hero-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .btn-primary { background: var(--black); color: var(--white); padding: 16px 36px; border-radius: 8px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary:hover { background: var(--gray-dark); transform: translateY(-2px); }
+    .btn-secondary { color: var(--black); padding: 16px 32px; border-radius: 8px; font-size: 16px; font-weight: 500; text-decoration: none; border: 2px solid var(--black); transition: transform 0.2s, background 0.2s; }
+    .btn-secondary:hover { background: var(--black); color: var(--white); transform: translateY(-2px); }
+
+    .hero-bg { position: absolute; top: 0; right: 0; width: 50%; height: 100%; pointer-events: none; overflow: hidden; }
+    .hero-grid { position: absolute; top: 80px; right: -40px; width: 560px; height: 560px; background-image: linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px); background-size: 40px 40px; border-radius: 12px; transform: rotate(-6deg); }
+    .hero-card { position: absolute; top: 140px; right: 80px; background: var(--white); border-radius: 16px; padding: 24px 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.12); width: 300px; animation: float 4s ease-in-out infinite; }
+    .hero-card-label { font-size: 11px; font-weight: 700; color: var(--gray-light); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; font-family: 'Space Mono', monospace; }
+    .hero-card-route { display: flex; flex-direction: column; gap: 10px; }
+    .route-node { display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; }
+    .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .route-line { width: 2px; height: 16px; background: #e0e0e0; margin-left: 4px; }
+    .hero-card-stat { margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0f0f0; display: flex; justify-content: space-between; }
+    .stat-item { text-align: center; }
+    .stat-value { font-size: 18px; font-weight: 900; color: var(--black); font-family: 'Space Mono', monospace; }
+    .stat-label { font-size: 10px; color: var(--gray-light); margin-top: 2px; }
+    .hero-card-badge { position: absolute; top: -12px; right: 20px; background: var(--yellow); color: var(--black); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; font-family: 'Space Mono', monospace; }
+    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
+
+    .stats-bar { background: var(--black); color: var(--white); padding: 32px 48px; display: flex; justify-content: space-around; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .stat-bar-item { text-align: center; }
+    .stat-bar-value { font-size: 36px; font-weight: 900; font-family: 'Space Mono', monospace; color: var(--yellow); }
+    .stat-bar-label { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+    .features { padding: 100px 48px; max-width: 1200px; margin: 0 auto; }
+    .section-label { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gray-light); margin-bottom: 16px; }
+    .section-title { font-size: clamp(32px, 4vw, 52px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 60px; }
+    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .feature-card { background: var(--white); border-radius: 16px; padding: 36px; border: 1px solid rgba(0,0,0,0.06); transition: transform 0.3s, box-shadow 0.3s; position: relative; overflow: hidden; }
+    .feature-card:hover { transform: translateY(-6px); box-shadow: 0 24px 48px rgba(0,0,0,0.08); }
+    .feature-card.highlight { background: var(--black); color: var(--white); }
+    .feature-icon { font-size: 36px; margin-bottom: 20px; display: block; }
+    .feature-title { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .feature-desc { font-size: 14px; line-height: 1.7; color: var(--gray); }
+    .feature-card.highlight .feature-desc { color: rgba(255,255,255,0.6); }
+    .feature-tag { position: absolute; top: 20px; right: 20px; background: var(--yellow); color: var(--black); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; font-family: 'Space Mono', monospace; }
+
+    .flow-section { background: var(--black); color: var(--white); padding: 100px 48px; }
+    .flow-section .section-label { color: rgba(255,255,255,0.4); }
+    .flow-section .section-title { color: var(--white); }
+    .flow-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-top: 60px; }
+    .flow-step { background: rgba(255,255,255,0.04); padding: 36px 28px; position: relative; transition: background 0.3s; }
+    .flow-step:hover { background: rgba(255,255,255,0.08); }
+    .flow-step-num { font-family: 'Space Mono', monospace; font-size: 48px; font-weight: 700; color: rgba(255,255,255,0.1); line-height: 1; margin-bottom: 20px; }
+    .flow-step-icon { font-size: 28px; margin-bottom: 16px; display: block; }
+    .flow-step-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+    .flow-step-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.6; }
+    .flow-step-arrow { position: absolute; top: 50%; right: -16px; transform: translateY(-50%); font-size: 20px; color: var(--yellow); z-index: 1; }
+    .flow-step:last-child .flow-step-arrow { display: none; }
+
+    .tech-section { padding: 80px 48px; max-width: 1200px; margin: 0 auto; }
+    .tech-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 40px; }
+    .tech-chip { background: var(--white); border: 1.5px solid rgba(0,0,0,0.1); padding: 10px 20px; border-radius: 100px; font-size: 13px; font-weight: 600; font-family: 'Space Mono', monospace; color: var(--gray-dark); transition: all 0.2s; cursor: default; }
+    .tech-chip:hover { border-color: var(--black); background: var(--black); color: var(--white); }
+    .tech-chip.active { background: var(--yellow); border-color: var(--yellow); color: var(--black); }
+
+    .cta-section { padding: 100px 48px; text-align: center; background: var(--white); border-top: 1px solid rgba(0,0,0,0.06); }
+    .cta-title { font-size: clamp(36px, 5vw, 64px); font-weight: 900; letter-spacing: -0.03em; margin-bottom: 20px; }
+    .cta-desc { font-size: 18px; color: var(--gray); margin-bottom: 48px; }
+
+    footer { background: var(--black); color: rgba(255,255,255,0.4); padding: 40px 48px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .footer-logo { font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700; color: var(--white); }
+    .footer-copy { font-size: 13px; }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { color: rgba(255,255,255,0.4); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+    .footer-links a:hover { color: var(--white); }
+
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 900px) {
+      nav { padding: 0 24px; }
+      .nav-links li:not(:last-child) { display: none; }
+      .hero { padding: 100px 24px 60px; }
+      .hero-bg { display: none; }
+      .features-grid { grid-template-columns: 1fr; }
+      .flow-steps { grid-template-columns: 1fr 1fr; }
+      .features, .tech-section { padding: 60px 24px; }
+      .flow-section, .cta-section { padding: 60px 24px; }
+      footer { padding: 32px 24px; flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="/index.html" class="nav-logo"><span class="dot"></span>RouteOn</a>
+    <ul class="nav-links">
+      <li><a href="#features">기능</a></li>
+      <li><a href="#flow">사용 흐름</a></li>
+      <li><a href="#tech">기술</a></li>
+      <li><a href="/login.html" class="nav-cta">관리자 로그인 →</a></li>
+    </ul>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">✦ 화물자동차 운수사업법 자동 반영</div>
+    <h1 class="hero-title">화물차 경로,<br><span class="accent">법대로</span> 최적화</h1>
+    <p class="hero-desc">OR-Tools 기반 TSP 알고리즘으로 최적 경유지 순서를 결정하고, 법정 휴게 규정을 자동으로 반영한 경로를 실시간으로 제공합니다.</p>
+    <div class="hero-actions">
+      <a href="/login.html" class="btn-primary">관리자 대시보드 →</a>
+      <a href="#features" class="btn-secondary">기능 살펴보기</a>
+    </div>
+    <div class="hero-bg">
+      <div class="hero-grid"></div>
+      <div class="hero-card">
+        <div class="hero-card-badge">최적 경로</div>
+        <div class="hero-card-label">오늘의 운행</div>
+        <div class="hero-card-route">
+          <div class="route-node"><div class="route-dot" style="background:#27ae60"></div><span>서울 물류센터 출발</span></div>
+          <div class="route-line"></div>
+          <div class="route-node"><div class="route-dot" style="background:#e67e22"></div><span>대전 창고</span></div>
+          <div class="route-line"></div>
+          <div class="route-node"><div class="route-dot" style="background:#8e44ad"></div><span>☕ 금강휴게소 (15분)</span></div>
+          <div class="route-line"></div>
+          <div class="route-node"><div class="route-dot" style="background:#e67e22"></div><span>대구 창고</span></div>
+          <div class="route-line"></div>
+          <div class="route-node"><div class="route-dot" style="background:#e74c3c"></div><span>부산 물류창고 도착</span></div>
+        </div>
+        <div class="hero-card-stat">
+          <div class="stat-item"><div class="stat-value">420km</div><div class="stat-label">총 거리</div></div>
+          <div class="stat-item"><div class="stat-value">5.4h</div><div class="stat-label">예상 시간</div></div>
+          <div class="stat-item"><div class="stat-value">1곳</div><div class="stat-label">휴게소</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="stats-bar">
+    <div class="stat-bar-item"><div class="stat-bar-value">253+</div><div class="stat-bar-label">졸음쉼터 데이터</div></div>
+    <div class="stat-bar-item"><div class="stat-bar-value">6,000초</div><div class="stat-bar-label">선제적 휴게 삽입 기준</div></div>
+    <div class="stat-bar-item"><div class="stat-bar-value">TSP</div><div class="stat-bar-label">OR-Tools 최적화</div></div>
+    <div class="stat-bar-item"><div class="stat-bar-value">실시간</div><div class="stat-bar-label">WebSocket 관제</div></div>
+  </div>
+
+  <section class="features" id="features">
+    <div class="section-label">FEATURES</div>
+    <h2 class="section-title">화물 운송에 필요한<br>모든 것</h2>
+    <div class="features-grid">
+      <div class="feature-card highlight fade-up">
+        <span class="feature-icon">🗺️</span>
+        <div class="feature-title">경로 최적화</div>
+        <div class="feature-desc">OR-Tools TSP 알고리즘으로 다중 경유지 방문 순서를 자동으로 최적화합니다. 카카오 모빌리티 API 기반 실제 도로 소요 시간을 반영합니다.</div>
+        <div class="feature-tag">핵심</div>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay:0.1s">
+        <span class="feature-icon">😴</span>
+        <div class="feature-title">법정 휴게 자동 삽입</div>
+        <div class="feature-desc">화물자동차 운수사업법 [별표3] 기준으로 1시간 40분 누적 운전 시 휴게소를 자동으로 경로에 삽입합니다.</div>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay:0.2s">
+        <span class="feature-icon">📡</span>
+        <div class="feature-title">실시간 관제</div>
+        <div class="feature-desc">WebSocket 기반 실시간 GPS 수신으로 기사의 현재 위치를 지도에 즉시 표시합니다. 50m 도착 감지로 배송 완료를 자동 처리합니다.</div>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay:0.3s">
+        <span class="feature-icon">🚚</span>
+        <div class="feature-title">원격 배차</div>
+        <div class="feature-desc">운행 중 관리자가 새 경유지를 추가하면 기사 앱에 즉시 알림을 전송하고 자동으로 경로를 재계산합니다.</div>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay:0.4s">
+        <span class="feature-icon">⚡</span>
+        <div class="feature-title">재경로 계산</div>
+        <div class="feature-desc">정체, 사고 등 돌발 상황 발생 시 현재 위치 기준으로 즉시 재최적화합니다. 긴급 예외 모드로 3시간까지 연속 운전을 허용합니다.</div>
+      </div>
+      <div class="feature-card fade-up" style="transition-delay:0.5s">
+        <span class="feature-icon">📊</span>
+        <div class="feature-title">경로선 시각화</div>
+        <div class="feature-desc">카카오맵 위에 실제 도로 경로선을 표시합니다. 출발지, 경유지, 휴게소, 목적지를 구분된 마커로 확인할 수 있습니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="flow-section" id="flow">
+    <div style="max-width:1200px; margin:0 auto;">
+      <div class="section-label">HOW IT WORKS</div>
+      <h2 class="section-title">간단한 4단계</h2>
+      <div class="flow-steps">
+        <div class="flow-step fade-up">
+          <div class="flow-step-num">01</div>
+          <span class="flow-step-icon">📋</span>
+          <div class="flow-step-title">운행 등록</div>
+          <div class="flow-step-desc">관리자가 경유지와 목적지를 등록하고 기사에게 배차합니다.</div>
+          <div class="flow-step-arrow">→</div>
+        </div>
+        <div class="flow-step fade-up" style="transition-delay:0.1s">
+          <div class="flow-step-num">02</div>
+          <span class="flow-step-icon">🧠</span>
+          <div class="flow-step-title">경로 최적화</div>
+          <div class="flow-step-desc">기사가 출발 시 OR-Tools TSP로 최적 방문 순서와 휴게소 위치를 계산합니다.</div>
+          <div class="flow-step-arrow">→</div>
+        </div>
+        <div class="flow-step fade-up" style="transition-delay:0.2s">
+          <div class="flow-step-num">03</div>
+          <span class="flow-step-icon">🗺️</span>
+          <div class="flow-step-title">운행 시작</div>
+          <div class="flow-step-desc">기사는 최적 경로로 운행하고 5초마다 GPS를 전송합니다. 관리자는 실시간으로 위치를 확인합니다.</div>
+          <div class="flow-step-arrow">→</div>
+        </div>
+        <div class="flow-step fade-up" style="transition-delay:0.3s">
+          <div class="flow-step-num">04</div>
+          <span class="flow-step-icon">✅</span>
+          <div class="flow-step-title">자동 완료</div>
+          <div class="flow-step-desc">배송지 50m 이내 도착 시 자동으로 완료 처리됩니다. 관리자는 원격으로 경유지를 추가할 수 있습니다.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tech-section" id="tech">
+    <div class="section-label">TECH STACK</div>
+    <h2 class="section-title">검증된 기술로<br>만들었습니다</h2>
+    <div class="tech-grid">
+      <span class="tech-chip active">OR-Tools TSP</span>
+      <span class="tech-chip active">FastAPI</span>
+      <span class="tech-chip active">카카오 모빌리티 API</span>
+      <span class="tech-chip">PostgreSQL 16</span>
+      <span class="tech-chip">TimescaleDB</span>
+      <span class="tech-chip">Redis</span>
+      <span class="tech-chip">WebSocket</span>
+      <span class="tech-chip">Docker</span>
+      <span class="tech-chip">Android (Kotlin)</span>
+      <span class="tech-chip">Synology NAS</span>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <h2 class="cta-title">지금 바로<br>시작하세요</h2>
+    <p class="cta-desc">관리자 계정으로 로그인하면 모든 기능을 사용할 수 있습니다.</p>
+    <a href="/login.html" class="btn-primary" style="font-size:18px; padding:18px 48px;">관리자 로그인 →</a>
+  </section>
+
+  <footer>
+    <div class="footer-logo">RouteOn</div>
+    <div class="footer-copy">© 2026 루트온 팀 — 졸업작품 프로젝트</div>
+    <div class="footer-links">
+      <a href="/login.html">관리자 로그인</a>
+      <a href="/register.html">회원가입</a>
+    </div>
+  </footer>
+
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>

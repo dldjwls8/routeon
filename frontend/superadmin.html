@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RouteOn — 슈퍼 관리자</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #111118;
+      --border:   #1e1e2e;
+      --border2:  #2a2a3e;
+      --text:     #e2e2f0;
+      --muted:    #6b6b8a;
+      --accent:   #FFE812;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --orange:   #f97316;
+      --blue:     #3b82f6;
+      --mono:     'IBM Plex Mono', monospace;
+      --sans:     'IBM Plex Sans KR', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── 로그인 화면 ── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    .login-bg {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 30% 60%, rgba(255,232,18,0.04) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 60% at 80% 20%, rgba(59,130,246,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .login-card {
+      position: relative;
+      z-index: 1;
+      width: 360px;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      padding: 40px;
+      background: var(--surface);
+    }
+
+    .login-eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+
+    .login-title {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .login-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 32px;
+    }
+
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-family: var(--mono);
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .field input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: var(--sans);
+      color: var(--text);
+      transition: border-color 0.15s;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .btn-login {
+      width: 100%;
+      margin-top: 8px;
+      padding: 12px;
+      background: var(--accent);
+      color: #111;
+      border: none;
+      border-radius: 3px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: var(--mono);
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-login:hover { opacity: 0.88; }
+
+    #login-error {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--red);
+      text-align: center;
+      display: none;
+    }
+
+    /* ── 메인 화면 ── */
+    #main-screen { display: none; flex-direction: column; min-height: 100vh; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      height: 52px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar-logo {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    .topbar-divider {
+      width: 1px;
+      height: 16px;
+      background: var(--border2);
+    }
+
+    .topbar-role {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+
+    .topbar-user {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .btn-sm {
+      padding: 6px 14px;
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      font-size: 12px;
+      font-family: var(--mono);
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .btn-sm:hover { border-color: var(--text); color: var(--text); }
+
+    /* ── 탭 ── */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      background: var(--surface);
+    }
+
+    .tab {
+      padding: 12px 20px;
+      font-size: 13px;
+      font-family: var(--mono);
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+    }
+
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── 콘텐츠 ── */
+    .content { padding: 32px; flex: 1; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .section-count {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .btn-refresh {
+      padding: 7px 14px;
+      background: transparent;
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: var(--mono);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── 기업 카드 ── */
+    .org-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .org-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 20px 24px;
+      transition: border-color 0.15s;
+    }
+    .org-card:hover { border-color: var(--border2); }
+
+    .org-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .org-name {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+
+    .org-meta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .org-meta-item {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
+    .org-meta-item span {
+      color: var(--text);
+      margin-left: 4px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 2px;
+      font-size: 11px;
+      font-family: var(--mono);
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-pending  { background: rgba(249,115,22,0.12); color: var(--orange); border: 1px solid rgba(249,115,22,0.25); }
+    .badge-approved { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.25); }
+    .badge-rejected { background: rgba(239,68,68,0.12);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+
+    .org-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-action {
+      padding: 7px 16px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-family: var(--mono);
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+      letter-spacing: 0.03em;
+    }
+    .btn-action:hover { opacity: 0.82; }
+    .btn-approve-org { background: var(--green);  color: #fff; }
+    .btn-reject-org  { background: var(--red);    color: #fff; }
+    .btn-doc         { background: var(--blue);   color: #fff; }
+    .btn-disabled    { background: var(--border2); color: var(--muted); cursor: default; }
+    .btn-disabled:hover { opacity: 1; }
+
+    .reject-reason-box {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: rgba(239,68,68,0.06);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 3px;
+      font-size: 12px;
+      color: var(--red);
+      font-family: var(--mono);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .empty-state .icon { font-size: 32px; margin-bottom: 12px; display: block; }
+
+    /* ── 반려 모달 ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      padding: 32px;
+      width: 440px;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .modal-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .modal-box textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-family: var(--sans);
+      color: var(--text);
+      resize: vertical;
+      min-height: 100px;
+      margin-bottom: 16px;
+    }
+    .modal-box textarea:focus { outline: none; border-color: var(--red); }
+
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ── 슈퍼어드민 계정 생성 탭 ── */
+    .create-form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 28px;
+      max-width: 440px;
+    }
+
+    /* ── 로딩 ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- 로그인 화면 -->
+<div id="login-screen">
+  <div class="login-bg"></div>
+  <div class="login-card">
+    <div class="login-eyebrow">RouteOn Internal</div>
+    <div class="login-title">슈퍼 관리자</div>
+    <div class="login-sub">루트온 운영팀 전용 콘솔입니다</div>
+    <div class="field">
+      <label>아이디</label>
+      <input type="text" id="login-username" placeholder="superadmin" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>비밀번호</label>
+      <input type="password" id="login-password" placeholder="••••••••">
+    </div>
+    <button class="btn-login" onclick="doLogin()">로그인 →</button>
+    <div id="login-error">아이디 또는 비밀번호가 올바르지 않습니다.</div>
+  </div>
+</div>
+
+<!-- 메인 화면 -->
+<div id="main-screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">RouteOn</div>
+      <div class="topbar-divider"></div>
+      <div class="topbar-role">Super Admin Console</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-user" id="topbar-username"></div>
+      <button class="btn-sm" onclick="doLogout()">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('pending')"  id="tab-pending">심사 대기</div>
+    <div class="tab"        onclick="switchTab('all')"      id="tab-all">전체 기업</div>
+    <div class="tab"        onclick="switchTab('create')"   id="tab-create">슈퍼어드민 계정 생성</div>
+  </div>
+
+  <div class="content">
+
+    <!-- 심사 대기 / 전체 탭 -->
+    <div id="pane-orgs">
+      <div class="section-header">
+        <div>
+          <div class="section-title" id="pane-title">심사 대기 기업</div>
+          <div class="section-count" id="pane-count"></div>
+        </div>
+        <button class="btn-refresh" onclick="loadOrgs()">↺ 새로고침</button>
+      </div>
+      <div class="org-list" id="org-list">
+        <div class="empty-state"><span class="spinner"></span></div>
+      </div>
+    </div>
+
+    <!-- 슈퍼어드민 계정 생성 탭 -->
+    <div id="pane-create" style="display:none;">
+      <div class="section-header">
+        <div class="section-title">슈퍼어드민 계정 생성</div>
+      </div>
+      <div class="create-form">
+        <div class="field">
+          <label>아이디</label>
+          <input type="text" id="sa-username" placeholder="superadmin2">
+        </div>
+        <div class="field">
+          <label>전화번호</label>
+          <input type="text" id="sa-phone" placeholder="010-0000-0000">
+        </div>
+        <div class="field">
+          <label>비밀번호</label>
+          <input type="password" id="sa-password" placeholder="••••••••">
+        </div>
+        <button class="btn-login" style="margin-top:8px;" onclick="createSuperAdmin()">계정 생성</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 반려 모달 -->
+<div class="modal-overlay" id="reject-modal">
+  <div class="modal-box">
+    <div class="modal-title">기업 등록 반려</div>
+    <div class="modal-sub" id="reject-modal-sub"></div>
+    <textarea id="reject-reason" placeholder="반려 사유를 입력해주세요. (기업에게 전달됩니다)"></textarea>
+    <div class="modal-actions">
+      <button class="btn-sm" onclick="closeRejectModal()">취소</button>
+      <button class="btn-action btn-reject-org" onclick="confirmReject()">반려 확정</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://swc.ddns.net:8000';
+  let token = localStorage.getItem('sa_token') || '';
+  let currentTab = 'pending';
+  let rejectTargetId = null;
+
+  function authHeaders() {
+    return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  }
+
+  // ── 로그인 ──────────────────────────────────────
+  async function doLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    document.getElementById('login-error').style.display = 'none';
+
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      document.getElementById('login-error').style.display = 'block';
+      return;
+    }
+    if (data.role !== 'superadmin') {
+      document.getElementById('login-error').textContent = '슈퍼 관리자 계정이 아닙니다.';
+      document.getElementById('login-error').style.display = 'block';
+      return;
+    }
+
+    token = data.access_token;
+    localStorage.setItem('sa_token', token);
+    document.getElementById('topbar-username').textContent = username;
+    showMain();
+  }
+
+  function doLogout() {
+    localStorage.removeItem('sa_token');
+    token = '';
+    document.getElementById('main-screen').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+
+  function showMain() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-screen').style.display  = 'flex';
+    loadOrgs();
+  }
+
+  // 이미 로그인된 경우
+  if (token) {
+    fetch(`${API}/auth/me`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : null)
+      .then(me => {
+        if (me && me.role === 'superadmin') {
+          document.getElementById('topbar-username').textContent = me.username;
+          showMain();
+        } else {
+          localStorage.removeItem('sa_token');
+        }
+      }).catch(() => {});
+  }
+
+  // Enter 키 로그인
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+      doLogin();
+    }
+  });
+
+  // ── 탭 전환 ──────────────────────────────────────
+  function switchTab(tab) {
+    currentTab = tab;
+    ['pending', 'all', 'create'].forEach(t => {
+      document.getElementById(`tab-${t}`)?.classList.remove('active');
+    });
+    document.getElementById(`tab-${tab}`)?.classList.add('active');
+
+    document.getElementById('pane-orgs').style.display   = tab !== 'create' ? 'block' : 'none';
+    document.getElementById('pane-create').style.display = tab === 'create' ? 'block' : 'none';
+
+    if (tab !== 'create') loadOrgs();
+  }
+
+  // ── 기업 목록 ──────────────────────────────────────
+  async function loadOrgs() {
+    const listEl = document.getElementById('org-list');
+    listEl.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+
+    const statusParam = currentTab === 'pending' ? '?status=pending_review' : '';
+    const titleEl = document.getElementById('pane-title');
+    titleEl.textContent = currentTab === 'pending' ? '심사 대기 기업' : '전체 기업';
+
+    const res = await fetch(`${API}/superadmin/organizations${statusParam}`, { headers: authHeaders() });
+    if (!res.ok) { listEl.innerHTML = '<div class="empty-state">데이터 로드 실패</div>'; return; }
+    const orgs = await res.json();
+
+    document.getElementById('pane-count').textContent = `총 ${orgs.length}건`;
+
+    if (orgs.length === 0) {
+      listEl.innerHTML = '<div class="empty-state"><span class="icon">✅</span>심사 대기 기업이 없습니다.</div>';
+      return;
+    }
+
+    listEl.innerHTML = orgs.map(o => {
+      const statusBadge = {
+        pending_review: `<span class="badge badge-pending">● 심사 중</span>`,
+        approved:       `<span class="badge badge-approved">● 승인</span>`,
+        rejected:       `<span class="badge badge-rejected">● 반려</span>`,
+      }[o.status] || '';
+
+      const canAct = o.status === 'pending_review';
+
+      return `
+        <div class="org-card" id="org-card-${o.id}">
+          <div class="org-card-top">
+            <div>
+              <div class="org-name">${o.name}</div>
+              <div class="org-meta">
+                <div class="org-meta-item">ID<span>${o.id}</span></div>
+                <div class="org-meta-item">CODE<span>${o.org_code}</span></div>
+                <div class="org-meta-item">등록일<span>${o.created_at.substring(0,10)}</span></div>
+                ${o.reviewed_at ? `<div class="org-meta-item">심사일<span>${o.reviewed_at.substring(0,10)}</span></div>` : ''}
+              </div>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+
+          <div class="org-actions">
+            ${o.doc_filename
+              ? `<button class="btn-action btn-doc" onclick="downloadDoc(${o.id})">📄 ${o.doc_filename}</button>`
+              : `<span style="font-size:12px; color:var(--muted);">첨부파일 없음</span>`
+            }
+            ${canAct
+              ? `<button class="btn-action btn-approve-org" onclick="approveOrg(${o.id}, '${o.name}')">✅ 승인</button>
+                 <button class="btn-action btn-reject-org"  onclick="openRejectModal(${o.id}, '${o.name}')">✕ 반려</button>`
+              : `<button class="btn-action btn-disabled" disabled>처리 완료</button>`
+            }
+          </div>
+
+          ${o.status === 'rejected' && o.reject_reason
+            ? `<div class="reject-reason-box">반려 사유: ${o.reject_reason}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ── 서류 다운로드 ──────────────────────────────────
+  function downloadDoc(orgId) {
+    const url = `${API}/superadmin/organizations/${orgId}/doc`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.setAttribute('download', '');
+    // Authorization 헤더가 필요하므로 fetch로 blob 다운로드
+    fetch(url, { headers: authHeaders() })
+      .then(r => {
+        if (!r.ok) throw new Error();
+        const disposition = r.headers.get('content-disposition') || '';
+        const match = disposition.match(/filename=(.+)/);
+        const filename = match ? match[1] : 'document';
+        return r.blob().then(blob => ({ blob, filename }));
+      })
+      .then(({ blob, filename }) => {
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objUrl;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(objUrl);
+      })
+      .catch(() => alert('파일 다운로드 실패'));
+  }
+
+  // ── 승인 ──────────────────────────────────────────
+  async function approveOrg(orgId, orgName) {
+    if (!confirm(`[${orgName}]을 승인하시겠습니까?`)) return;
+    const res = await fetch(`${API}/superadmin/organizations/${orgId}/approve`, {
+      method: 'POST', headers: authHeaders(),
+    });
+    if (!res.ok) { alert('승인 실패'); return; }
+    alert(`✅ [${orgName}] 승인 완료`);
+    loadOrgs();
+  }
+
+  // ── 반려 모달 ──────────────────────────────────────
+  function openRejectModal(orgId, orgName) {
+    rejectTargetId = orgId;
+    document.getElementById('reject-modal-sub').textContent = `[${orgName}] 반려 처리`;
+    document.getElementById('reject-reason').value = '';
+    document.getElementById('reject-modal').classList.add('open');
+  }
+
+  function closeRejectModal() {
+    document.getElementById('reject-modal').classList.remove('open');
+    rejectTargetId = null;
+  }
+
+  async function confirmReject() {
+    const reason = document.getElementById('reject-reason').value.trim();
+    if (!reason) { alert('반려 사유를 입력해주세요.'); return; }
+    const res = await fetch(`${API}/superadmin/organizations/${rejectTargetId}/reject`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) { alert('반려 처리 실패'); return; }
+    closeRejectModal();
+    alert('반려 처리 완료');
+    loadOrgs();
+  }
+
+  // ── 슈퍼어드민 계정 생성 ──────────────────────────
+  async function createSuperAdmin() {
+    const username = document.getElementById('sa-username').value.trim();
+    const phone    = document.getElementById('sa-phone').value.trim();
+    const password = document.getElementById('sa-password').value;
+
+    if (!username || !password) return alert('아이디와 비밀번호를 입력해주세요.');
+
+    const res = await fetch(`${API}/superadmin/create-account`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ username, phone, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(`실패: ${data.detail}`); return; }
+    alert(`✅ 슈퍼어드민 계정 [${username}] 생성 완료`);
+    document.getElementById('sa-username').value = '';
+    document.getElementById('sa-phone').value = '';
+    document.getElementById('sa-password').value = '';
+  }
+</script>
+</body>
+</html>

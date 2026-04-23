@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 관리자 대시보드</title>
+  <script>
+    const API = 'http://swc.ddns.net:8000';
+
+    function getToken() { return localStorage.getItem('token'); }
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+    }
+
+    if (!getToken()) window.location.href = '/login.html';
+  </script>
+  <style>
+    body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: 'Malgun Gothic', sans-serif; background: #f4f7f6; overflow: hidden; }
+    
+    /* 💡 왼쪽 패널 레이아웃 & 너비 증가 (380px), 접기 애니메이션 적용 */
+    .left-panel { 
+      width: 380px; 
+      background: #fff; 
+      border-right: 1px solid #e0e0e0; 
+      display: flex; 
+      flex-direction: column; 
+      box-shadow: 2px 0 10px rgba(0,0,0,0.05); 
+      z-index: 10; 
+      transition: margin-left 0.3s ease; /* 부드러운 슬라이딩 효과 */
+    }
+    
+    /* 패널이 접혔을 때의 클래스 (너비만큼 왼쪽으로 숨김) */
+    .left-panel.collapsed {
+      margin-left: -380px;
+    }
+
+    /* 💡 헤더 영역 줄바꿈 방지 */
+    .admin-header { padding: 25px 25px 15px 25px; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #FFE812; white-space: nowrap; }
+    .admin-header .logo-img { height: 40px; width: auto; border-radius: 6px; }
+    .admin-header .title-text { font-size: 20px; font-weight: bold; color: #333; }
+    
+    #driver-list { flex-grow: 1; overflow-y: auto; padding: 15px 25px; } 
+    
+    .left-footer { padding: 20px 25px; border-top: 1px solid #eee; background: #fafafa; display: flex; gap: 10px; }
+    .left-footer .btn { flex: 1; font-size: 14px; padding: 12px; }
+
+    .map-container { flex-grow: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+
+    /* 💡 패널 접기/펴기 토글 버튼 (지도 영역 좌측 상단에 고정) */
+    .panel-toggle-btn {
+      position: absolute;
+      top: 20px;
+      left: 10px;
+      z-index: 20;
+      background: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 16px;
+      transition: 0.2s;
+    }
+    .panel-toggle-btn:hover { background: #f4f4f4; }
+
+    .right-panel { width: 380px; background: #fff; border-left: 1px solid #e0e0e0; padding: 25px; display: none; flex-direction: column; overflow-y: auto; box-shadow: -2px 0 10px rgba(0,0,0,0.05); z-index: 10; }
+    
+    h2, h3 { margin-top: 25px; color: #555; }
+    .driver-card { background: #f8f9fa; padding: 18px; margin-bottom: 12px; border-radius: 10px; border: 1px solid #eee; cursor: pointer; transition: 0.3s; }
+    .driver-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #FFE812; }
+    .driver-card.active { border-color: #FFE812; background: #fffde8; }
+    .status-badge { display: inline-block; padding: 4px 10px; border-radius: 15px; font-size: 12px; color: #fff; font-weight: bold; margin-left: 5px; }
+    .bg-green { background: #2ecc71; } .bg-orange { background: #e67e22; } .bg-red { background: #e74c3c; }
+    
+    .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: #fff; transition: 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-approve { background: #3498db; width: 100%; margin-top: 12px; font-size: 14px; }
+    .btn-delete { background: #e74c3c; padding: 5px 10px; font-size: 12px; }
+    .btn-setting { background: #34495e; }
+    .btn-add { background: #f1c40f; color: #333; margin-top: 10px; width: 100%; font-size: 15px; }
+    
+    .route-item { display: flex; justify-content: space-between; align-items: center; background: #f1f3f5; padding: 12px; margin-bottom: 8px; border-radius: 6px; border: 1px solid #eee; }
+    .route-item small { color: #7f8c8d; display: block; margin-top: 3px; }
+    input[type="text"] { padding: 10px; margin-bottom: 8px; width: calc(100% - 22px); border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+
+    .custom-app-marker { position: relative; padding: 8px 12px; background: #fff; border: 2px solid #333; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: 0.1s; cursor: pointer; }
+    .custom-app-marker:hover { transform: scale(1.1) translateY(-5px); border-color: #FFE812; z-index: 100; }
+    .custom-app-marker.active { border-color: #FFE812; background: #FFE812; }
+    .custom-app-marker .content { display: flex; align-items: center; gap: 6px; }
+    .custom-app-marker .icon { font-size: 18px; }
+    .custom-app-marker .name { font-weight: bold; color: #333; font-size: 14px; white-space: nowrap; }
+    .custom-app-marker:after { content: ''; position: absolute; border-style: solid; border-width: 10px 8px 0; border-color: #333 transparent transparent; display: block; width: 0; z-index: 1; bottom: -10px; left: 50%; transform: translateX(-50%); }
+    .custom-app-marker.active:after { border-color: #FFE812 transparent transparent; }
+
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: #fff; width: 600px; max-height: 80vh; border-radius: 12px; padding: 30px; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FFE812; padding-bottom: 10px; margin-bottom: 20px; }
+    .modal-header h2 { margin: 0; }
+    .setting-group { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee; }
+    .setting-group label { display: block; font-weight: bold; margin-bottom: 10px; color: #333; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; font-size: 14px; }
+    th { background: #f1f3f5; }
+    .btn-sm { padding: 4px 8px; font-size: 12px; margin-right: 4px; }
+    .btn-warn { background: #e67e22; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div class="left-panel" id="left-panel">
+    <div class="admin-header">
+      <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
+      <span class="title-text">관리자페이지</span>
+    </div>
+    <!-- 조직코드 표시 -->
+    <div id="org-code-box" style="margin: 0 16px 12px; background:#fffde8; border:1.5px solid #FFE812; border-radius:8px; padding:10px 14px;">
+      <div style="font-size:11px; color:#888; margin-bottom:4px; font-weight:600;">📋 기사 가입용 조직코드</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="org-code-value" style="font-size:16px; font-weight:900; color:#333; font-family:monospace; letter-spacing:0.05em;">-</span>
+        <button onclick="copyOrgCode()" title="복사" style="background:none; border:none; cursor:pointer; font-size:16px; padding:2px;">📋</button>
+        <button onclick="reissueOrgCode()" title="재발급" style="background:none; border:none; cursor:pointer; font-size:16px; padding:2px;">🔄</button>
+      </div>
+    </div>
+    
+    <div id="driver-list"></div>
+
+    <div class="left-footer">
+      <button class="btn btn-approve" onclick="openTripModal()" style="background:#27ae60;">🚛 운행 생성</button>
+      <button class="btn btn-setting" onclick="openDriverModal()">👥 기사 관리</button>
+      <button class="btn btn-delete" onclick="logout()">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="map-container">
+    <button class="panel-toggle-btn" id="toggle-btn" onclick="togglePanel()" title="메뉴 접기">◀</button>
+    <div id="map"></div>
+  </div>
+
+  <div class="right-panel" id="right-panel">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 id="detail-name" style="margin:0; border:none; font-size:20px; color:#333;">기사 이름</h2>
+      <button onclick="hideRightPanel()" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
+    </div>
+    <hr style="margin: 15px 0;">
+
+    <!-- 현재 운행 정보 -->
+    <div id="trip-info-box" style="display:none; background:#f8f9fa; border-radius:10px; padding:16px; margin-bottom:16px; border:1px solid #eee;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <strong style="color:#333;">🚛 현재 운행</strong>
+        <span id="trip-status-badge" class="status-badge"></span>
+      </div>
+      <small id="trip-dest-info" style="color:#666; display:block; margin-bottom:12px;"></small>
+      <div style="display:flex; gap:8px;">
+        <button id="btn-trip-complete" class="btn" style="flex:1; background:#27ae60; font-size:13px; padding:8px;" onclick="completeTripCurrent()">✅ 운행 완료</button>
+        <button id="btn-trip-cancel"   class="btn btn-delete" style="flex:1; font-size:13px; padding:8px;" onclick="cancelTripCurrent()">❌ 운행 취소</button>
+      </div>
+    </div>
+
+    <div id="no-trip-box" style="display:none; color:gray; font-size:13px; margin-bottom:16px; padding:12px; background:#f8f9fa; border-radius:8px; text-align:center;">
+      진행 중인 운행이 없습니다.
+    </div>
+
+    <h3>📍 현재 배차(운행) 목록</h3>
+    <div id="route-list"></div>
+
+    <!-- 원격 배차 -->
+    <div style="margin-top: 25px; background: #fcfcfc; padding: 18px; border-radius: 10px; border: 1px solid #eee;">
+      <h4 style="margin-top:0; color:#333;">+ 새 경유지 추가 (원격 배차)</h4>
+      <input type="text" id="new-dest-name" placeholder="경유지 이름 (예: 평택항 상차장)">
+      <input type="text" id="new-dest-addr" placeholder="상세 주소 입력">
+      <button class="btn btn-add" onclick="addRoute()">운행 목록에 추가</button>
+    </div>
+  </div>
+
+  <!-- ※ 미구현 기능: 설정 모달 (승인방식/법규정/조직코드) — 추후 구현 예정
+  <div class="modal-overlay" id="settings-modal-legacy">
+    ... 승인 방식, 법 규정, 조직코드 설정 UI (백엔드 연동 미완성)
+  </div>
+  -->
+
+  <!-- 운행 생성 모달 -->
+  <div class="modal-overlay" id="trip-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🚛 새 운행 생성</h2>
+        <button onclick="closeTripModal()" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
+      </div>
+
+      <div class="setting-group">
+        <label>기사 선택</label>
+        <select id="trip-driver" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+          <option value="">기사를 선택하세요</option>
+        </select>
+      </div>
+
+      <div class="setting-group">
+        <label>차량 선택</label>
+        <select id="trip-vehicle" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+          <option value="">차량을 선택하세요</option>
+        </select>
+      </div>
+
+      <div class="setting-group">
+        <label>목적지</label>
+        <input type="text" id="trip-dest-name" placeholder="목적지 이름 (예: 부산 물류창고)" style="width:100%; margin-bottom:8px;">
+        <input type="text" id="trip-dest-addr" placeholder="목적지 주소" style="width:100%; margin:0;">
+      </div>
+
+      <div class="setting-group">
+        <label>경유지 (선택)</label>
+        <div id="trip-waypoints-list"></div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input type="text" id="wp-name" placeholder="경유지 이름" style="margin:0; flex:1;">
+          <input type="text" id="wp-addr" placeholder="경유지 주소" style="margin:0; flex:2;">
+          <button class="btn btn-setting" onclick="addWaypoint()" style="white-space:nowrap; padding:10px 14px;">추가</button>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label>출발 예정 시각 (선택)</label>
+        <input type="datetime-local" id="trip-departure" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px; margin:0;">
+      </div>
+
+      <button class="btn btn-approve" onclick="createTrip()" style="width:100%; margin-top:10px; font-size:15px;">✅ 운행 생성</button>
+    </div>
+  </div>
+
+  <!-- 기사 관리 모달 -->
+  <div class="modal-overlay" id="driver-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>👥 기사 관리</h2>
+        <button onclick="closeDriverModal()" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
+      </div>
+      <!-- 승인 대기 -->
+      <div id="pending-section" style="margin-bottom:20px;">
+        <h4 style="color:#e67e22; margin-bottom:10px;">⏳ 승인 대기</h4>
+        <table>
+          <thead><tr><th>아이디</th><th>전화번호</th><th>조직코드</th><th>승인</th></tr></thead>
+          <tbody id="pending-list"></tbody>
+        </table>
+      </div>
+      <hr style="margin:20px 0;">
+      <!-- 승인된 기사 -->
+      <h4 style="margin-bottom:10px;">✅ 소속 기사</h4>
+      <table>
+        <thead><tr><th>아이디</th><th>전화번호</th><th>관리</th></tr></thead>
+        <tbody id="driver-manage-list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    let map;
+    let markers = {}; 
+    let currentDriverId = null;
+    let currentPolyline = null;   // 현재 표시 중인 경로선
+    let routeMarkers    = [];     // 경유지/휴게소 마커 목록
+
+    function initMap() {
+      const container = document.getElementById('map');
+      const options = { center: new kakao.maps.LatLng(37.3950, 127.1110), level: 5 };
+      map = new kakao.maps.Map(container, options);
+    }
+
+    // 💡 왼쪽 패널 토글(접기/펴기) 기능
+    function togglePanel() {
+      const panel = document.getElementById('left-panel');
+      const btn = document.getElementById('toggle-btn');
+      panel.classList.toggle('collapsed');
+      
+      if (panel.classList.contains('collapsed')) {
+        btn.innerText = '▶';
+        btn.title = '메뉴 펴기';
+      } else {
+        btn.innerText = '◀';
+        btn.title = '메뉴 접기';
+      }
+      setTimeout(() => map.relayout(), 300);
+    }
+
+    // 전체 기사+운행 정보 캐시
+    let driversCache = [];
+    let tripsCache = {};  // driver_id → trip
+
+    async function loadDrivers() {
+      const res = await fetch(`${API}/users?role=driver`, { headers: authHeaders() });
+      if (res.status === 401) { window.location.href = '/login.html'; return; }
+      driversCache = await res.json();
+
+      // 각 기사의 진행 중 운행 조회
+      const tripPromises = driversCache.map(d =>
+        fetch(`${API}/trips?driver_id=${d.id}`, { headers: authHeaders() })
+          .then(r => r.ok ? r.json() : [])
+          .then(trips => { tripsCache[d.id] = trips.find(t => ['scheduled','in_progress'].includes(t.status)) || null; })
+          .catch(() => { tripsCache[d.id] = null; })
+      );
+      await Promise.all(tripPromises);
+      renderLeftPanel(driversCache);
+    }
+
+    function renderLeftPanel(drivers) {
+      const listDiv = document.getElementById('driver-list');
+      listDiv.innerHTML = '';
+
+      if (drivers.length === 0) {
+        listDiv.innerHTML = '<p style="color:gray; text-align:center; padding:20px; font-size:13px;">등록된 기사가 없습니다.</p>';
+        return;
+      }
+
+      drivers.forEach(d => {
+        const trip = tripsCache[d.id];
+        const isRunning = trip?.status === 'in_progress';
+        const isScheduled = trip?.status === 'scheduled';
+        const card = document.createElement('div');
+        card.className = `driver-card ${d.id === currentDriverId ? 'active' : ''}`;
+        card.id = `card-${d.id}`;
+        card.onclick = () => showDriverDetail(d.id);
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:15px; color:#333;">${d.username} 기사</strong>
+            <span class="status-badge ${isRunning ? 'bg-green' : isScheduled ? 'bg-orange' : ''}"
+              style="${!isRunning && !isScheduled ? 'background:#ccc' : ''}">
+              ${isRunning ? '운행 중' : isScheduled ? '출발 대기' : '대기 중'}</span>
+          </div>
+          <small style="color:gray; display:block; margin-top:5px;">
+            ${trip ? `🚛 ${trip.dest_name}` : '배차 없음'}
+          </small>
+        `;
+        listDiv.appendChild(card);
+      });
+    }
+
+    function createCustomMarkerElement(name, id) {
+      const content = document.createElement('div');
+      content.className = 'custom-app-marker';
+      content.id = `marker-${id}`;
+      content.onclick = () => showDriverDetail(id); 
+      content.innerHTML = `<div class="content"><span class="icon">🚚</span><span class="name">${name}</span></div>`;
+      return content;
+    }
+
+    async function showDriverDetail(id) {
+      currentDriverId = id;
+
+      document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('active'));
+      const cardEl = document.getElementById(`card-${id}`);
+      if(cardEl) cardEl.classList.add('active');
+
+      document.querySelectorAll('.custom-app-marker').forEach(m => m.classList.remove('active'));
+      const markerEl = document.getElementById(`marker-${id}`);
+      if(markerEl) markerEl.classList.add('active');
+
+      // 기사 배송 목록 조회
+      const res = await fetch(`${API}/deliveries`, { headers: authHeaders() });
+      const allDeliveries = await res.json();
+      const driverDeliveries = allDeliveries.filter(d => d.assigned_to === id);
+
+      // 현재 위치 조회
+      try {
+        const locRes = await fetch(`${API}/location-logs/${id}`, { headers: authHeaders() });
+        if (locRes.ok) {
+          const loc = await locRes.json();
+          map.panTo(new kakao.maps.LatLng(loc.lat, loc.lon));
+        }
+      } catch(e) {}
+
+      // 운행 중인 trip 조회 → 경로선 표시
+      clearRouteDisplay();
+      try {
+        const tripRes = await fetch(
+          `${API}/trips?driver_id=${id}`,
+          // scheduled + in_progress 모두 포함
+          { headers: authHeaders() }
+        );
+        if (tripRes.ok) {
+          const trips = await tripRes.json();
+          if (trips.length > 0) {
+            const tripId = trips[0].id;
+            await drawRoutePolyline(tripId);
+          }
+        }
+      } catch(e) { console.warn('경로 조회 실패:', e); }
+
+      // 우측 패널
+      const driverCard = document.getElementById(`card-${id}`);
+      const driverName = driverCard ? driverCard.querySelector('strong').innerText : id;
+      document.getElementById('right-panel').style.display = 'flex';
+      document.getElementById('detail-name').innerText = driverName;
+
+      // 운행 정보 박스
+      const trip = tripsCache[id];
+      const tripInfoBox = document.getElementById('trip-info-box');
+      const noTripBox   = document.getElementById('no-trip-box');
+      if (trip) {
+        tripInfoBox.style.display = 'block';
+        noTripBox.style.display   = 'none';
+        const statusMap  = { scheduled: '출발 대기', in_progress: '운행 중', completed: '완료', cancelled: '취소' };
+        const statusColor = { scheduled: 'bg-orange', in_progress: 'bg-green', completed: '', cancelled: '' };
+        document.getElementById('trip-status-badge').textContent  = statusMap[trip.status] || trip.status;
+        document.getElementById('trip-status-badge').className     = `status-badge ${statusColor[trip.status] || ''}`;
+        document.getElementById('trip-dest-info').textContent      = `목적지: ${trip.dest_name}`;
+        tripInfoBox._tripId = trip.id;
+
+        // 완료/취소된 운행은 버튼 숨기기
+        const canAct = ['scheduled', 'in_progress'].includes(trip.status);
+        document.getElementById('btn-trip-complete').style.display = canAct ? 'block' : 'none';
+        document.getElementById('btn-trip-cancel').style.display   = canAct ? 'block' : 'none';
+      } else {
+        tripInfoBox.style.display = 'none';
+        noTripBox.style.display   = 'block';
+      }
+
+      renderRoutes(driverDeliveries);
+    }
+
+    // 경로선 + 노드 마커 초기화
+    function clearRouteDisplay() {
+      if (currentPolyline) {
+        currentPolyline.setMap(null);
+        currentPolyline = null;
+      }
+      routeMarkers.forEach(m => m.setMap(null));
+      routeMarkers = [];
+    }
+
+    // 실제 도로 경로선 그리기
+    async function drawRoutePolyline(tripId) {
+      const res = await fetch(`${API}/trips/${tripId}/polyline`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // 폴리라인 그리기
+      if (data.polyline && data.polyline.length > 1) {
+        const path = data.polyline.map(p => new kakao.maps.LatLng(p.lat, p.lon));
+        currentPolyline = new kakao.maps.Polyline({
+          path,
+          strokeWeight: 5,
+          strokeColor:  '#3498db',
+          strokeOpacity: 0.8,
+          strokeStyle:  'solid',
+          map,
+        });
+
+        // 경로 전체가 보이도록 지도 범위 조정
+        const bounds = new kakao.maps.LatLngBounds();
+        path.forEach(p => bounds.extend(p));
+        map.setBounds(bounds, 80);
+      }
+
+      // 노드별 마커 표시 (출발지/경유지/목적지/휴게소)
+      if (data.nodes) {
+        data.nodes.forEach(node => {
+          const icons = {
+            origin:      { content: '🏁', color: '#27ae60' },
+            waypoint:    { content: '📦', color: '#e67e22' },
+            destination: { content: '🏴', color: '#e74c3c' },
+            rest_stop:   { content: '☕', color: '#8e44ad' },
+          };
+          const ic = icons[node.type] || { content: '📍', color: '#333' };
+
+          const el = document.createElement('div');
+          el.style.cssText = `
+            background: ${ic.color}; color: #fff; padding: 4px 8px;
+            border-radius: 12px; font-size: 12px; white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: default;
+          `;
+          el.innerHTML = `${ic.content} ${node.name}`;
+          if (node.min_rest_minutes) {
+            el.innerHTML += ` <small>(${node.min_rest_minutes}분 휴식)</small>`;
+          }
+
+          const overlay = new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(node.lat, node.lon),
+            content:  el,
+            map,
+            yAnchor: 1.5,
+          });
+          routeMarkers.push(overlay);
+        });
+      }
+    }
+
+    function hideRightPanel() {
+      document.getElementById('right-panel').style.display = 'none';
+      currentDriverId = null;
+      clearRouteDisplay();
+      document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.custom-app-marker').forEach(m => m.classList.remove('active'));
+    }
+
+    function renderRoutes(deliveries) {
+      const routeDiv = document.getElementById('route-list');
+      routeDiv.innerHTML = '';
+      if(deliveries.length === 0) {
+        routeDiv.innerHTML = '<p style="color: gray; text-align:center; padding:20px;">등록된 배차가 없습니다.</p>';
+        return;
+      }
+      deliveries.forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'route-item';
+        const statusLabel = { pending: '대기', in_progress: '진행중', done: '완료', done_manual: '수동완료' }[d.status] || d.status;
+        item.innerHTML = `
+            <div>
+              <strong style="color:#333;">${d.address}</strong>
+              <small>상태: ${statusLabel}</small>
+            </div>
+            <button class="btn btn-delete" onclick="deleteDelivery('${d.id}')">삭제</button>
+        `;
+        routeDiv.appendChild(item);
+      });
+    }
+
+    async function addRoute() {
+      const name = document.getElementById('new-dest-name').value.trim();
+      const addr = document.getElementById('new-dest-addr').value.trim();
+      if (!name) return alert('목적지 이름을 입력하세요!');
+      if (!addr) return alert('주소를 입력하세요!');
+      if (!currentDriverId) return alert('기사를 먼저 선택하세요!');
+
+      // 1. 기사의 진행 중인 trip 조회
+      const tripRes = await fetch(
+        `${API}/trips?driver_id=${currentDriverId}&status=in_progress`,
+        { headers: authHeaders() }
+      );
+      const allTrips = await tripRes.json();
+      const trips = allTrips.filter(t => ['scheduled','in_progress'].includes(t.status));
+
+      if (!trips || trips.length === 0) {
+        return alert('활성 운행이 없습니다.\n먼저 운행을 생성하고 경로 최적화를 완료해주세요.');
+      }
+      const tripId = trips[0].id;
+
+      // 2. 주소 → 좌표 변환
+      const coordRes = await fetch(
+        `${API}/address/coord?query=${encodeURIComponent(addr)}`,
+        { headers: authHeaders() }
+      );
+      if (!coordRes.ok) return alert('주소를 찾을 수 없습니다.');
+      const coord = await coordRes.json();
+
+      // 3. 경유지 추가 + 앱에 재경로 알림
+      const res = await fetch(`${API}/trips/${tripId}/waypoints`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ name, lat: coord.lat, lon: coord.lon })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`경유지 추가 실패: ${err.detail}`);
+      }
+
+      const data = await res.json();
+      alert(`✅ '${name}' 경유지가 추가됐습니다.\n기사 앱에 재경로 요청을 전송했습니다.`);
+
+      document.getElementById('new-dest-name').value = '';
+      document.getElementById('new-dest-addr').value = '';
+      await showDriverDetail(currentDriverId);
+    }
+
+    async function deleteDelivery(deliveryId) {
+      if(!confirm('이 배차를 삭제하시겠습니까?')) return;
+      await fetch(`${API}/deliveries/${deliveryId}`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      showDriverDetail(currentDriverId);
+    }
+
+    // ── 조직코드 ──────────────────────────────────────
+    async function loadOrgCode() {
+      try {
+        const res = await fetch(`${API}/organizations/me`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const org = await res.json();
+        document.getElementById('org-code-value').textContent = org.org_code || '-';
+        // 헤더에 기업명 표시
+        const titleEl = document.querySelector('.title-text');
+        if (titleEl && org.name) titleEl.textContent = org.name;
+      } catch(e) {}
+    }
+
+    function copyOrgCode() {
+      const code = document.getElementById('org-code-value').textContent;
+      if (code === '-') return;
+      navigator.clipboard.writeText(code).then(() => {
+        alert(`조직코드 [${code}]가 복사됐습니다.\n기사님들에게 공유해주세요.`);
+      });
+    }
+
+    async function reissueOrgCode() {
+      if (!confirm('조직코드를 새로 발급하시겠습니까?\n기존 코드로는 더 이상 가입할 수 없습니다.')) return;
+      const res = await fetch(`${API}/organizations/regen-code`, {
+        method: 'POST', headers: authHeaders()
+      });
+      if (!res.ok) return alert('재발급 실패');
+      const data = await res.json();
+      document.getElementById('org-code-value').textContent = data.org_code;
+      alert(`새 조직코드: ${data.org_code}`);
+    }
+
+    function logout() {
+      if(confirm('정말 로그아웃 하시겠습니까?')) {
+        localStorage.clear();
+        window.location.href = '/login.html';
+      }
+    }
+
+    // ── 운행 생성 모달 ──────────────────────────────
+    let tripWaypoints = [];  // [{name, lat, lon}]
+
+    async function openTripModal() {
+      tripWaypoints = [];
+      renderWaypointList();
+      document.getElementById('trip-dest-name').value = '';
+      document.getElementById('trip-dest-addr').value = '';
+      document.getElementById('trip-departure').value  = '';
+
+      // 기사 목록
+      const driverSel = document.getElementById('trip-driver');
+      driverSel.innerHTML = '<option value="">기사를 선택하세요</option>';
+      driversCache.forEach(d => {
+        driverSel.innerHTML += `<option value="${d.id}">${d.username} 기사</option>`;
+      });
+
+      // 차량 목록
+      const vehicleSel = document.getElementById('trip-vehicle');
+      vehicleSel.innerHTML = '<option value="">차량을 선택하세요</option>';
+      try {
+        const vRes = await fetch(`${API}/vehicles`, { headers: authHeaders() });
+        const vehicles = await vRes.json();
+        vehicles.forEach(v => {
+          vehicleSel.innerHTML += `<option value="${v.id}">${v.plate_number} (${v.vehicle_type})</option>`;
+        });
+      } catch(e) {}
+
+      document.getElementById('trip-modal').style.display = 'flex';
+    }
+
+    function closeTripModal() {
+      document.getElementById('trip-modal').style.display = 'none';
+    }
+
+    async function addWaypoint() {
+      const name = document.getElementById('wp-name').value.trim();
+      const addr = document.getElementById('wp-addr').value.trim();
+      if (!name || !addr) return alert('이름과 주소를 입력하세요.');
+
+      const coordRes = await fetch(`${API}/address/coord?query=${encodeURIComponent(addr)}`, { headers: authHeaders() });
+      if (!coordRes.ok) return alert('주소를 찾을 수 없습니다.');
+      const coord = await coordRes.json();
+
+      tripWaypoints.push({ name, lat: coord.lat, lon: coord.lon });
+      document.getElementById('wp-name').value = '';
+      document.getElementById('wp-addr').value = '';
+      renderWaypointList();
+    }
+
+    function renderWaypointList() {
+      const el = document.getElementById('trip-waypoints-list');
+      if (tripWaypoints.length === 0) {
+        el.innerHTML = '<small style="color:gray;">추가된 경유지 없음</small>';
+        return;
+      }
+      el.innerHTML = tripWaypoints.map((w, i) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:#f1f3f5; border-radius:6px; margin-bottom:6px;">
+          <span style="font-size:13px;">📦 ${w.name}</span>
+          <button onclick="removeWaypoint(${i})" style="background:none; border:none; cursor:pointer; color:#e74c3c; font-size:16px;">×</button>
+        </div>
+      `).join('');
+    }
+
+    function removeWaypoint(idx) {
+      tripWaypoints.splice(idx, 1);
+      renderWaypointList();
+    }
+
+    async function createTrip() {
+      const driverId  = document.getElementById('trip-driver').value;
+      const vehicleId = document.getElementById('trip-vehicle').value;
+      const destName  = document.getElementById('trip-dest-name').value.trim();
+      const destAddr  = document.getElementById('trip-dest-addr').value.trim();
+      const departure = document.getElementById('trip-departure').value;
+
+      if (!driverId)  return alert('기사를 선택하세요.');
+      if (!vehicleId) return alert('차량을 선택하세요.');
+      if (!destName)  return alert('목적지 이름을 입력하세요.');
+      if (!destAddr)  return alert('목적지 주소를 입력하세요.');
+
+      const coordRes = await fetch(`${API}/address/coord?query=${encodeURIComponent(destAddr)}`, { headers: authHeaders() });
+      if (!coordRes.ok) return alert('목적지 주소를 찾을 수 없습니다.');
+      const coord = await coordRes.json();
+
+      const body = {
+        driver_id:  driverId,
+        vehicle_id: parseInt(vehicleId),
+        dest_name:  destName,
+        dest_lat:   coord.lat,
+        dest_lon:   coord.lon,
+        waypoints:  tripWaypoints,
+      };
+      if (departure) body.departure_time = new Date(departure).toISOString();
+
+      const res = await fetch(`${API}/trips`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`운행 생성 실패: ${err.detail}`);
+      }
+
+      alert('✅ 운행이 생성됐습니다!');
+      closeTripModal();
+      loadDrivers();
+    }
+
+    // ── 기사 관리 모달 ──────────────────────────────
+    async function openDriverModal() {
+      document.getElementById('driver-modal').style.display = 'flex';
+      document.getElementById('pending-list').innerHTML       = '<tr><td colspan="4" style="text-align:center; color:gray;">로딩 중...</td></tr>';
+      document.getElementById('driver-manage-list').innerHTML = '<tr><td colspan="3" style="text-align:center; color:gray;">로딩 중...</td></tr>';
+
+      // 승인 대기 목록
+      const pRes = await fetch(`${API}/users?role=pending`, { headers: authHeaders() });
+      const pending = pRes.ok ? await pRes.json() : [];
+      document.getElementById('pending-list').innerHTML = pending.length === 0
+        ? '<tr><td colspan="4" style="text-align:center; color:gray;">승인 대기 없음</td></tr>'
+        : pending.map(u => `
+          <tr>
+            <td><strong>${u.username}</strong></td>
+            <td>${u.phone || '-'}</td>
+            <td>${u.org_code || '-'}</td>
+            <td>
+              <button class="btn btn-approve btn-sm" style="background:#27ae60; padding:5px 10px; font-size:12px;"
+                onclick="approveDriver('${u.id}')">✅ 승인</button>
+              <button class="btn btn-delete btn-sm" onclick="kickDriver('${u.id}')">거절</button>
+            </td>
+          </tr>
+        `).join('');
+
+      // 승인된 기사 목록
+      const dRes = await fetch(`${API}/users?role=driver`, { headers: authHeaders() });
+      const drivers = dRes.ok ? await dRes.json() : [];
+      document.getElementById('driver-manage-list').innerHTML = drivers.length === 0
+        ? '<tr><td colspan="3" style="text-align:center; color:gray;">등록된 기사 없음</td></tr>'
+        : drivers.map(d => `
+          <tr>
+            <td><strong>${d.username}</strong></td>
+            <td>${d.phone || '-'}</td>
+            <td><button class="btn btn-delete btn-sm" onclick="kickDriver('${d.id}')">탈퇴</button></td>
+          </tr>
+        `).join('');
+    }
+
+    async function approveDriver(userId) {
+      if (!confirm('이 기사를 승인하시겠습니까?')) return;
+      const res = await fetch(`${API}/auth/approve/${userId}`, {
+        method: 'POST', headers: authHeaders()
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`승인 실패: ${err.detail}`);
+      }
+      alert('✅ 승인됐습니다.');
+      openDriverModal();
+      loadDrivers();
+    }
+
+    function closeDriverModal() {
+      document.getElementById('driver-modal').style.display = 'none';
+      loadDrivers();
+    }
+
+    // ── 운행 완료/취소 ──────────────────────────────
+    async function completeTripCurrent() {
+      const tripId = document.getElementById('trip-info-box')._tripId;
+      if (!tripId || !confirm('이 운행을 완료 처리하시겠습니까?')) return;
+      const res = await fetch(`${API}/trips/${tripId}/status?status=completed`, {
+        method: 'PATCH', headers: authHeaders()
+      });
+      if (!res.ok) return alert('처리 실패');
+      alert('✅ 운행이 완료 처리됐습니다.');
+      await loadDrivers();
+      await showDriverDetail(currentDriverId);
+    }
+
+    async function cancelTripCurrent() {
+      const tripId = document.getElementById('trip-info-box')._tripId;
+      if (!tripId || !confirm('이 운행을 취소하시겠습니까?')) return;
+      const res = await fetch(`${API}/trips/${tripId}/status?status=cancelled`, {
+        method: 'PATCH', headers: authHeaders()
+      });
+      if (!res.ok) return alert('처리 실패');
+      alert('운행이 취소됐습니다.');
+      await loadDrivers();
+      await showDriverDetail(currentDriverId);
+    }
+
+    // ── 미구현 기능 (추후 구현 예정) ─────────────────
+    // async function openSettings() { ... }  // 승인 방식, 법 규정, 조직코드 설정
+    // async function saveSettings() { ... }  // 설정 저장 API 미구현
+
+    async function kickDriver(id) {
+      if(!confirm('해당 기사를 강제 탈퇴시키겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+
+      if(currentDriverId === id) hideRightPanel();
+
+      if(markers[id]) {
+        markers[id].setMap(null);
+        delete markers[id];
+      }
+
+      await fetch(`${API}/users/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+      openSettings(); 
+    }
+
+    window.onload = async () => {
+      // 1. 서버에서 카카오 JS 키 조회
+      let kakaoKey;
+      try {
+        const res = await fetch(`${API}/config`);
+        if (!res.ok) throw new Error();
+        const cfg = await res.json();
+        kakaoKey = cfg.kakao_js_key;
+      } catch(e) {
+        alert('지도 키 로드 실패. 백엔드 서버와 KAKAO_JS_KEY 환경변수를 확인해주세요.');
+        return;
+      }
+
+      // 2. autoload=false로 SDK 동적 로드 (document.write 없이)
+      const script = document.createElement('script');
+      script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&autoload=false`;
+      script.onload = () => {
+        // 3. kakao.maps.load() 콜백에서 지도 초기화
+        kakao.maps.load(() => {
+          initMap();
+          loadDrivers();
+          connectWebSocket();
+          loadOrgCode();
+        });
+      };
+      script.onerror = () => {
+        alert('카카오 SDK 로드 실패. JS 키 또는 허용 도메인을 확인해주세요.');
+      };
+      document.head.appendChild(script);
+    };
+
+    // ────────────────────────────────────────────────
+    // WebSocket — 실시간 기사 위치 수신
+    // ────────────────────────────────────────────────
+    let ws = null;
+    let wsReconnectTimer = null;
+
+    function connectWebSocket() {
+      const WS_URL = 'ws://swc.ddns.net:8000/ws/location';
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('[WS] 연결됨');
+        // 30초마다 ping 전송 (연결 유지)
+        clearInterval(wsReconnectTimer);
+        wsReconnectTimer = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send('ping');
+          }
+        }, 30000);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateDriverMarker(data);
+        } catch (e) {
+          console.warn('[WS] 메시지 파싱 오류:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        console.warn('[WS] 연결 끊김 — 5초 후 재연결');
+        clearInterval(wsReconnectTimer);
+        setTimeout(connectWebSocket, 5000);
+      };
+
+      ws.onerror = (e) => {
+        console.error('[WS] 오류:', e);
+        ws.close();
+      };
+    }
+
+    function updateDriverMarker(data) {
+      const { user_id, lat, lon } = data;
+      if (!lat || !lon) return;
+
+      const position = new kakao.maps.LatLng(lat, lon);
+
+      if (!markers[user_id]) {
+        // 처음 수신 — 드라이버 정보 로드 후 마커 생성
+        fetch(`${API}/users?role=driver`, { headers: authHeaders() })
+          .then(r => r.ok ? r.json() : null)
+          .then(drivers => {
+            const driver = Array.isArray(drivers) ? drivers.find(d => d.id === user_id) : null;
+            const name = driver ? driver.username : user_id.slice(0, 6);
+            const markerContent = createCustomMarkerElement(name, user_id);
+            const overlay = new kakao.maps.CustomOverlay({
+              position, content: markerContent, map, yAnchor: 1.15
+            });
+            markers[user_id] = overlay;
+          })
+          .catch(() => {
+            // 드라이버 정보 없어도 마커는 생성
+            const markerContent = createCustomMarkerElement(user_id.slice(0, 6), user_id);
+            const overlay = new kakao.maps.CustomOverlay({
+              position, content: markerContent, map, yAnchor: 1.15
+            });
+            markers[user_id] = overlay;
+          });
+      } else {
+        // 기존 마커 위치 업데이트
+        markers[user_id].setPosition(position);
+      }
+
+      // 현재 선택된 기사면 지도도 이동
+      if (currentDriverId === user_id) {
+        map.panTo(position);
+      }
+    }
+  </script>
+</body>
+</html>

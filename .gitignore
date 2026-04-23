@@ -1,0 +1,28 @@
+# 환경변수 (절대 커밋 금지)
+.env
+
+# 의존성
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 빌드 결과물
+dist/
+build/
+*.egg-info/
+
+# 로그
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

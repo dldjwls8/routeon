@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 기업 등록</title>
+  <style>
+    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f4f7f6; font-family: 'Malgun Gothic', sans-serif; }
+    .auth-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 400px; }
+    .logo-img { height: 40px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
+    h2 { margin: 0 0 6px 0; color: #333; text-align: center; }
+    .subtitle { text-align: center; color: #888; font-size: 13px; margin-bottom: 24px; }
+    .section-label { font-size: 12px; font-weight: bold; color: #888; letter-spacing: 0.08em; text-transform: uppercase; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
+    input { width: 100%; box-sizing: border-box; padding: 11px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    input:focus { border-color: #FFE812; outline: none; }
+    .btn-submit { width: 100%; padding: 14px; background: #FFE812; color: #333; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 14px; }
+    .btn-submit:hover { background: #e5cf00; }
+    .link { display: block; margin-top: 15px; font-size: 14px; color: #555; text-decoration: none; text-align: center; }
+    .link:hover { text-decoration: underline; }
+    .error-msg { color: #e74c3c; font-size: 12px; margin-top: 5px; display: none; }
+    .info-box { background: #fffde8; border: 1px solid #FFE812; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #666; margin-bottom: 20px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
+    <h2>기업 등록</h2>
+    <p class="subtitle">루트온 서비스를 시작하려면 기업을 먼저 등록하세요</p>
+
+    <div class="info-box">
+      📋 서류 심사 완료 후 <strong>조직코드</strong>가 활성화됩니다.<br>
+      심사는 영업일 기준 1~2일이 소요될 수 있습니다.
+    </div>
+
+    <form id="registerForm">
+      <div class="section-label">기업 정보</div>
+
+      <div class="form-group">
+        <label>기업명</label>
+        <input type="text" id="orgName" required placeholder="예: (주)루트물류">
+      </div>
+
+      <div class="section-label">관리자 계정</div>
+
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="username" required placeholder="아이디 입력">
+      </div>
+
+      <div class="form-group">
+        <label>이메일 (승인/반려 알림 수신)</label>
+        <input type="email" id="email" required placeholder="admin@company.com">
+      </div>
+
+      <div class="form-group">
+        <label>휴대전화 번호</label>
+        <input type="tel" id="phone" required placeholder="010-0000-0000">
+      </div>
+
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="password" required placeholder="비밀번호 입력">
+        <div id="pwd-error" class="error-msg">비밀번호는 4자 이상이어야 합니다.</div>
+      </div>
+
+      <div class="form-group">
+        <label>비밀번호 확인</label>
+        <input type="password" id="passwordConfirm" required placeholder="비밀번호 다시 입력">
+        <div id="pwd-match-error" class="error-msg">비밀번호가 일치하지 않습니다.</div>
+      </div>
+
+      <div class="section-label">사업자 서류</div>
+
+      <div class="form-group">
+        <label>첨부 파일 (사업자등록증 등)</label>
+        <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required
+          style="padding:8px; cursor:pointer;">
+        <small style="color:#888; display:block; margin-top:4px;">PDF, JPG, PNG / 최대 10MB</small>
+        <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
+      </div>
+
+      <button type="submit" class="btn-submit">기업 등록 완료</button>
+    </form>
+
+    <a href="/login.html" class="link">이미 계정이 있으신가요? 로그인</a>
+  </div>
+
+  <script>
+    const API = 'http://swc.ddns.net:8000';
+
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const orgName         = document.getElementById('orgName').value.trim();
+      const username        = document.getElementById('username').value.trim();
+      const email           = document.getElementById('email').value.trim();
+      const phone           = document.getElementById('phone').value.trim();
+      const password        = document.getElementById('password').value;
+      const passwordConfirm = document.getElementById('passwordConfirm').value;
+
+      document.getElementById('pwd-error').style.display       = 'none';
+      document.getElementById('pwd-match-error').style.display = 'none';
+
+      if (password.length < 4) {
+        document.getElementById('pwd-error').style.display = 'block';
+        return;
+      }
+      if (password !== passwordConfirm) {
+        document.getElementById('pwd-match-error').style.display = 'block';
+        return;
+      }
+
+      const docFile = document.getElementById('docFile').files[0];
+      if (!docFile) {
+        document.getElementById('file-error').style.display = 'block';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('name',     orgName);
+      formData.append('username', username);
+      formData.append('password', password);
+      formData.append('phone',    phone);
+      formData.append('email',    email);
+      formData.append('doc_file', docFile);
+
+      const res = await fetch(`${API}/organizations`, {
+        method: 'POST',
+        body: formData   // Content-Type 헤더 자동 설정 (multipart)
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(
+          `🎉 기업 등록 신청 완료!\n\n` +
+          `기업명: ${data.org_name || orgName}\n\n` +
+          `서류 심사 후 이용 가능합니다.\n심사 완료 시 로그인하여 조직코드를 확인해주세요.`
+        );
+        window.location.href = '/login.html';
+      } else {
+        alert(data.detail || '등록에 실패했습니다.');
+      }
+    });
+  </script>
+</body>
+</html>

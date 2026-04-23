@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>루트온 — RouteOn</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Serif+Display&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:      #f7f8fa;
+    --white:   #ffffff;
+    --surface: #f0f2f7;
+    --border:  #e4e8f0;
+    --accent:  #2563eb;
+    --accent2: #059669;
+    --warn:    #f97316;
+    --text:    #111827;
+    --sub:     #374151;
+    --muted:   #9ca3af;
+    --sans: 'Noto Sans KR', sans-serif;
+    --serif: 'DM Serif Display', serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 400;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 52px;
+    background: rgba(247,248,250,0.9);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+  }
+
+  .nav-logo {
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 36px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--sub);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--accent); }
+
+  /* ── HERO ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 120px 24px 100px;
+    background: var(--white);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 배경 원형 데코 */
+  .hero::before {
+    content: '';
+    position: absolute;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--accent);
+    background: rgba(37,99,235,0.08);
+    border: 1px solid rgba(37,99,235,0.18);
+    padding: 6px 16px;
+    border-radius: 20px;
+    margin-bottom: 36px;
+    animation: fadeUp 0.7s ease both;
+  }
+
+  .hero-badge span {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: blink 2s infinite;
+  }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+  .hero-title {
+    font-family: var(--serif);
+    font-size: clamp(3rem, 8vw, 6.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    animation: fadeUp 0.7s 0.1s ease both;
+    color: var(--text);
+  }
+
+  .hero-title .blue { color: var(--accent); }
+  .hero-title .green { color: var(--accent2); }
+
+  .hero-subtitle {
+    font-size: clamp(0.95rem, 2vw, 1.15rem);
+    font-weight: 500;
+    color: var(--sub);
+    margin-bottom: 12px;
+    animation: fadeUp 0.7s 0.15s ease both;
+  }
+
+  .hero-desc {
+    font-size: 0.95rem;
+    color: var(--muted);
+    max-width: 480px;
+    margin: 0 auto 48px;
+    animation: fadeUp 0.7s 0.2s ease both;
+    line-height: 1.9;
+  }
+
+  .hero-cta {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    animation: fadeUp 0.7s 0.25s ease both;
+  }
+
+  .btn {
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 13px 28px;
+    border-radius: 8px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(37,99,235,0.25);
+  }
+  .btn-primary:hover {
+    background: #1d4ed8;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(37,99,235,0.35);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--sub);
+    border: 1.5px solid var(--border);
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 스크롤 힌트 */
+  .scroll-hint {
+    position: absolute;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    text-transform: uppercase;
+    animation: fadeUp 0.7s 0.5s ease both;
+  }
+
+  .scroll-line {
+    width: 1px; height: 40px;
+    background: linear-gradient(to bottom, var(--muted), transparent);
+    animation: scrollDown 1.8s ease-in-out infinite;
+  }
+
+  @keyframes scrollDown {
+    0%   { transform: scaleY(0); transform-origin: top; }
+    50%  { transform: scaleY(1); transform-origin: top; }
+    51%  { transform-origin: bottom; }
+    100% { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
+  }
+
+  /* ── 공통 섹션 ── */
+  .section-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 100px 24px;
+  }
+
+  .label {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(37,99,235,0.08);
+    padding: 4px 12px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin-bottom: 14px;
+    color: var(--text);
+  }
+
+  .section-desc {
+    font-size: 0.95rem;
+    color: var(--muted);
+    margin-bottom: 56px;
+    max-width: 440px;
+  }
+
+  /* ── PROBLEM ── */
+  .problem { background: var(--white); }
+
+  .problem-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 20px;
+  }
+
+  .problem-card {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 32px 28px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.2s, border-color 0.2s;
+  }
+
+  .problem-card.visible { opacity: 1; transform: translateY(0); }
+  .problem-card:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.07);
+    border-color: rgba(37,99,235,0.2);
+  }
+
+  .problem-num {
+    font-family: var(--serif);
+    font-size: 2.4rem;
+    color: rgba(37,99,235,0.12);
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+
+  .problem-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .problem-body {
+    font-size: 0.87rem;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+
+  /* ── FEATURES ── */
+  .features { background: var(--bg); }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  .feature-card {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 32px 28px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.2s, border-color 0.2s;
+  }
+
+  .feature-card.visible { opacity: 1; transform: translateY(0); }
+  .feature-card:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.07);
+    border-color: rgba(5,150,105,0.25);
+  }
+
+  .feature-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: rgba(5,150,105,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+  }
+
+  .feature-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .feature-body {
+    font-size: 0.87rem;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+
+  /* ── STACK ── */
+  .stack { background: var(--white); }
+
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+  }
+
+  .stack-group {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 20px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .stack-group.visible { opacity: 1; transform: translateY(0); }
+
+  .stack-group-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--border);
+  }
+
+  .stack-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 0.85rem;
+    color: var(--sub);
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── TEAM ── */
+  .team { background: var(--bg); }
+
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+  }
+
+  .team-card {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 36px 28px;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.2s;
+  }
+
+  .team-card.visible { opacity: 1; transform: translateY(0); }
+  .team-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.07); }
+
+  .avatar {
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    margin: 0 auto 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    color: #fff;
+  }
+
+  .team-name {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+
+  .team-role {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .tag {
+    font-size: 0.72rem;
+    color: var(--sub);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--white);
+    border-top: 1.5px solid var(--border);
+    padding: 36px 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-logo {
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    color: var(--accent);
+  }
+
+  .footer-copy {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  /* ── ANIMATION ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 640px) {
+    nav { padding: 0 20px; }
+    .nav-links { gap: 18px; }
+    footer { flex-direction: column; gap: 10px; text-align: center; padding: 28px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">RouteOn</div>
+  <ul class="nav-links">
+    <li><a href="#problem">문제</a></li>
+    <li><a href="#features">기능</a></li>
+    <li><a href="#stack">기술</a></li>
+    <li><a href="#team">팀</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge"><span></span>2025 졸업작품</div>
+  <h1 class="hero-title">
+    배송의 <span class="blue">경로</span>를<br>
+    <span class="green">최적화</span>하다
+  </h1>
+  <p class="hero-subtitle">루트온 RouteOn</p>
+  <p class="hero-desc">
+    다중 경유지 경로 최적화와 스마트 휴식 포인트 추천으로<br>배송 기사의 업무 효율과 삶의 질을 높이는 서비스
+  </p>
+  <div class="hero-cta">
+    <a href="#features" class="btn btn-primary">기능 살펴보기</a>
+    <a href="#team" class="btn btn-outline">팀 소개</a>
+  </div>
+  <div class="scroll-hint">
+    <span>scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problem" class="problem">
+  <div class="section-inner">
+    <div class="label">Problem</div>
+    <h2 class="section-title">우리가 해결하는 문제</h2>
+    <p class="section-desc">배송 기사들이 매일 겪는 비효율과 고충</p>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="problem-num">01</div>
+        <div class="problem-title">비효율적인 수동 경로 계획</div>
+        <p class="problem-body">수십 개의 배송지를 수작업으로 정리하느라 업무 시작 전부터 소모되는 시간과 에너지</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-num">02</div>
+        <div class="problem-title">과도한 연속 운전</div>
+        <p class="problem-body">적절한 휴식 없이 이어지는 장시간 운전으로 인한 피로 누적과 사고 위험</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-num">03</div>
+        <div class="problem-title">배송 현황 파악의 어려움</div>
+        <p class="problem-body">관리자가 실시간 배송 현황을 파악하기 어려워 발생하는 소통 비용과 오차</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="features">
+  <div class="section-inner">
+    <div class="label">Features</div>
+    <h2 class="section-title">핵심 기능</h2>
+    <p class="section-desc">루트온이 제공하는 스마트 솔루션</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <div class="feature-title">다중 경유지 경로 최적화</div>
+        <p class="feature-body">카카오맵 API와 OR-Tools로 최대 10개 경유지의 최적 순서를 자동 계산해 이동 시간과 연료비를 절감합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">☕</div>
+        <div class="feature-title">스마트 휴식 포인트 추천</div>
+        <p class="feature-body">배송 횟수와 주행 시간 기준으로 경로 이탈을 최소화하는 최적의 휴식 장소를 자동으로 추천합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📍</div>
+        <div class="feature-title">GPS 기반 자동 완료</div>
+        <p class="feature-body">앱이 GPS를 주기적으로 전송하면 서버가 50m 반경 도착을 감지해 배송을 자동 완료 처리합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">관리자 실시간 모니터링</div>
+        <p class="feature-body">관리자 웹에서 전체 배송 기사의 위치와 배송 현황을 실시간으로 확인하고 배송지를 배정합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔐</div>
+        <div class="feature-title">역할 기반 접근 제어</div>
+        <p class="feature-body">관리자와 배송 기사 계정을 분리하고 JWT 인증으로 각 역할에 맞는 기능만 안전하게 접근합니다.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">고성능 데이터 파이프라인</div>
+        <p class="feature-body">TimescaleDB로 GPS 시계열 데이터를 효율적으로 저장하고, Redis로 실시간 위치를 빠르게 처리합니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section id="stack" class="stack">
+  <div class="section-inner">
+    <div class="label">Tech Stack</div>
+    <h2 class="section-title">기술 스택</h2>
+    <p class="section-desc">서비스를 구성하는 기술들</p>
+    <div class="stack-grid">
+      <div class="stack-group">
+        <div class="stack-group-label">Backend</div>
+        <div class="stack-item"><div class="dot" style="background:#2563eb"></div>Python 3.12</div>
+        <div class="stack-item"><div class="dot" style="background:#2563eb"></div>FastAPI</div>
+        <div class="stack-item"><div class="dot" style="background:#2563eb"></div>SQLAlchemy</div>
+        <div class="stack-item"><div class="dot" style="background:#2563eb"></div>JWT 인증</div>
+      </div>
+      <div class="stack-group">
+        <div class="stack-group-label">Database</div>
+        <div class="stack-item"><div class="dot" style="background:#059669"></div>PostgreSQL</div>
+        <div class="stack-item"><div class="dot" style="background:#059669"></div>TimescaleDB</div>
+        <div class="stack-item"><div class="dot" style="background:#059669"></div>Redis</div>
+      </div>
+      <div class="stack-group">
+        <div class="stack-group-label">Algorithm</div>
+        <div class="stack-item"><div class="dot" style="background:#f97316"></div>Google OR-Tools</div>
+        <div class="stack-item"><div class="dot" style="background:#f97316"></div>TSP 최적화</div>
+        <div class="stack-item"><div class="dot" style="background:#f97316"></div>GPS 도착 감지</div>
+      </div>
+      <div class="stack-group">
+        <div class="stack-group-label">Frontend / App</div>
+        <div class="stack-item"><div class="dot" style="background:#7c3aed"></div>Android (Kotlin)</div>
+        <div class="stack-item"><div class="dot" style="background:#7c3aed"></div>Node.js</div>
+        <div class="stack-item"><div class="dot" style="background:#7c3aed"></div>카카오맵 SDK</div>
+      </div>
+      <div class="stack-group">
+        <div class="stack-group-label">Infrastructure</div>
+        <div class="stack-item"><div class="dot" style="background:#0891b2"></div>Docker Compose</div>
+        <div class="stack-item"><div class="dot" style="background:#0891b2"></div>Nginx</div>
+        <div class="stack-item"><div class="dot" style="background:#0891b2"></div>Synology NAS</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TEAM -->
+<section id="team" class="team">
+  <div class="section-inner">
+    <div class="label">Team</div>
+    <h2 class="section-title">팀 소개</h2>
+    <p class="section-desc">루트온을 만드는 사람들</p>
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="avatar" style="background:linear-gradient(135deg,#2563eb,#3b82f6)">어</div>
+        <div class="team-name">어진</div>
+        <div class="team-role">Backend · Infra</div>
+        <div class="tags">
+          <span class="tag">FastAPI</span>
+          <span class="tag">PostgreSQL</span>
+          <span class="tag">Docker</span>
+          <span class="tag">관리자 웹</span>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="avatar" style="background:linear-gradient(135deg,#f97316,#fb923c)">A</div>
+        <div class="team-name">홍요아</div>
+        <div class="team-role">Algorithm · App</div>
+        <div class="tags">
+          <span class="tag">OR-Tools</span>
+          <span class="tag">제약 알고리즘</span>
+          <span class="tag">Android</span>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="avatar" style="background:linear-gradient(135deg,#059669,#10b981)">B</div>
+        <div class="team-name">신우철</div>
+        <div class="team-role">App</div>
+        <div class="tags">
+          <span class="tag">Android</span>
+          <span class="tag">카카오맵 SDK</span>
+          <span class="tag">UI/UX</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">RouteOn</div>
+  <div class="footer-copy">© 2025 RouteOn Team — 졸업작품</div>
+</footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => entry.target.classList.add('visible'), i * 80);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll(
+    '.problem-card, .feature-card, .stack-group, .team-card'
+  ).forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
