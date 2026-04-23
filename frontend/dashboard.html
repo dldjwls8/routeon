@@ -133,6 +133,7 @@
     <div class="left-footer">
       <button class="btn btn-approve" onclick="openTripModal()" style="background:#27ae60;">🚛 운행 생성</button>
       <button class="btn btn-setting" onclick="openDriverModal()">👥 기사 관리</button>
+      <button class="btn btn-setting" onclick="openVehicleModal()" style="background:#2980b9;">🚗 차량 관리</button>
       <button class="btn btn-delete" onclick="logout()">로그아웃</button>
     </div>
   </div>
@@ -232,6 +233,53 @@
   </div>
 
   <!-- 기사 관리 모달 -->
+  <div class="modal-overlay" id="vehicle-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🚗 차량 관리</h2>
+        <button onclick="closeVehicleModal()" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
+      </div>
+      <!-- 차량 등록 폼 -->
+      <div style="margin-bottom:24px;">
+        <h4 style="margin-bottom:12px;">차량 등록</h4>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div>
+            <label style="font-size:13px; color:#555;">번호판 <span style="color:red;">*</span></label>
+            <input id="v-plate" type="text" placeholder="예) 12가 3456" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:13px; color:#555;">차종 <span style="color:red;">*</span></label>
+            <input id="v-type" type="text" placeholder="예) 5톤카고, 15톤탑차" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:13px; color:#555;">총중량 (kg) <span style="color:red;">*</span></label>
+            <input id="v-weight" type="number" placeholder="예) 10000" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:13px; color:#555;">차량 높이 (m) <span style="color:red;">*</span></label>
+            <input id="v-height" type="number" step="0.1" placeholder="예) 3.5" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:13px; color:#555;">길이 (cm)</label>
+            <input id="v-length" type="number" placeholder="선택" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:13px; color:#555;">폭 (cm)</label>
+            <input id="v-width" type="number" placeholder="선택" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
+          </div>
+        </div>
+        <button class="btn btn-approve" onclick="registerVehicle()" style="margin-top:14px; width:100%; background:#2980b9;">등록</button>
+      </div>
+      <hr style="margin:0 0 20px;">
+      <!-- 등록된 차량 목록 -->
+      <h4 style="margin-bottom:12px;">등록된 차량</h4>
+      <table>
+        <thead><tr><th>번호판</th><th>차종</th><th>총중량</th><th>높이</th><th>관리</th></tr></thead>
+        <tbody id="vehicle-list"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="driver-modal">
     <div class="modal-content">
       <div class="modal-header">
@@ -776,6 +824,74 @@
     function closeDriverModal() {
       document.getElementById('driver-modal').style.display = 'none';
       loadDrivers();
+    }
+
+    // ── 차량 관리 ────────────────────────────────
+    async function openVehicleModal() {
+      document.getElementById('vehicle-modal').style.display = 'flex';
+      await loadVehicles();
+    }
+
+    function closeVehicleModal() {
+      document.getElementById('vehicle-modal').style.display = 'none';
+    }
+
+    async function loadVehicles() {
+      const tbody = document.getElementById('vehicle-list');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">로딩 중...</td></tr>';
+      const res = await fetch(`${API}/vehicles`, { headers: authHeaders() });
+      const vehicles = res.ok ? await res.json() : [];
+      tbody.innerHTML = vehicles.length === 0
+        ? '<tr><td colspan="5" style="text-align:center; color:gray;">등록된 차량 없음</td></tr>'
+        : vehicles.map(v => `
+          <tr>
+            <td><strong>${v.plate_number}</strong></td>
+            <td>${v.vehicle_type}</td>
+            <td>${v.weight_kg.toLocaleString()}kg</td>
+            <td>${v.height_m}m</td>
+            <td><button class="btn btn-delete btn-sm" onclick="deleteVehicle(${v.id})">삭제</button></td>
+          </tr>
+        `).join('');
+    }
+
+    async function registerVehicle() {
+      const plate  = document.getElementById('v-plate').value.trim();
+      const type   = document.getElementById('v-type').value.trim();
+      const weight = parseFloat(document.getElementById('v-weight').value);
+      const height = parseFloat(document.getElementById('v-height').value);
+      const length = document.getElementById('v-length').value;
+      const width  = document.getElementById('v-width').value;
+
+      if (!plate || !type || isNaN(weight) || isNaN(height)) {
+        return alert('번호판, 차종, 총중량, 높이는 필수입니다.');
+      }
+
+      const body = { plate_number: plate, vehicle_type: type, weight_kg: weight, height_m: height };
+      if (length) body.length_cm = parseFloat(length);
+      if (width)  body.width_cm  = parseFloat(width);
+
+      const res = await fetch(`${API}/vehicles`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`등록 실패: ${err.detail}`);
+      }
+      ['v-plate','v-type','v-weight','v-height','v-length','v-width'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      await loadVehicles();
+    }
+
+    async function deleteVehicle(vehicleId) {
+      if (!confirm('이 차량을 삭제하시겠습니까?')) return;
+      const res = await fetch(`${API}/vehicles/${vehicleId}`, {
+        method: 'DELETE', headers: authHeaders()
+      });
+      if (!res.ok) return alert('삭제 실패');
+      await loadVehicles();
     }
 
     // ── 운행 완료/취소 ──────────────────────────────
