@@ -1,6 +1,5 @@
 """
 RouteOn — OR-Tools TSP 경유지 순서 최적화
-팀원 A 코드 (동기 버전 유지)
 """
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 

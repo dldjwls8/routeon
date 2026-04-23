@@ -10,7 +10,7 @@
 
 | ENUM | 값 |
 |------|----|
-| `userrole` | `admin`, `driver` |
+| `userrole` | `superadmin`, `admin`, `driver`, `pending` |
 | `orgstatus` | `pending_review`, `approved`, `rejected` |
 | `tripstatus` | `scheduled`, `in_progress`, `completed`, `cancelled` |
 | `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual` |

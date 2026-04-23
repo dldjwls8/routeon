@@ -1,7 +1,5 @@
 """
 RouteOn — 카카오 모빌리티 API 연동 (비동기)
-팀원 A의 kakao.py 기반, 우리 환경변수 체계에 맞게 수정
-
 카카오 모빌리티 API: https://apis-navi.kakaomobility.com/v1
 """
 
