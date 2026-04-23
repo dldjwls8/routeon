@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>루트온 — 관리자 대시보드</title>
   <script>
-    const API = 'http://swc.ddns.net:8000';
+    const API = 'http://168.138.45.63:8000';
 
     function getToken() { return localStorage.getItem('token'); }
     function authHeaders() {
@@ -978,7 +978,7 @@
     let wsReconnectTimer = null;
 
     function connectWebSocket() {
-      const WS_URL = 'ws://swc.ddns.net:8000/ws/location';
+      const WS_URL = 'ws://168.138.45.63:8000/ws/location';
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
