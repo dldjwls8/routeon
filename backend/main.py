@@ -359,8 +359,8 @@ async def get_trip_polyline(
 
     nodes = route_data["route"]  # [{type, name, lat, lon}, ...]
 
-    # rest_stop 제외한 실제 경유 노드만 추출 (카카오 경유지 최대 5개 제한)
-    drive_nodes = [n for n in nodes if n["type"] != "rest_stop"]
+    # 전체 노드를 경유지로 포함 (휴게소도 실제 경유 지점)
+    drive_nodes = nodes
 
     if len(drive_nodes) < 2:
         return {"trip_id": trip_id, "polyline": [], "nodes": nodes}
