@@ -10,7 +10,7 @@ from sqlalchemy import text
 POSTGRES_USER     = os.getenv("POSTGRES_USER", "routeon")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 POSTGRES_HOST     = os.getenv("POSTGRES_HOST", "db")
-POSTGRES_PORT     = os.getenv("POSTGRES_PORT", "5433")
+POSTGRES_PORT     = os.getenv("POSTGRES_PORT", "5432")
 POSTGRES_DB       = os.getenv("POSTGRES_DB", "routeon")
 
 DATABASE_URL = (
@@ -18,7 +18,14 @@ DATABASE_URL = (
     f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 )
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,       # 쿼리 전 연결 유효성 확인 → 끊긴 연결 자동 교체
+    pool_recycle=1800,        # 30분마다 연결 갱신
+)
 
 AsyncSessionLocal = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
