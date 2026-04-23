@@ -167,15 +167,19 @@
       진행 중인 운행이 없습니다.
     </div>
 
-    <h3>📍 현재 배차(운행) 목록</h3>
-    <div id="route-list"></div>
+    <!-- 경로 노드 리스트 -->
+    <div id="route-nodes-box" style="display:none; margin-bottom:20px;">
+      <h3 style="margin-bottom:10px;">📍 경로</h3>
+      <div id="route-nodes-list"></div>
+    </div>
 
     <!-- 원격 배차 -->
-    <div style="margin-top: 25px; background: #fcfcfc; padding: 18px; border-radius: 10px; border: 1px solid #eee;">
+    <div id="remote-dispatch-box" style="display:none; background:#fcfcfc; padding:18px; border-radius:10px; border:1px solid #eee;">
       <h4 style="margin-top:0; color:#333;">+ 새 경유지 추가 (원격 배차)</h4>
+      <div id="current-waypoints-list" style="margin-bottom:12px;"></div>
       <input type="text" id="new-dest-name" placeholder="경유지 이름 (예: 평택항 상차장)">
       <input type="text" id="new-dest-addr" placeholder="상세 주소 입력">
-      <button class="btn btn-add" onclick="addRoute()">운행 목록에 추가</button>
+      <button class="btn btn-add" onclick="addRoute()">경유지 추가</button>
     </div>
   </div>
 
@@ -465,7 +469,8 @@
         noTripBox.style.display   = 'block';
       }
 
-      renderRoutes(driverDeliveries);
+      renderRouteNodes(trip);
+      renderRemoteDispatch(trip);
     }
 
     // 경로선 + 노드 마커 초기화
@@ -537,32 +542,83 @@
 
     function hideRightPanel() {
       document.getElementById('right-panel').style.display = 'none';
+      document.getElementById('route-nodes-box').style.display = 'none';
+      document.getElementById('remote-dispatch-box').style.display = 'none';
       currentDriverId = null;
       clearRouteDisplay();
       document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.custom-app-marker').forEach(m => m.classList.remove('active'));
     }
 
-    function renderRoutes(deliveries) {
-      const routeDiv = document.getElementById('route-list');
-      routeDiv.innerHTML = '';
-      if(deliveries.length === 0) {
-        routeDiv.innerHTML = '<p style="color: gray; text-align:center; padding:20px;">등록된 배차가 없습니다.</p>';
+    function renderRouteNodes(trip) {
+      const box  = document.getElementById('route-nodes-box');
+      const list = document.getElementById('route-nodes-list');
+
+      if (!trip) { box.style.display = 'none'; return; }
+      box.style.display = 'block';
+
+      const nodeIcons = {
+        origin:      { icon: '🏁', color: '#27ae60', label: '출발' },
+        waypoint:    { icon: '📦', color: '#e67e22', label: '경유' },
+        rest_stop:   { icon: '☕', color: '#8e44ad', label: '휴게' },
+        destination: { icon: '🏴', color: '#e74c3c', label: '목적지' },
+      };
+
+      // optimized_route가 있으면 전체 노드, 없으면 waypoints + 목적지만 표시
+      let nodes = [];
+      if (trip.optimized_route?.route) {
+        nodes = trip.optimized_route.route;
+      } else {
+        nodes = [
+          ...(trip.waypoints || []).map(w => ({ type: 'waypoint', name: w.name, lat: w.lat, lon: w.lon })),
+          { type: 'destination', name: trip.dest_name },
+        ];
+      }
+
+      if (nodes.length === 0) {
+        list.innerHTML = '<p style="color:gray; font-size:13px; text-align:center; padding:10px;">경로 정보 없음</p>';
         return;
       }
-      deliveries.forEach(d => {
-        const item = document.createElement('div');
-        item.className = 'route-item';
-        const statusLabel = { pending: '대기', in_progress: '진행중', done: '완료', done_manual: '수동완료' }[d.status] || d.status;
-        item.innerHTML = `
-            <div>
-              <strong style="color:#333;">${d.address}</strong>
-              <small>상태: ${statusLabel}</small>
+
+      list.innerHTML = nodes.map((n, i) => {
+        const meta = nodeIcons[n.type] || { icon: '📍', color: '#555', label: '' };
+        const rest = n.min_rest_minutes ? `<span style="font-size:11px; color:#8e44ad; margin-left:6px;">(${n.min_rest_minutes}분 휴식)</span>` : '';
+        return `
+          <div style="display:flex; align-items:center; gap:10px; padding:9px 12px;
+                      background:#fff; border:1px solid #eee; border-radius:8px; margin-bottom:6px;">
+            <span style="font-size:18px;">${meta.icon}</span>
+            <div style="flex:1;">
+              <span style="font-size:14px; font-weight:600; color:#333;">${n.name}</span>${rest}
+              <small style="display:block; color:#aaa; font-size:11px;">${meta.label}</small>
             </div>
-            <button class="btn btn-delete" onclick="deleteDelivery('${d.id}')">삭제</button>
-        `;
-        routeDiv.appendChild(item);
-      });
+            ${i < nodes.length - 1 ? '' : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function renderRemoteDispatch(trip) {
+      const box = document.getElementById('remote-dispatch-box');
+      const wpList = document.getElementById('current-waypoints-list');
+
+      if (!trip || !['scheduled', 'in_progress'].includes(trip.status)) {
+        box.style.display = 'none';
+        return;
+      }
+      box.style.display = 'block';
+
+      const waypoints = trip.waypoints || [];
+      if (waypoints.length === 0) {
+        wpList.innerHTML = '<p style="color:gray; font-size:12px; margin:0 0 8px;">등록된 경유지 없음</p>';
+      } else {
+        wpList.innerHTML = `
+          <p style="font-size:12px; color:#555; margin:0 0 6px; font-weight:600;">현재 경유지</p>
+          ${waypoints.map(w => `
+            <div style="font-size:13px; padding:5px 10px; background:#f1f3f5;
+                        border-radius:6px; margin-bottom:4px; color:#333;">
+              📦 ${w.name}
+            </div>`).join('')}
+          <div style="border-top:1px solid #eee; margin:10px 0;"></div>`;
+      }
     }
 
     async function addRoute() {
