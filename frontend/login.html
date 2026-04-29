@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>루트온 관리자 - 로그인</title>
+  <title>루트온 - 로그인</title>
   <style>
     body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f7f6; font-family: 'Malgun Gothic', sans-serif; }
     .auth-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 350px; text-align: center; }
@@ -20,7 +20,7 @@
 
   <div class="auth-card">
     <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
-    <h2>관리자 로그인</h2>
+    <h2>로그인</h2>
     
     <form id="loginForm">
       <input type="text" id="username" placeholder="아이디" required>
@@ -28,7 +28,7 @@
       <button type="submit" class="btn">로그인</button>
     </form>
     
-    <a href="/register.html" class="link">계정이 없으신가요? 관리자 가입하기</a>
+    <a href="/register.html" class="link">관리자 계정이 없으신가요? 가입하기</a>
   </div>
 
   <script>
@@ -52,7 +52,7 @@
         localStorage.setItem('user_id', data.user_id);
         localStorage.setItem('username', data.username);
         localStorage.setItem('role', data.role);
-        window.location.href = '/dashboard.html';
+        window.location.href = data.role === 'driver' ? '/driver.html' : '/dashboard.html';
       } else {
         alert(data.detail || '로그인에 실패했습니다.');
       }

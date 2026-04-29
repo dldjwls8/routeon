@@ -178,6 +178,49 @@ GPS 이동 이력. TimescaleDB hypertable (7일 retention).
 
 ---
 
+### `conversations`
+
+관리자와 기사 간 조직 내부 1:1 대화방. 운행과는 독립된 MVP 채팅이다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `id` | UUID | PK | |
+| `organization_id` | INTEGER | FK → organizations.id, NOT NULL | 대화방 소속 조직 |
+| `admin_id` | UUID | FK → users.id, NOT NULL | 관리자 참여자 |
+| `driver_id` | UUID | FK → users.id, NOT NULL | 기사 참여자 |
+| `admin_last_read_at` | DATETIME | | 관리자 읽음 워터마크 |
+| `driver_last_read_at` | DATETIME | | 기사 읽음 워터마크 |
+| `created_at` | DATETIME | NOT NULL | |
+| `updated_at` | DATETIME | NOT NULL | 최근 메시지 시각 |
+
+제약/인덱스:
+- UNIQUE (`organization_id`, `admin_id`, `driver_id`)
+- INDEX `admin_id`, `driver_id`
+- INDEX (`organization_id`, `updated_at`)
+
+---
+
+### `messages`
+
+대화방에 저장되는 텍스트 메시지. MVP에서는 첨부/삭제/수정 없이 본문만 저장한다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `id` | UUID | PK | |
+| `conversation_id` | UUID | FK → conversations.id, NOT NULL | |
+| `sender_id` | UUID | FK → users.id, NOT NULL | 발신자 |
+| `content` | TEXT | NOT NULL | 최대 2,000자 |
+| `created_at` | DATETIME | NOT NULL | |
+
+제약/인덱스:
+- INDEX (`conversation_id`, `created_at`) — 시간순 메시지 조회
+- INDEX (`conversation_id`, `id`) — 커서 검증
+- INDEX `sender_id`
+
+읽음 수는 `messages.created_at > conversations.{role}_last_read_at`이고 발신자가 본인이 아닌 메시지 수로 계산한다.
+
+---
+
 ## 관계 다이어그램
 
 ```
@@ -187,6 +230,8 @@ organizations ──── users ──────── trips ─────�
                                 vehicles (N:1)
 
 users ──────── locations (1:N, GPS 이력)
+users ──────── conversations ──────── messages
+              admin/driver (1:1)
 
 rest_stops (독립 — trips.optimized_route JSONB에서 참조)
 ```

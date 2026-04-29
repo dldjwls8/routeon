@@ -65,7 +65,11 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    payload = decode_token(credentials.credentials)
+    return await get_current_user_from_token(credentials.credentials, db)
+
+
+async def get_current_user_from_token(token: str, db: AsyncSession) -> User:
+    payload = decode_token(token)
     result  = await db.execute(select(User).where(User.id == payload["sub"]))
     user    = result.scalar_one_or_none()
     if not user:

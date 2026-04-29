@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Float, Integer, Boolean,
-    DateTime, ForeignKey, Text, Enum as SAEnum
+    DateTime, ForeignKey, Text, Enum as SAEnum,
+    Index, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -92,6 +93,69 @@ class User(Base):
                                 foreign_keys="Delivery.assigned_to")
     trips        = relationship("Trip", back_populates="driver")
     locations    = relationship("Location", back_populates="user")
+    admin_conversations = relationship(
+        "Conversation",
+        back_populates="admin",
+        foreign_keys="Conversation.admin_id",
+    )
+    driver_conversations = relationship(
+        "Conversation",
+        back_populates="driver",
+        foreign_keys="Conversation.driver_id",
+    )
+    sent_messages = relationship(
+        "Message",
+        back_populates="sender",
+        foreign_keys="Message.sender_id",
+    )
+
+
+# ────────────────────────────────────────────────
+# conversations / messages  (관리자 ↔ 기사 1:1 채팅)
+# ────────────────────────────────────────────────
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "admin_id", "driver_id",
+            name="uq_conversations_org_admin_driver",
+        ),
+        Index("ix_conversations_admin_id", "admin_id"),
+        Index("ix_conversations_driver_id", "driver_id"),
+        Index("ix_conversations_org_updated", "organization_id", "updated_at"),
+    )
+
+    id                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id     = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    admin_id            = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    driver_id           = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    admin_last_read_at  = Column(DateTime)
+    driver_last_read_at = Column(DateTime)
+    created_at          = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at          = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    organization = relationship("Organization")
+    admin        = relationship("User", back_populates="admin_conversations", foreign_keys=[admin_id])
+    driver       = relationship("User", back_populates="driver_conversations", foreign_keys=[driver_id])
+    messages     = relationship("Message", back_populates="conversation")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+        Index("ix_messages_conversation_id_id", "conversation_id", "id"),
+        Index("ix_messages_sender_id", "sender_id"),
+    )
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False)
+    sender_id       = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    content         = Column(Text, nullable=False)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    conversation = relationship("Conversation", back_populates="messages")
+    sender       = relationship("User", back_populates="sent_messages", foreign_keys=[sender_id])
 
 
 # ────────────────────────────────────────────────

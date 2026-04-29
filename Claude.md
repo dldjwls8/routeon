@@ -252,6 +252,27 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 | `GET /location-logs/{user_id}` | 관리자 | 기사 현재 위치 (Redis) |
 | `WS /ws/location` | 없음 | 실시간 위치 + 재경로 알림 WebSocket |
 
+### 채팅
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
+| `GET /chat/partners` | 관리자/기사 | 같은 조직의 채팅 가능 상대 목록. 관리자면 기사, 기사면 관리자만 반환 |
+| `GET /chat/conversations` | 관리자/기사 | 본인이 참여한 대화방 목록 + unread_count |
+| `POST /chat/conversations` | 관리자/기사 | `{partner_id}`로 같은 조직 admin-driver 대화방 생성 또는 조회 |
+| `GET /chat/conversations/{id}/messages?before_message_id=&limit=50` | 관리자/기사 | 메시지 히스토리. 응답은 항상 과거→현재 시간 오름차순 |
+| `POST /chat/conversations/{id}/messages` | 관리자/기사 | `{content}` 텍스트 메시지 전송. 공백/2,000자 초과 거부 |
+| `POST /chat/conversations/{id}/read` | 관리자/기사 | `{last_read_message_id?}` 기준 읽음 워터마크 갱신 |
+| `WS /ws/chat?token={JWT}` | 관리자/기사 | 사용자 단위 채팅 WebSocket. `chat.ready`, `chat.message`, `chat.read` 이벤트 수신 |
+
+채팅 권한 규칙:
+- 같은 `organization_id` 안의 `admin` ↔ `driver` 조합만 허용한다.
+- `superadmin`, `pending`, admin↔admin, driver↔driver 조합은 거부한다.
+- 실시간 전송 실패는 DB 저장을 롤백하지 않는다. 재접속 시 REST 히스토리로 복구한다.
+
+프론트엔드 진입점:
+- 관리자: `/dashboard.html` 기사 카드 선택 → 우측 패널의 1:1 채팅 영역
+- 기사: `/driver.html` → 같은 조직 관리자 목록에서 선택, 기본값은 첫 번째 관리자
+- 로그인 후 `role === "driver"`는 `/driver.html`, 그 외 관리 계정은 `/dashboard.html`로 이동한다.
+
 ---
 
 ## 주의사항
