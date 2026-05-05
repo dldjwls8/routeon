@@ -171,6 +171,88 @@
     .wp-drag-item { cursor: grab; }
     .wp-drag-item.dragging { opacity: 0.35; cursor: grabbing; }
     .wp-drag-item.drag-over { outline: 2px dashed #FFE812; background: #fffde8 !important; border-radius: 6px; }
+
+    /* ── 지도 검색바 ───────────────────────────────── */
+    .map-search-bar {
+      position: absolute; top: 16px; left: 55px; width: 250px; z-index: 15;
+    }
+    .map-search-bar .search-icon {
+      position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+      font-size: 14px; pointer-events: none; z-index: 1;
+    }
+    .map-search-bar input {
+      width: 100%; padding: 10px 12px 10px 34px; border: none;
+      border-radius: 22px; font-size: 13px; outline: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.18); box-sizing: border-box; background: #fff;
+    }
+    .map-search-bar .ac-dropdown { border-radius: 8px; border-top: 1px solid #ddd; margin-top: 4px; }
+
+    /* ── 운행 생성 패널 (지도 위 플로팅) ──────────── */
+    .trip-builder {
+      position: absolute; top: 16px; right: 16px; width: 272px; z-index: 15;
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+      max-height: calc(100vh - 100px); overflow-y: auto;
+    }
+    .tb-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 14px; background: #333; color: #fff;
+      font-size: 14px; font-weight: bold; border-radius: 12px 12px 0 0;
+    }
+    .tb-reset-btn {
+      background: rgba(255,255,255,0.15); border: none; color: #fff;
+      border-radius: 10px; padding: 3px 9px; cursor: pointer; font-size: 12px;
+    }
+    .tb-reset-btn:hover { background: rgba(255,255,255,0.3); }
+    .tb-section { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+    .tb-section:last-child { border-bottom: none; }
+    .tb-label {
+      font-size: 11px; font-weight: 700; color: #999;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      margin-bottom: 6px; display: flex; align-items: center; gap: 5px;
+    }
+    .tb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+    .tb-point-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .tb-point-label {
+      font-size: 13px; color: #333; flex: 1; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tb-point-label.tb-unset { color: #c0c0c0; font-style: italic; }
+    .tb-icon-btn {
+      background: #f1f3f5; border: none; border-radius: 6px;
+      padding: 4px 8px; cursor: pointer; font-size: 13px; flex-shrink: 0;
+    }
+    .tb-icon-btn:hover { background: #e0e3e7; }
+    .tb-wp-item {
+      display: flex; align-items: center; gap: 6px; font-size: 12px;
+      padding: 5px 0; color: #555;
+    }
+    .tb-wp-item .wp-handle { color: #ccc; cursor: grab; }
+    .tb-wp-item.dragging { opacity: 0.4; }
+    .tb-wp-item.drag-over { outline: 2px dashed #e67e22; border-radius: 4px; }
+    .tb-add-wp-btn {
+      width: 100%; padding: 7px; background: #fff7e6;
+      border: 1px dashed #e67e22; border-radius: 6px;
+      color: #e67e22; font-size: 12px; cursor: pointer; margin-top: 6px;
+    }
+    .tb-add-wp-btn:hover { background: #ffecd1; }
+    .tb-footer { padding: 12px 14px; }
+    .tb-footer select, .tb-footer input[type="datetime-local"] {
+      width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 13px; margin-bottom: 8px; box-sizing: border-box;
+    }
+
+    /* ── 검색 핀 팝업 ──────────────────────────────── */
+    .search-pin-popup {
+      background: #fff; border-radius: 10px; padding: 12px 14px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.2); min-width: 170px; font-size: 13px;
+    }
+    .search-pin-popup .pin-name { font-weight: bold; color: #333; margin-bottom: 8px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .search-pin-popup .pin-btns { display: flex; gap: 5px; }
+    .search-pin-popup .pin-btn {
+      flex: 1; padding: 5px 0; border: none; border-radius: 12px;
+      cursor: pointer; font-size: 11px; font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -193,7 +275,6 @@
     <div id="driver-list"></div>
 
     <div class="left-footer">
-      <button class="btn btn-approve" onclick="openTripModal()" style="background:#27ae60;">🚛 운행 생성</button>
       <button class="btn btn-setting" onclick="openDriverModal()">👥 기사 관리</button>
       <button class="btn btn-setting" onclick="openVehicleModal()" style="background:#2980b9;">🚗 차량 관리</button>
       <button class="btn btn-delete" onclick="logout()">로그아웃</button>
@@ -202,6 +283,57 @@
 
   <div class="map-container">
     <button class="panel-toggle-btn" id="toggle-btn" onclick="togglePanel()" title="메뉴 접기">◀</button>
+
+    <!-- 지도 검색바 -->
+    <div class="map-search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="map-search-input" placeholder="장소 검색..." autocomplete="off">
+      <div class="ac-dropdown" id="ac-map-search"></div>
+    </div>
+
+    <!-- 운행 생성 패널 -->
+    <div class="trip-builder" id="trip-builder">
+      <div class="tb-header">
+        <span>🚛 새 운행</span>
+        <button class="tb-reset-btn" onclick="resetTripBuilder()">↺ 초기화</button>
+      </div>
+
+      <div class="tb-section">
+        <div class="tb-label"><span class="tb-dot" style="background:#27ae60;"></span>출발지 <span style="font-weight:normal; color:#bbb;">(선택)</span></div>
+        <div class="tb-point-row">
+          <div id="tb-origin-label" class="tb-point-label tb-unset">검색하거나 지도 클릭</div>
+          <div style="display:flex;gap:3px;">
+            <button class="tb-icon-btn" onclick="openMapPicker('tb-origin')" title="지도에서 선택">📍</button>
+            <button class="tb-icon-btn" id="tb-origin-clear" onclick="clearTbPoint('origin')" style="display:none;" title="삭제">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tb-section">
+        <div class="tb-label"><span class="tb-dot" style="background:#e67e22;"></span>경유지</div>
+        <div id="tb-waypoints-list"></div>
+        <button class="tb-add-wp-btn" onclick="openMapPicker('tb-wp')">+ 경유지 지도에서 추가</button>
+      </div>
+
+      <div class="tb-section">
+        <div class="tb-label"><span class="tb-dot" style="background:#e74c3c;"></span>목적지 <span style="color:#e74c3c;">*</span></div>
+        <div class="tb-point-row">
+          <div id="tb-dest-label" class="tb-point-label tb-unset">검색하거나 지도 클릭</div>
+          <div style="display:flex;gap:3px;">
+            <button class="tb-icon-btn" onclick="openMapPicker('tb-dest')" title="지도에서 선택">📍</button>
+            <button class="tb-icon-btn" id="tb-dest-clear" onclick="clearTbPoint('dest')" style="display:none;" title="삭제">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tb-footer">
+        <select id="tb-driver"><option value="">기사 선택</option></select>
+        <select id="tb-vehicle"><option value="">차량 선택</option></select>
+        <input type="datetime-local" id="tb-departure" title="출발 예정 시각 (선택)">
+        <button class="btn btn-approve" onclick="createTripFromMap()" style="width:100%; font-size:14px;">✅ 운행 생성</button>
+      </div>
+    </div>
+
     <div id="map-pick-banner">
       <span id="map-pick-label">📍 위치를 클릭하세요</span>
       <button class="pick-cancel" onclick="cancelMapPick()">취소</button>
@@ -276,74 +408,6 @@
   -->
 
   <!-- 운행 생성 모달 -->
-  <div class="modal-overlay" id="trip-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>🚛 새 운행 생성</h2>
-        <button onclick="closeTripModal()" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
-      </div>
-
-      <div class="setting-group">
-        <label>기사 선택</label>
-        <select id="trip-driver" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
-          <option value="">기사를 선택하세요</option>
-        </select>
-      </div>
-
-      <div class="setting-group">
-        <label>차량 선택</label>
-        <select id="trip-vehicle" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
-          <option value="">차량을 선택하세요</option>
-        </select>
-      </div>
-
-      <div class="setting-group">
-        <label>출발지 <span style="font-weight:normal; color:#999; font-size:12px;">(선택 — 미입력 시 기사 현재 위치 사용)</span></label>
-        <input type="text" id="trip-origin-name" placeholder="출발지 이름 (예: 서울 물류센터)" style="width:100%; margin-bottom:8px;" autocomplete="off">
-        <div class="ac-wrapper">
-          <div style="display:flex; gap:6px; align-items:stretch;">
-            <input type="text" id="trip-origin-addr" placeholder="출발지 주소 검색" autocomplete="off" style="flex:1; margin:0;">
-            <button type="button" class="btn btn-setting" onclick="openMapPicker('trip-origin')" style="white-space:nowrap; padding:8px 12px; font-size:13px;">🗺 지도</button>
-          </div>
-          <div class="ac-dropdown" id="ac-trip-origin-addr"></div>
-        </div>
-      </div>
-
-      <div class="setting-group">
-        <label>목적지</label>
-        <input type="text" id="trip-dest-name" placeholder="목적지 이름 (예: 부산 물류창고)" style="width:100%; margin-bottom:8px;" autocomplete="off">
-        <div class="ac-wrapper">
-          <div style="display:flex; gap:6px; align-items:stretch;">
-            <input type="text" id="trip-dest-addr" placeholder="목적지 주소 검색" autocomplete="off" style="flex:1; margin:0;">
-            <button type="button" class="btn btn-setting" onclick="openMapPicker('trip-dest')" style="white-space:nowrap; padding:8px 12px; font-size:13px;">🗺 지도</button>
-          </div>
-          <div class="ac-dropdown" id="ac-trip-dest-addr"></div>
-        </div>
-      </div>
-
-      <div class="setting-group">
-        <label>경유지 (선택)</label>
-        <div id="trip-waypoints-list"></div>
-        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:flex-start;">
-          <input type="text" id="wp-name" placeholder="경유지 이름" autocomplete="off" style="margin:0; flex:1; min-width:100px;">
-          <div class="ac-wrapper" style="flex:2; min-width:160px;">
-            <input type="text" id="wp-addr" placeholder="경유지 주소 검색" autocomplete="off" style="margin:0; width:100%; box-sizing:border-box;">
-            <div class="ac-dropdown" id="ac-wp-addr"></div>
-          </div>
-          <button type="button" class="btn btn-setting" onclick="openMapPicker('wp')" style="padding:10px 11px; font-size:15px;" title="지도에서 선택">🗺</button>
-          <button class="btn btn-setting" onclick="addWaypoint()" style="white-space:nowrap; padding:10px 14px;">추가</button>
-        </div>
-      </div>
-
-      <div class="setting-group">
-        <label>출발 예정 시각 (선택)</label>
-        <input type="datetime-local" id="trip-departure" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; font-size:14px; margin:0;">
-      </div>
-
-      <button class="btn btn-approve" onclick="createTrip()" style="width:100%; margin-top:10px; font-size:15px;">✅ 운행 생성</button>
-    </div>
-  </div>
-
   <!-- 기사 관리 모달 -->
   <div class="modal-overlay" id="vehicle-modal">
     <div class="modal-content">
@@ -483,6 +547,7 @@
       await Promise.all(tripPromises);
       await loadChatConversations();
       renderLeftPanel(driversCache);
+      initTripBuilder();
     }
 
     function renderLeftPanel(drivers) {
@@ -862,84 +927,92 @@
     }
 
     // ── 운행 생성 모달 ──────────────────────────────
-    let tripWaypoints = [];  // [{name, lat, lon}]
+    // ════════════════════════════════════════════════
+    // 운행 생성 패널 (Trip Builder)
+    // ════════════════════════════════════════════════
+    let tbOrigin    = null;  // {name, lat, lon}
+    let tbDest      = null;  // {name, lat, lon}
+    let tbWaypoints = [];    // [{name, lat, lon}]
+    let _searchPinOverlay = null;
+    let _searchPinCoord   = null;
 
-    async function openTripModal() {
-      tripWaypoints = [];
-      renderWaypointList();
-      document.getElementById('trip-origin-name').value = '';
-      document.getElementById('trip-origin-addr').value = '';
-      document.getElementById('trip-dest-name').value   = '';
-      document.getElementById('trip-dest-addr').value   = '';
-      document.getElementById('trip-departure').value   = '';
-      delete _acCoords['trip-origin-addr'];
-      delete _acCoords['trip-dest-addr'];
-      delete _acCoords['wp-addr'];
-
-      // 기사 목록 (현재 선택된 기사 자동 선택)
-      const driverSel = document.getElementById('trip-driver');
-      driverSel.innerHTML = '<option value="">기사를 선택하세요</option>';
+    async function initTripBuilder() {
+      // 기사 목록
+      const driverSel = document.getElementById('tb-driver');
+      driverSel.innerHTML = '<option value="">기사 선택</option>';
       driversCache.forEach(d => {
         driverSel.innerHTML += `<option value="${d.id}">${d.username} 기사</option>`;
       });
       if (currentDriverId) driverSel.value = currentDriverId;
 
       // 차량 목록
-      const vehicleSel = document.getElementById('trip-vehicle');
-      vehicleSel.innerHTML = '<option value="">차량을 선택하세요</option>';
+      const vehicleSel = document.getElementById('tb-vehicle');
+      vehicleSel.innerHTML = '<option value="">차량 선택</option>';
       try {
         const vRes = await fetch(`${API}/vehicles`, { headers: authHeaders() });
-        const vehicles = await vRes.json();
+        const vehicles = vRes.ok ? await vRes.json() : [];
         vehicles.forEach(v => {
           vehicleSel.innerHTML += `<option value="${v.id}">${v.plate_number} (${v.vehicle_type})</option>`;
         });
       } catch(e) {}
 
-      document.getElementById('trip-modal').style.display = 'flex';
+      renderTbWaypoints();
     }
 
-    function closeTripModal() {
-      document.getElementById('trip-modal').style.display = 'none';
-      delete _acCoords['trip-origin-addr'];
-      delete _acCoords['trip-dest-addr'];
-      delete _acCoords['wp-addr'];
-    }
-
-    async function addWaypoint() {
-      const name = document.getElementById('wp-name').value.trim();
-      const addr = document.getElementById('wp-addr').value.trim();
-      if (!name || !addr) return alert('이름과 주소를 입력하세요.');
-
-      let coord = _acCoords['wp-addr'];
-      if (!coord) {
-        const coordRes = await fetch(`${API}/address/coord?query=${encodeURIComponent(addr)}`, { headers: authHeaders() });
-        if (!coordRes.ok) return alert('주소를 찾을 수 없습니다.');
-        coord = await coordRes.json();
+    function setTbPoint(type, name, lat, lon) {
+      const point = { name, lat, lon };
+      if (type === 'origin') {
+        tbOrigin = point;
+        document.getElementById('tb-origin-label').textContent = name;
+        document.getElementById('tb-origin-label').classList.remove('tb-unset');
+        document.getElementById('tb-origin-clear').style.display = 'inline-block';
+      } else if (type === 'dest') {
+        tbDest = point;
+        document.getElementById('tb-dest-label').textContent = name;
+        document.getElementById('tb-dest-label').classList.remove('tb-unset');
+        document.getElementById('tb-dest-clear').style.display = 'inline-block';
       }
-
-      tripWaypoints.push({ name, lat: coord.lat, lon: coord.lon });
-      document.getElementById('wp-name').value = '';
-      document.getElementById('wp-addr').value = '';
-      delete _acCoords['wp-addr'];
-      renderWaypointList();
     }
 
-    function renderWaypointList() {
-      const el = document.getElementById('trip-waypoints-list');
-      if (tripWaypoints.length === 0) {
-        el.innerHTML = '<small style="color:gray;">추가된 경유지 없음</small>';
+    function clearTbPoint(type) {
+      if (type === 'origin') {
+        tbOrigin = null;
+        document.getElementById('tb-origin-label').textContent = '검색하거나 지도 클릭';
+        document.getElementById('tb-origin-label').classList.add('tb-unset');
+        document.getElementById('tb-origin-clear').style.display = 'none';
+      } else if (type === 'dest') {
+        tbDest = null;
+        document.getElementById('tb-dest-label').textContent = '검색하거나 지도 클릭';
+        document.getElementById('tb-dest-label').classList.add('tb-unset');
+        document.getElementById('tb-dest-clear').style.display = 'none';
+      }
+    }
+
+    function tbAddWaypoint(name, lat, lon) {
+      tbWaypoints.push({ name, lat, lon });
+      renderTbWaypoints();
+    }
+
+    function tbRemoveWaypoint(idx) {
+      tbWaypoints.splice(idx, 1);
+      renderTbWaypoints();
+    }
+
+    function renderTbWaypoints() {
+      const el = document.getElementById('tb-waypoints-list');
+      if (tbWaypoints.length === 0) {
+        el.innerHTML = '<div style="font-size:12px; color:#ccc; padding:2px 0;">없음</div>';
         return;
       }
-      el.innerHTML = tripWaypoints.map((w, i) => `
-        <div class="wp-drag-item" draggable="true" data-idx="${i}"
-             style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:#f1f3f5; border-radius:6px; margin-bottom:6px;">
-          <span style="color:#bbb; font-size:16px; cursor:grab;" title="드래그해서 순서 변경">⠿</span>
-          <span style="font-size:13px; flex:1;">📦 ${w.name}</span>
-          <button onclick="removeWaypoint(${i})" style="background:none; border:none; cursor:pointer; color:#e74c3c; font-size:16px; line-height:1;">×</button>
+      el.innerHTML = tbWaypoints.map((w, i) => `
+        <div class="tb-wp-item" draggable="true" data-idx="${i}">
+          <span class="wp-handle">⠿</span>
+          <span style="flex:1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📦 ${escapeHtml(w.name)}</span>
+          <button onclick="tbRemoveWaypoint(${i})" style="background:none; border:none; cursor:pointer; color:#e74c3c; font-size:14px; padding:0 2px; flex-shrink:0;">✕</button>
         </div>
       `).join('');
 
-      el.querySelectorAll('.wp-drag-item').forEach(item => {
+      el.querySelectorAll('.tb-wp-item').forEach(item => {
         item.addEventListener('dragstart', e => {
           _dragSrcIdx = parseInt(item.dataset.idx);
           setTimeout(() => item.classList.add('dragging'), 0);
@@ -953,64 +1026,45 @@
           item.classList.remove('drag-over');
           const destIdx = parseInt(item.dataset.idx);
           if (_dragSrcIdx === null || _dragSrcIdx === destIdx) return;
-          const moved = tripWaypoints.splice(_dragSrcIdx, 1)[0];
-          tripWaypoints.splice(destIdx, 0, moved);
+          const moved = tbWaypoints.splice(_dragSrcIdx, 1)[0];
+          tbWaypoints.splice(destIdx, 0, moved);
           _dragSrcIdx = null;
-          renderWaypointList();
+          renderTbWaypoints();
         });
       });
     }
 
-    function removeWaypoint(idx) {
-      tripWaypoints.splice(idx, 1);
-      renderWaypointList();
+    function resetTripBuilder() {
+      tbOrigin = tbDest = null;
+      tbWaypoints = [];
+      clearTbPoint('origin');
+      clearTbPoint('dest');
+      renderTbWaypoints();
+      document.getElementById('tb-departure').value = '';
+      if (currentDriverId) document.getElementById('tb-driver').value = currentDriverId;
     }
 
-    async function createTrip() {
-      const driverId   = document.getElementById('trip-driver').value;
-      const vehicleId  = document.getElementById('trip-vehicle').value;
-      const originName = document.getElementById('trip-origin-name').value.trim();
-      const originAddr = document.getElementById('trip-origin-addr').value.trim();
-      const destName   = document.getElementById('trip-dest-name').value.trim();
-      const destAddr   = document.getElementById('trip-dest-addr').value.trim();
-      const departure  = document.getElementById('trip-departure').value;
+    async function createTripFromMap() {
+      const driverId  = document.getElementById('tb-driver').value;
+      const vehicleId = document.getElementById('tb-vehicle').value;
+      const departure = document.getElementById('tb-departure').value;
 
       if (!driverId)  return alert('기사를 선택하세요.');
       if (!vehicleId) return alert('차량을 선택하세요.');
-      if (!destName)  return alert('목적지 이름을 입력하세요.');
-      if (!destAddr)  return alert('목적지 주소를 입력하세요.');
-
-      // 출발지 좌표 (입력된 경우만)
-      let originCoord = null;
-      if (originAddr) {
-        originCoord = _acCoords['trip-origin-addr'];
-        if (!originCoord) {
-          const r = await fetch(`${API}/address/coord?query=${encodeURIComponent(originAddr)}`, { headers: authHeaders() });
-          if (!r.ok) return alert('출발지 주소를 찾을 수 없습니다.');
-          originCoord = await r.json();
-        }
-      }
-
-      // 목적지 좌표
-      let coord = _acCoords['trip-dest-addr'];
-      if (!coord) {
-        const coordRes = await fetch(`${API}/address/coord?query=${encodeURIComponent(destAddr)}`, { headers: authHeaders() });
-        if (!coordRes.ok) return alert('목적지 주소를 찾을 수 없습니다.');
-        coord = await coordRes.json();
-      }
+      if (!tbDest)    return alert('목적지를 지도에서 선택하세요.');
 
       const body = {
         driver_id:  driverId,
         vehicle_id: parseInt(vehicleId),
-        dest_name:  destName,
-        dest_lat:   coord.lat,
-        dest_lon:   coord.lon,
-        waypoints:  tripWaypoints,
+        dest_name:  tbDest.name,
+        dest_lat:   tbDest.lat,
+        dest_lon:   tbDest.lon,
+        waypoints:  tbWaypoints,
       };
-      if (originCoord) {
-        body.origin_name = originName || originAddr;
-        body.origin_lat  = originCoord.lat;
-        body.origin_lon  = originCoord.lon;
+      if (tbOrigin) {
+        body.origin_name = tbOrigin.name;
+        body.origin_lat  = tbOrigin.lat;
+        body.origin_lon  = tbOrigin.lon;
       }
       if (departure) body.departure_time = new Date(departure).toISOString();
 
@@ -1023,8 +1077,94 @@
       }
 
       alert('✅ 운행이 생성됐습니다!');
-      closeTripModal();
+      resetTripBuilder();
       loadDrivers();
+    }
+
+    // ════════════════════════════════════════════════
+    // 지도 상단 검색바
+    // ════════════════════════════════════════════════
+    function initMapSearch() {
+      const input    = document.getElementById('map-search-input');
+      const dropdown = document.getElementById('ac-map-search');
+      if (!input) return;
+
+      input.addEventListener('input', () => {
+        clearTimeout(_acDebounce['map-search']);
+        const q = input.value.trim();
+        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+        _acDebounce['map-search'] = setTimeout(() => {
+          const ps = new kakao.maps.services.Places();
+          ps.keywordSearch(q, (data, status) => {
+            if (status !== kakao.maps.services.Status.OK || !data.length) {
+              dropdown.style.display = 'none';
+              return;
+            }
+            _acResults['map-search'] = data.slice(0, 6).map(p => ({
+              name: p.place_name,
+              addr: p.road_address_name || p.address_name,
+              lat:  parseFloat(p.y),
+              lon:  parseFloat(p.x),
+            }));
+            dropdown.innerHTML = _acResults['map-search'].map((r, i) => `
+              <div class="ac-item" data-idx="${i}">
+                <div class="ac-item-name">${escapeHtml(r.name)}</div>
+                <div class="ac-item-addr">${escapeHtml(r.addr)}</div>
+              </div>
+            `).join('');
+            dropdown.style.display = 'block';
+
+            dropdown.querySelectorAll('.ac-item').forEach(item => {
+              item.addEventListener('mousedown', e => {
+                e.preventDefault();
+                const r = _acResults['map-search'][parseInt(item.dataset.idx)];
+                input.value = r.name;
+                dropdown.style.display = 'none';
+                showSearchPin(r.lat, r.lon, r.name, r.addr);
+              });
+            });
+          });
+        }, 300);
+      });
+      input.addEventListener('blur', () => {
+        setTimeout(() => { dropdown.style.display = 'none'; }, 180);
+      });
+    }
+
+    function showSearchPin(lat, lon, name, addr) {
+      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
+
+      _searchPinCoord = { lat, lon, name: addr || name };
+      map.panTo(new kakao.maps.LatLng(lat, lon));
+
+      const el = document.createElement('div');
+      el.className = 'search-pin-popup';
+      el.innerHTML = `
+        <div class="pin-name" title="${escapeHtml(addr || name)}">${escapeHtml(name)}</div>
+        <div class="pin-btns">
+          <button class="pin-btn" style="background:#e8f8ee; color:#27ae60;" onclick="useSearchPin('origin')">🏁 출발지</button>
+          <button class="pin-btn" style="background:#fff7e6; color:#e67e22;" onclick="useSearchPin('waypoint')">📦 경유지</button>
+          <button class="pin-btn" style="background:#fdecea; color:#e74c3c;" onclick="useSearchPin('dest')">🏴 목적지</button>
+        </div>
+      `;
+
+      _searchPinOverlay = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(lat, lon),
+        content:  el,
+        map,
+        yAnchor: 1.4,
+        zIndex:  20,
+      });
+    }
+
+    function useSearchPin(type) {
+      if (!_searchPinCoord) return;
+      const { name, lat, lon } = _searchPinCoord;
+      if (type === 'origin')   setTbPoint('origin', name, lat, lon);
+      else if (type === 'dest') setTbPoint('dest',  name, lat, lon);
+      else                     tbAddWaypoint(name, lat, lon);
+      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
+      document.getElementById('map-search-input').value = '';
     }
 
     // ── 기사 관리 모달 ──────────────────────────────
@@ -1219,6 +1359,7 @@
         kakao.maps.load(() => {
           initMap();
           initAutocomplete();
+          initMapSearch();
           loadDrivers();
           connectLocationWebSocket();
           connectChatWebSocket();
@@ -1392,10 +1533,7 @@
     // ① 자동완성
     // ════════════════════════════════════════════════
     function initAutocomplete() {
-      setupAC('trip-origin-addr', 'trip-origin-name');
-      setupAC('trip-dest-addr',   'trip-dest-name');
-      setupAC('wp-addr',          'wp-name');
-      setupAC('new-dest-addr',    'new-dest-name');
+      setupAC('new-dest-addr', 'new-dest-name');
     }
 
     function setupAC(addrId, nameId) {
@@ -1460,16 +1598,15 @@
     function openMapPicker(target) {
       mapPickerTarget = target;
       mapPickerCoord  = null;
+      _pickSrcModal   = null;  // 모달 없음 — 패널은 항상 지도 위에 있음
 
-      // 모달이 열려 있으면 숨기고 기억
-      const inTripModal = ['trip-origin', 'trip-dest', 'wp'].includes(target);
-      _pickSrcModal = inTripModal ? 'trip-modal' : null;
-      if (_pickSrcModal) document.getElementById(_pickSrcModal).style.display = 'none';
+      // 검색 핀 팝업 닫기
+      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
 
       // 배너 문구
       const labels = {
-        'trip-origin': '출발지', 'trip-dest': '목적지',
-        'wp': '경유지', 'new-dest': '경유지',
+        'tb-origin': '출발지', 'tb-dest': '목적지', 'tb-wp': '경유지',
+        'new-dest': '경유지',
       };
       document.getElementById('map-pick-label').textContent =
         `📍 ${labels[target] || '위치'}를 지도에서 클릭하세요`;
@@ -1523,16 +1660,14 @@
     function _finishMapPick() {
       const addr = mapPickerCoord.addr ||
         `${mapPickerCoord.lat.toFixed(5)}, ${mapPickerCoord.lon.toFixed(5)}`;
+      const { lat, lon } = mapPickerCoord;
 
-      if (mapPickerTarget === 'trip-origin') {
-        document.getElementById('trip-origin-addr').value = addr;
-        _acCoords['trip-origin-addr'] = mapPickerCoord;
-      } else if (mapPickerTarget === 'trip-dest') {
-        document.getElementById('trip-dest-addr').value = addr;
-        _acCoords['trip-dest-addr'] = mapPickerCoord;
-      } else if (mapPickerTarget === 'wp') {
-        document.getElementById('wp-addr').value = addr;
-        _acCoords['wp-addr'] = mapPickerCoord;
+      if (mapPickerTarget === 'tb-origin') {
+        setTbPoint('origin', addr, lat, lon);
+      } else if (mapPickerTarget === 'tb-dest') {
+        setTbPoint('dest', addr, lat, lon);
+      } else if (mapPickerTarget === 'tb-wp') {
+        tbAddWaypoint(addr, lat, lon);
       } else if (mapPickerTarget === 'new-dest') {
         document.getElementById('new-dest-addr').value = addr;
         _acCoords['new-dest-addr'] = mapPickerCoord;
