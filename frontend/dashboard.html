@@ -135,30 +135,24 @@
     .ac-item-name { font-size: 13px; font-weight: 600; color: #333; }
     .ac-item-addr { font-size: 11px; color: #999; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* ── 지도 선택 모달 ──────────────────────────── */
-    .map-picker-overlay {
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.65); display: none;
-      justify-content: center; align-items: center; z-index: 2500;
+    /* ── 지도 픽 모드 배너 ──────────────────────── */
+    #map-pick-banner {
+      display: none; position: absolute; top: 16px; left: 50%;
+      transform: translateX(-50%); z-index: 20;
+      background: rgba(30,30,30,0.92); color: #fff;
+      padding: 11px 20px; border-radius: 24px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+      font-size: 14px; font-weight: bold; white-space: nowrap;
+      align-items: center; gap: 14px; pointer-events: auto;
     }
-    .map-picker-box {
-      background: #fff; width: 680px; border-radius: 14px; overflow: hidden;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.3); display: flex; flex-direction: column;
+    #map-pick-banner.active { display: flex; }
+    #map-pick-banner .pick-cancel {
+      background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.35);
+      color: #fff; border-radius: 14px; padding: 4px 13px;
+      font-size: 13px; cursor: pointer; font-weight: normal;
     }
-    .map-picker-header {
-      padding: 14px 20px; background: #333; color: #fff;
-      display: flex; justify-content: space-between; align-items: center;
-      font-size: 15px; font-weight: bold;
-    }
-    #map-picker-map { height: 380px; }
-    .map-picker-result {
-      padding: 12px 16px; background: #fffde8; border-top: 1px solid #ffe082;
-      font-size: 13px; color: #555; min-height: 44px; display: flex; align-items: center;
-    }
-    .map-picker-footer {
-      padding: 12px 16px; display: flex; gap: 10px;
-      background: #fafafa; border-top: 1px solid #eee;
-    }
+    #map-pick-banner .pick-cancel:hover { background: rgba(255,255,255,0.32); }
+    .map-container.pick-mode { cursor: crosshair; }
 
     /* ── 노드 상세 팝업 ───────────────────────────── */
     .node-popup {
@@ -208,6 +202,10 @@
 
   <div class="map-container">
     <button class="panel-toggle-btn" id="toggle-btn" onclick="togglePanel()" title="메뉴 접기">◀</button>
+    <div id="map-pick-banner">
+      <span id="map-pick-label">📍 위치를 클릭하세요</span>
+      <button class="pick-cancel" onclick="cancelMapPick()">취소</button>
+    </div>
     <div id="map"></div>
   </div>
 
@@ -418,22 +416,6 @@
     </div>
   </div>
 
-  <!-- 지도 선택 모달 -->
-  <div class="map-picker-overlay" id="map-picker-overlay">
-    <div class="map-picker-box">
-      <div class="map-picker-header">
-        <span>📍 지도에서 위치 선택</span>
-        <button onclick="closeMapPicker()" style="background:none; border:none; color:#fff; font-size:24px; cursor:pointer; line-height:1;">&times;</button>
-      </div>
-      <div id="map-picker-map"></div>
-      <div class="map-picker-result" id="map-picker-result">지도를 클릭해 위치를 선택하세요.</div>
-      <div class="map-picker-footer">
-        <button class="btn btn-approve" onclick="confirmMapPick()" style="flex:1;">✅ 이 위치 선택</button>
-        <button class="btn" onclick="closeMapPicker()" style="background:#999; flex:1;">취소</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     let map;
     let markers = {}; 
@@ -451,12 +433,13 @@
     let _acCoords    = {};   // inputId → {lat, lon}  자동완성 선택 좌표
     let _acResults   = {};   // inputId → 검색 결과 배열
     let _acDebounce  = {};   // inputId → setTimeout id
-    let _dragSrcIdx  = null;
-    let _nodePopupEl = null;
-    let mapPickerMap    = null;
-    let mapPickerMarker = null;
-    let mapPickerCoord  = null;
-    let mapPickerTarget = null;
+    let _dragSrcIdx      = null;
+    let _nodePopupEl     = null;
+    let _pickHandler     = null;
+    let _pickSrcModal    = null;
+    let mapPickerMarker  = null;
+    let mapPickerCoord   = null;
+    let mapPickerTarget  = null;
 
     function initMap() {
       const container = document.getElementById('map');
@@ -1477,45 +1460,67 @@
     function openMapPicker(target) {
       mapPickerTarget = target;
       mapPickerCoord  = null;
-      document.getElementById('map-picker-result').textContent = '지도를 클릭해 위치를 선택하세요.';
-      document.getElementById('map-picker-overlay').style.display = 'flex';
 
-      setTimeout(() => {
-        if (!mapPickerMap) {
-          const container = document.getElementById('map-picker-map');
-          mapPickerMap = new kakao.maps.Map(container, {
-            center: map.getCenter(),
-            level:  map.getLevel(),
-          });
-          kakao.maps.event.addListener(mapPickerMap, 'click', e => {
-            const ll = e.latLng;
-            mapPickerCoord = { lat: ll.getLat(), lon: ll.getLng() };
-            if (mapPickerMarker) mapPickerMarker.setMap(null);
-            mapPickerMarker = new kakao.maps.Marker({ position: ll, map: mapPickerMap });
+      // 모달이 열려 있으면 숨기고 기억
+      const inTripModal = ['trip-origin', 'trip-dest', 'wp'].includes(target);
+      _pickSrcModal = inTripModal ? 'trip-modal' : null;
+      if (_pickSrcModal) document.getElementById(_pickSrcModal).style.display = 'none';
 
-            const gc = new kakao.maps.services.Geocoder();
-            gc.coord2Address(ll.getLng(), ll.getLat(), (result, status) => {
-              const addr = status === kakao.maps.services.Status.OK
-                ? (result[0].road_address?.address_name || result[0].address?.address_name || '')
-                : '';
-              mapPickerCoord.addr = addr;
-              document.getElementById('map-picker-result').innerHTML =
-                `<strong>📍 선택된 위치:</strong> ${escapeHtml(addr || `${mapPickerCoord.lat.toFixed(5)}, ${mapPickerCoord.lon.toFixed(5)}`)}`;
-            });
-          });
-        } else {
-          mapPickerMap.setCenter(map.getCenter());
-          mapPickerMap.relayout();
+      // 배너 문구
+      const labels = {
+        'trip-origin': '출발지', 'trip-dest': '목적지',
+        'wp': '경유지', 'new-dest': '경유지',
+      };
+      document.getElementById('map-pick-label').textContent =
+        `📍 ${labels[target] || '위치'}를 지도에서 클릭하세요`;
+      document.getElementById('map-pick-banner').classList.add('active');
+      document.querySelector('.map-container').classList.add('pick-mode');
+
+      // 클릭 리스너 등록
+      _pickHandler = e => _onMapPickClick(e);
+      kakao.maps.event.addListener(map, 'click', _pickHandler);
+    }
+
+    function cancelMapPick() {
+      if (_pickHandler) {
+        kakao.maps.event.removeListener(map, 'click', _pickHandler);
+        _pickHandler = null;
+      }
+      if (mapPickerMarker) { mapPickerMarker.setMap(null); mapPickerMarker = null; }
+      document.getElementById('map-pick-banner').classList.remove('active');
+      document.querySelector('.map-container').classList.remove('pick-mode');
+      if (_pickSrcModal) {
+        document.getElementById(_pickSrcModal).style.display = 'flex';
+        _pickSrcModal = null;
+      }
+      mapPickerTarget = null;
+    }
+
+    function _onMapPickClick(e) {
+      // 리스너 즉시 제거 (중복 클릭 방지)
+      kakao.maps.event.removeListener(map, 'click', _pickHandler);
+      _pickHandler = null;
+
+      const ll = e.latLng;
+      mapPickerCoord = { lat: ll.getLat(), lon: ll.getLng() };
+
+      if (mapPickerMarker) mapPickerMarker.setMap(null);
+      mapPickerMarker = new kakao.maps.Marker({ position: ll, map });
+
+      document.getElementById('map-pick-label').textContent = '주소 조회 중…';
+
+      const gc = new kakao.maps.services.Geocoder();
+      gc.coord2Address(ll.getLng(), ll.getLat(), (result, status) => {
+        if (status === kakao.maps.services.Status.OK) {
+          mapPickerCoord.addr =
+            result[0].road_address?.address_name ||
+            result[0].address?.address_name || '';
         }
-      }, 60);
+        _finishMapPick();
+      });
     }
 
-    function closeMapPicker() {
-      document.getElementById('map-picker-overlay').style.display = 'none';
-    }
-
-    function confirmMapPick() {
-      if (!mapPickerCoord) return alert('지도에서 위치를 클릭해 선택해주세요.');
+    function _finishMapPick() {
       const addr = mapPickerCoord.addr ||
         `${mapPickerCoord.lat.toFixed(5)}, ${mapPickerCoord.lon.toFixed(5)}`;
 
@@ -1532,7 +1537,14 @@
         document.getElementById('new-dest-addr').value = addr;
         _acCoords['new-dest-addr'] = mapPickerCoord;
       }
-      closeMapPicker();
+
+      document.getElementById('map-pick-banner').classList.remove('active');
+      document.querySelector('.map-container').classList.remove('pick-mode');
+      if (_pickSrcModal) {
+        document.getElementById(_pickSrcModal).style.display = 'flex';
+        _pickSrcModal = null;
+      }
+      mapPickerTarget = null;
     }
 
     // ════════════════════════════════════════════════
