@@ -301,28 +301,22 @@
       <div class="tb-section">
         <div class="tb-label"><span class="tb-dot" style="background:#27ae60;"></span>출발지 <span style="font-weight:normal; color:#bbb;">(선택)</span></div>
         <div class="tb-point-row">
-          <div id="tb-origin-label" class="tb-point-label tb-unset">검색하거나 지도 클릭</div>
-          <div style="display:flex;gap:3px;">
-            <button class="tb-icon-btn" onclick="openMapPicker('tb-origin')" title="지도에서 선택">📍</button>
-            <button class="tb-icon-btn" id="tb-origin-clear" onclick="clearTbPoint('origin')" style="display:none;" title="삭제">✕</button>
-          </div>
+          <div id="tb-origin-label" class="tb-point-label tb-unset">지도를 클릭하세요</div>
+          <button class="tb-icon-btn" id="tb-origin-clear" onclick="clearTbPoint('origin')" style="display:none;" title="삭제">✕</button>
         </div>
       </div>
 
       <div class="tb-section">
         <div class="tb-label"><span class="tb-dot" style="background:#e67e22;"></span>경유지</div>
         <div id="tb-waypoints-list"></div>
-        <button class="tb-add-wp-btn" onclick="openMapPicker('tb-wp')">+ 경유지 지도에서 추가</button>
+        <div style="font-size:11px; color:#ccc; margin-top:5px; text-align:center;">지도 클릭 후 '경유지로' 선택</div>
       </div>
 
       <div class="tb-section">
         <div class="tb-label"><span class="tb-dot" style="background:#e74c3c;"></span>목적지 <span style="color:#e74c3c;">*</span></div>
         <div class="tb-point-row">
-          <div id="tb-dest-label" class="tb-point-label tb-unset">검색하거나 지도 클릭</div>
-          <div style="display:flex;gap:3px;">
-            <button class="tb-icon-btn" onclick="openMapPicker('tb-dest')" title="지도에서 선택">📍</button>
-            <button class="tb-icon-btn" id="tb-dest-clear" onclick="clearTbPoint('dest')" style="display:none;" title="삭제">✕</button>
-          </div>
+          <div id="tb-dest-label" class="tb-point-label tb-unset">지도를 클릭하세요</div>
+          <button class="tb-icon-btn" id="tb-dest-clear" onclick="clearTbPoint('dest')" style="display:none;" title="삭제">✕</button>
         </div>
       </div>
 
@@ -509,7 +503,32 @@
       const container = document.getElementById('map');
       const options = { center: new kakao.maps.LatLng(37.3950, 127.1110), level: 5 };
       map = new kakao.maps.Map(container, options);
-      kakao.maps.event.addListener(map, 'click', hideNodePopup);
+      kakao.maps.event.addListener(map, 'click', onMapClick);
+    }
+
+    function onMapClick(e) {
+      hideNodePopup();
+      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
+
+      // 원격배차 픽모드 중이면 _pickHandler가 처리
+      if (mapPickerTarget) return;
+
+      const ll  = e.latLng;
+      const lat = ll.getLat();
+      const lon = ll.getLng();
+
+      const gc = new kakao.maps.services.Geocoder();
+      gc.coord2Address(lon, lat, (result, status) => {
+        let addr = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        let name = addr;
+        if (status === kakao.maps.services.Status.OK) {
+          addr = result[0].road_address?.address_name
+              || result[0].address?.address_name
+              || addr;
+          name = addr;
+        }
+        showSearchPin(lat, lon, name, addr);
+      });
     }
 
     // 💡 왼쪽 패널 토글(접기/펴기) 기능
@@ -1596,24 +1615,17 @@
     // ② 지도에서 위치 선택
     // ════════════════════════════════════════════════
     function openMapPicker(target) {
+      if (target !== 'new-dest') return;  // 트립빌더는 지도 클릭으로 직접 처리
       mapPickerTarget = target;
       mapPickerCoord  = null;
-      _pickSrcModal   = null;  // 모달 없음 — 패널은 항상 지도 위에 있음
+      _pickSrcModal   = null;
 
-      // 검색 핀 팝업 닫기
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
 
-      // 배너 문구
-      const labels = {
-        'tb-origin': '출발지', 'tb-dest': '목적지', 'tb-wp': '경유지',
-        'new-dest': '경유지',
-      };
-      document.getElementById('map-pick-label').textContent =
-        `📍 ${labels[target] || '위치'}를 지도에서 클릭하세요`;
+      document.getElementById('map-pick-label').textContent = '📍 경유지를 지도에서 클릭하세요';
       document.getElementById('map-pick-banner').classList.add('active');
       document.querySelector('.map-container').classList.add('pick-mode');
 
-      // 클릭 리스너 등록
       _pickHandler = e => _onMapPickClick(e);
       kakao.maps.event.addListener(map, 'click', _pickHandler);
     }
@@ -1660,15 +1672,8 @@
     function _finishMapPick() {
       const addr = mapPickerCoord.addr ||
         `${mapPickerCoord.lat.toFixed(5)}, ${mapPickerCoord.lon.toFixed(5)}`;
-      const { lat, lon } = mapPickerCoord;
 
-      if (mapPickerTarget === 'tb-origin') {
-        setTbPoint('origin', addr, lat, lon);
-      } else if (mapPickerTarget === 'tb-dest') {
-        setTbPoint('dest', addr, lat, lon);
-      } else if (mapPickerTarget === 'tb-wp') {
-        tbAddWaypoint(addr, lat, lon);
-      } else if (mapPickerTarget === 'new-dest') {
+      if (mapPickerTarget === 'new-dest') {
         document.getElementById('new-dest-addr').value = addr;
         _acCoords['new-dest-addr'] = mapPickerCoord;
       }
