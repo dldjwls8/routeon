@@ -438,6 +438,9 @@ class WaypointSchema(BaseModel):
 class TripCreate(BaseModel):
     driver_id:         str
     vehicle_id:        Optional[int]   = None
+    origin_name:       Optional[str]   = None
+    origin_lat:        Optional[float] = None
+    origin_lon:        Optional[float] = None
     dest_name:         str
     dest_lat:          float
     dest_lon:          float
@@ -486,6 +489,7 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
     waypoints_json = [w.model_dump() for w in req.waypoints] if req.waypoints else []
     t = Trip(
         driver_id=uuid_lib.UUID(req.driver_id), vehicle_id=req.vehicle_id,
+        origin_name=req.origin_name, origin_lat=req.origin_lat, origin_lon=req.origin_lon,
         dest_name=req.dest_name, dest_lat=req.dest_lat, dest_lon=req.dest_lon,
         waypoints=waypoints_json, departure_time=req.departure_time,
         vehicle_height_m=req.vehicle_height_m, vehicle_weight_kg=req.vehicle_weight_kg,

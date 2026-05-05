@@ -300,6 +300,18 @@
       </div>
 
       <div class="setting-group">
+        <label>출발지 <span style="font-weight:normal; color:#999; font-size:12px;">(선택 — 미입력 시 기사 현재 위치 사용)</span></label>
+        <input type="text" id="trip-origin-name" placeholder="출발지 이름 (예: 서울 물류센터)" style="width:100%; margin-bottom:8px;" autocomplete="off">
+        <div class="ac-wrapper">
+          <div style="display:flex; gap:6px; align-items:stretch;">
+            <input type="text" id="trip-origin-addr" placeholder="출발지 주소 검색" autocomplete="off" style="flex:1; margin:0;">
+            <button type="button" class="btn btn-setting" onclick="openMapPicker('trip-origin')" style="white-space:nowrap; padding:8px 12px; font-size:13px;">🗺 지도</button>
+          </div>
+          <div class="ac-dropdown" id="ac-trip-origin-addr"></div>
+        </div>
+      </div>
+
+      <div class="setting-group">
         <label>목적지</label>
         <input type="text" id="trip-dest-name" placeholder="목적지 이름 (예: 부산 물류창고)" style="width:100%; margin-bottom:8px;" autocomplete="off">
         <div class="ac-wrapper">
@@ -872,9 +884,12 @@
     async function openTripModal() {
       tripWaypoints = [];
       renderWaypointList();
-      document.getElementById('trip-dest-name').value = '';
-      document.getElementById('trip-dest-addr').value = '';
-      document.getElementById('trip-departure').value  = '';
+      document.getElementById('trip-origin-name').value = '';
+      document.getElementById('trip-origin-addr').value = '';
+      document.getElementById('trip-dest-name').value   = '';
+      document.getElementById('trip-dest-addr').value   = '';
+      document.getElementById('trip-departure').value   = '';
+      delete _acCoords['trip-origin-addr'];
       delete _acCoords['trip-dest-addr'];
       delete _acCoords['wp-addr'];
 
@@ -902,6 +917,7 @@
 
     function closeTripModal() {
       document.getElementById('trip-modal').style.display = 'none';
+      delete _acCoords['trip-origin-addr'];
       delete _acCoords['trip-dest-addr'];
       delete _acCoords['wp-addr'];
     }
@@ -968,17 +984,31 @@
     }
 
     async function createTrip() {
-      const driverId  = document.getElementById('trip-driver').value;
-      const vehicleId = document.getElementById('trip-vehicle').value;
-      const destName  = document.getElementById('trip-dest-name').value.trim();
-      const destAddr  = document.getElementById('trip-dest-addr').value.trim();
-      const departure = document.getElementById('trip-departure').value;
+      const driverId   = document.getElementById('trip-driver').value;
+      const vehicleId  = document.getElementById('trip-vehicle').value;
+      const originName = document.getElementById('trip-origin-name').value.trim();
+      const originAddr = document.getElementById('trip-origin-addr').value.trim();
+      const destName   = document.getElementById('trip-dest-name').value.trim();
+      const destAddr   = document.getElementById('trip-dest-addr').value.trim();
+      const departure  = document.getElementById('trip-departure').value;
 
       if (!driverId)  return alert('기사를 선택하세요.');
       if (!vehicleId) return alert('차량을 선택하세요.');
       if (!destName)  return alert('목적지 이름을 입력하세요.');
       if (!destAddr)  return alert('목적지 주소를 입력하세요.');
 
+      // 출발지 좌표 (입력된 경우만)
+      let originCoord = null;
+      if (originAddr) {
+        originCoord = _acCoords['trip-origin-addr'];
+        if (!originCoord) {
+          const r = await fetch(`${API}/address/coord?query=${encodeURIComponent(originAddr)}`, { headers: authHeaders() });
+          if (!r.ok) return alert('출발지 주소를 찾을 수 없습니다.');
+          originCoord = await r.json();
+        }
+      }
+
+      // 목적지 좌표
       let coord = _acCoords['trip-dest-addr'];
       if (!coord) {
         const coordRes = await fetch(`${API}/address/coord?query=${encodeURIComponent(destAddr)}`, { headers: authHeaders() });
@@ -994,6 +1024,11 @@
         dest_lon:   coord.lon,
         waypoints:  tripWaypoints,
       };
+      if (originCoord) {
+        body.origin_name = originName || originAddr;
+        body.origin_lat  = originCoord.lat;
+        body.origin_lon  = originCoord.lon;
+      }
       if (departure) body.departure_time = new Date(departure).toISOString();
 
       const res = await fetch(`${API}/trips`, {
@@ -1374,9 +1409,10 @@
     // ① 자동완성
     // ════════════════════════════════════════════════
     function initAutocomplete() {
-      setupAC('trip-dest-addr', 'trip-dest-name');
-      setupAC('wp-addr',        'wp-name');
-      setupAC('new-dest-addr',  'new-dest-name');
+      setupAC('trip-origin-addr', 'trip-origin-name');
+      setupAC('trip-dest-addr',   'trip-dest-name');
+      setupAC('wp-addr',          'wp-name');
+      setupAC('new-dest-addr',    'new-dest-name');
     }
 
     function setupAC(addrId, nameId) {
@@ -1483,7 +1519,10 @@
       const addr = mapPickerCoord.addr ||
         `${mapPickerCoord.lat.toFixed(5)}, ${mapPickerCoord.lon.toFixed(5)}`;
 
-      if (mapPickerTarget === 'trip-dest') {
+      if (mapPickerTarget === 'trip-origin') {
+        document.getElementById('trip-origin-addr').value = addr;
+        _acCoords['trip-origin-addr'] = mapPickerCoord;
+      } else if (mapPickerTarget === 'trip-dest') {
         document.getElementById('trip-dest-addr').value = addr;
         _acCoords['trip-dest-addr'] = mapPickerCoord;
       } else if (mapPickerTarget === 'wp') {
