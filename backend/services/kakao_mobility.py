@@ -10,19 +10,12 @@ from math import atan2, cos, radians, sin, sqrt
 from typing import Any
 
 import httpx
-from cachetools import TTLCache
 
 KAKAO_BASE     = "https://apis-navi.kakaomobility.com/v1"
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 
-# 경로 탐색 실패 시 대체값 — TSP에서 사실상 제외
 _UNREACHABLE_SEC = 10_800_000
 _LOCAL_RADIUS_M  = 10_000
-
-# TTL 캐시 (1시간)
-_cache_realtime: TTLCache = TTLCache(maxsize=2_000, ttl=3_600)
-_cache_future:   TTLCache = TTLCache(maxsize=2_000, ttl=3_600)
-_cache_multi:    TTLCache = TTLCache(maxsize=500,   ttl=3_600)
 
 
 # ────────────────────────────────────────────────

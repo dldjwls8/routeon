@@ -32,10 +32,11 @@ from auth import (
     get_current_user, get_current_user_from_token,
     require_admin, require_driver, require_superadmin,
 )
-from services.optimizer import solve_tsp
+from services.optimizer import solve_tsp, validate_tsp_constraints
 from services.rest_stop_inserter import RouteNode, insert_rest_stops
 from services.email_service import send_approved, send_rejected
 from services import kakao_mobility
+from services import graphhopper as gh_svc
 from services.chat_manager import ChatConnectionManager
 
 # ────────────────────────────────────────────────
@@ -513,16 +514,8 @@ async def get_trip_polyline(
     """
     운행의 최적화된 경로를 실제 도로 폴리라인 좌표로 반환합니다.
     관리자 웹 지도에서 경로선을 그릴 때 사용합니다.
-
-    Returns:
-        {
-            "trip_id": "...",
-            "polyline": [{"lat": ..., "lon": ...}, ...],
-            "nodes": [{"type": ..., "name": ..., "lat": ..., "lon": ...}, ...]
-        }
     """
     import uuid as uuid_lib
-    import httpx
 
     _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
     t  = _r.scalar_one_or_none()
@@ -535,67 +528,15 @@ async def get_trip_polyline(
 
     nodes = route_data["route"]  # [{type, name, lat, lon}, ...]
 
-    # 전체 노드를 경유지로 포함 (휴게소도 실제 경유 지점)
-    drive_nodes = nodes
-
-    if len(drive_nodes) < 2:
+    if len(nodes) < 2:
         return {"trip_id": trip_id, "polyline": [], "nodes": nodes}
 
-    # 카카오 모빌리티 directions API로 실제 도로 좌표 요청
-    KAKAO_BASE = "https://apis-navi.kakaomobility.com/v1"
-    headers    = {"Authorization": f"KakaoAK {KAKAO_REST_KEY}"}
-    polyline: list[dict] = []
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        # 노드가 많으면 구간별로 나눠서 호출 (카카오 경유지 최대 5개)
-        origin = drive_nodes[0]
-        dest   = drive_nodes[-1]
-        middle = drive_nodes[1:-1]
-
-        # 경유지 5개 초과 시 청크로 분할
-        chunk_size = 5
-        chunks = [middle[i:i+chunk_size] for i in range(0, max(len(middle), 1), chunk_size)] if middle else [[]]
-
-        for chunk in chunks:
-            params = {
-                "origin":      f"{origin['lon']},{origin['lat']}",
-                "destination": f"{dest['lon']},{dest['lat']}",
-                "summary":     "false",
-            }
-            if chunk:
-                params["waypoints"] = "|".join(
-                    f"{w['lon']},{w['lat']}" for w in chunk
-                )
-
-            try:
-                resp = await client.get(
-                    f"{KAKAO_BASE}/directions", params=params, headers=headers
-                )
-                if resp.status_code != 200:
-                    continue
-
-                data = resp.json()
-                sections = data.get("routes", [{}])[0].get("sections", [])
-                for section in sections:
-                    for road in section.get("roads", []):
-                        coords = road.get("vertexes", [])
-                        # vertexes: [lon, lat, lon, lat, ...]
-                        for i in range(0, len(coords) - 1, 2):
-                            polyline.append({
-                                "lat": coords[i + 1],
-                                "lon": coords[i],
-                            })
-
-                # 청크가 여러 개면 origin을 마지막 경유지로 이동
-                if chunk:
-                    origin = chunk[-1]
-
-            except Exception:
-                continue
-
-    # 폴리라인 좌표가 없으면 직선 연결 fallback
-    if not polyline:
-        polyline = [{"lat": n["lat"], "lon": n["lon"]} for n in drive_nodes]
+    try:
+        raw_polyline, _, _ = await gh_svc.get_route_with_stats(nodes, profile="truck")
+        # [[lat, lon], ...] → [{"lat": ..., "lon": ...}, ...]
+        polyline = [{"lat": p[0], "lon": p[1]} for p in raw_polyline]
+    except Exception:
+        polyline = [{"lat": n["lat"], "lon": n["lon"]} for n in nodes]
 
     return {
         "trip_id":  trip_id,
@@ -791,15 +732,19 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     nodes.append({"name": dest_name, "lat": dest_lat, "lon": dest_lon})
 
     try:
-        time_matrix, dist_matrix = await kakao_mobility.build_time_matrix(
-            nodes,
-            route_mode=req.route_mode,
-            departure_time=t.departure_time,
-        )
+        time_matrix, dist_matrix = await gh_svc.build_time_matrix(nodes, profile="truck")
     except Exception as e:
-        raise HTTPException(502, f"카카오 모빌리티 API 오류: {e}")
+        raise HTTPException(502, f"GraphHopper API 오류: {e}")
+
+    node_names = [n["name"] for n in nodes]
+    violation = validate_tsp_constraints(time_matrix, node_names=node_names)
+    if violation:
+        code, msg = violation
+        raise HTTPException(code, msg)
 
     tsp_order = solve_tsp(time_matrix)
+    if tsp_order is None:
+        raise HTTPException(422, "경로 계산 실패: 가능한 경로가 없습니다.")
     dest_idx  = len(nodes) - 1
     k         = len(tsp_order)
     ordered   = [
@@ -836,7 +781,7 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
         ordered, reordered, rest_candidates,
         initial_drive_sec=req.initial_drive_sec,
         is_emergency=req.is_emergency,
-        picker=kakao_mobility.find_best_rest_stop,
+        time_fn=gh_svc.get_travel_time,
     )
 
     # 총 거리·시간 계산
@@ -893,13 +838,13 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
     nodes.append({"name": req.dest_name, "lat": req.dest_lat, "lon": req.dest_lon})
 
     try:
-        time_matrix, dist_matrix = await kakao_mobility.build_time_matrix(
-            nodes, route_mode=req.route_mode
-        )
+        time_matrix, dist_matrix = await gh_svc.build_time_matrix(nodes, profile="truck")
     except Exception as e:
-        raise HTTPException(502, f"카카오 모빌리티 API 오류: {e}")
+        raise HTTPException(502, f"GraphHopper API 오류: {e}")
 
     tsp_order = solve_tsp(time_matrix)
+    if tsp_order is None:
+        raise HTTPException(422, "재경로 계산 실패: 가능한 경로가 없습니다.")
     dest_idx  = len(nodes) - 1
     k         = len(tsp_order)
     ordered   = [
@@ -929,7 +874,7 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
         ordered, reordered, rest_candidates,
         initial_drive_sec=req.current_drive_sec,
         is_emergency=req.is_emergency,
-        picker=kakao_mobility.find_best_rest_stop,
+        time_fn=gh_svc.get_travel_time,
     )
 
     total_sec     = sum(reordered[i][i + 1] for i in range(len(ordered) - 1))

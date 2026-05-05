@@ -27,15 +27,17 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - TMAP_APP_KEY=${TMAP_APP_KEY}
       - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
       - KAKAO_JS_KEY=${KAKAO_JS_KEY}
+      - GRAPHHOPPER_BASE_URL=${GRAPHHOPPER_BASE_URL:-http://host.docker.internal:8989}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - JWT_SECRET=${JWT_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
     depends_on:
