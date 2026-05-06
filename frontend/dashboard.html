@@ -190,15 +190,33 @@
     .tb-wp-item.dragging { opacity: 0.4; }
     .tb-wp-item.drag-over { outline: 2px dashed #e67e22; border-radius: 4px; }
 
-    /* ── 검색 핀 팝업 ──────────────────────────────── */
+    /* ── 검색 핀 팝업 (말풍선) ─────────────────────── */
     .search-pin-popup {
-      background: #fff; border-radius: 10px; padding: 12px 14px;
-      box-shadow: 0 4px 18px rgba(0,0,0,0.2); min-width: 180px; font-size: 13px;
+      background: #fff; border-radius: 12px; font-size: 13px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+      min-width: 240px; max-width: 280px; cursor: default;
     }
-    .search-pin-popup .pin-name { font-weight: bold; color: #333; margin-bottom: 8px; white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+    .search-pin-popup .pin-body { padding: 14px 16px 12px; }
+    .search-pin-popup .pin-category {
+      font-size: 11px; color: #3498db; font-weight: 700; margin-bottom: 4px;
+    }
+    .search-pin-popup .pin-name {
+      font-size: 16px; font-weight: bold; color: #111; margin-bottom: 8px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 248px;
+    }
+    .search-pin-popup .pin-info-row {
+      font-size: 12px; color: #555; margin-bottom: 4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .search-pin-popup .pin-kakao-link {
+      display: inline-block; font-size: 11px; color: #3498db;
+      text-decoration: none; margin: 4px 0 10px;
+    }
+    .search-pin-popup .pin-kakao-link:hover { text-decoration: underline; }
+    .search-pin-popup .pin-divider { border: none; border-top: 1px solid #f0f0f0; margin: 10px 0 8px; }
     .search-pin-popup .pin-btns { display: flex; gap: 5px; }
     .search-pin-popup .pin-btn {
-      flex: 1; padding: 5px 0; border: none; border-radius: 12px;
+      flex: 1; padding: 6px 0; border: none; border-radius: 12px;
       cursor: pointer; font-size: 11px; font-weight: bold;
     }
     .search-pin-popup .pin-btn-emergency {
@@ -207,6 +225,14 @@
       background: #f3e8ff; color: #7c3aed;
     }
     .search-pin-popup .pin-btn-emergency:hover { background: #e9d5ff; }
+    /* 말풍선 꼬리 */
+    .search-pin-popup .pin-tail {
+      width: 0; height: 0; margin: 0 auto;
+      border-left: 11px solid transparent;
+      border-right: 11px solid transparent;
+      border-top: 13px solid #fff;
+      filter: drop-shadow(0 3px 2px rgba(0,0,0,0.1));
+    }
   </style>
 </head>
 <body>
@@ -472,10 +498,13 @@
 
         const ps = new kakao.maps.services.Places();
         ps.keywordSearch(keyword, (places, pStatus) => {
-          const name = (pStatus === kakao.maps.services.Status.OK && places.length > 0)
-            ? places[0].place_name
-            : addr;
-          showSearchPin(lat, lon, name, addr);
+          let name = addr, info = {};
+          if (pStatus === kakao.maps.services.Status.OK && places.length > 0) {
+            const p = places[0];
+            name = p.place_name;
+            info = { phone: p.phone || '', category: p.category_name || '', placeUrl: p.place_url || '' };
+          }
+          showSearchPin(lat, lon, name, addr, info);
         }, {
           location: new kakao.maps.LatLng(lat, lon),
           radius: 30,
@@ -1029,10 +1058,13 @@
               return;
             }
             _acResults['map-search'] = data.slice(0, 6).map(p => ({
-              name: p.place_name,
-              addr: p.road_address_name || p.address_name,
-              lat:  parseFloat(p.y),
-              lon:  parseFloat(p.x),
+              name:     p.place_name,
+              addr:     p.road_address_name || p.address_name,
+              lat:      parseFloat(p.y),
+              lon:      parseFloat(p.x),
+              phone:    p.phone    || '',
+              category: p.category_name || '',
+              placeUrl: p.place_url || '',
             }));
             dropdown.innerHTML = _acResults['map-search'].map((r, i) => `
               <div class="ac-item" data-idx="${i}">
@@ -1048,7 +1080,8 @@
                 const r = _acResults['map-search'][parseInt(item.dataset.idx)];
                 input.value = r.name;
                 dropdown.style.display = 'none';
-                showSearchPin(r.lat, r.lon, r.name, r.addr);
+                showSearchPin(r.lat, r.lon, r.name, r.addr,
+                  { phone: r.phone, category: r.category, placeUrl: r.placeUrl });
               });
             });
           });
@@ -1059,27 +1092,38 @@
       });
     }
 
-    function showSearchPin(lat, lon, name, addr) {
+    function showSearchPin(lat, lon, name, addr, info = {}) {
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
 
-      _searchPinCoord = { lat, lon, name: name || addr };
+      const { phone = '', category = '', placeUrl = '' } = info;
+      _searchPinCoord = { lat, lon, name: name || addr, addr, phone, category, placeUrl };
       map.panTo(new kakao.maps.LatLng(lat, lon));
 
-      const el = document.createElement('div');
-      el.className = 'search-pin-popup';
       const activeTrip = currentDriverId && tripsCache[currentDriverId] &&
         ['scheduled', 'in_progress'].includes(tripsCache[currentDriverId].status);
 
+      // 카테고리 최하위 분류만 표시 (예: "음식점 > 한식" → "한식")
+      const catShort = category ? category.split(' > ').pop() : '';
+
+      const el = document.createElement('div');
+      el.className = 'search-pin-popup';
       el.innerHTML = `
-        <div class="pin-name" title="${escapeHtml(addr || name)}">${escapeHtml(name)}</div>
-        <div class="pin-btns">
-          <button class="pin-btn" style="background:#e8f8ee; color:#27ae60;" onclick="useSearchPin('origin')">🏁 출발지</button>
-          <button class="pin-btn" style="background:#fff7e6; color:#e67e22;" onclick="useSearchPin('waypoint')">📦 경유지</button>
-          <button class="pin-btn" style="background:#fdecea; color:#e74c3c;" onclick="useSearchPin('dest')">🏴 목적지</button>
+        <div class="pin-body">
+          ${catShort ? `<div class="pin-category">${escapeHtml(catShort)}</div>` : ''}
+          <div class="pin-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+          ${addr && addr !== name ? `<div class="pin-info-row">📍 ${escapeHtml(addr)}</div>` : ''}
+          ${phone ? `<div class="pin-info-row">📞 ${escapeHtml(phone)}</div>` : ''}
+          ${placeUrl ? `<a class="pin-kakao-link" href="${escapeHtml(placeUrl)}" target="_blank" rel="noopener">카카오맵에서 보기 →</a>` : ''}
+          <hr class="pin-divider">
+          <div class="pin-btns">
+            <button class="pin-btn" style="background:#e8f8ee; color:#27ae60;" onclick="useSearchPin('origin')">🏁 출발지</button>
+            <button class="pin-btn" style="background:#fff7e6; color:#e67e22;" onclick="useSearchPin('waypoint')">📦 경유지</button>
+            <button class="pin-btn" style="background:#fdecea; color:#e74c3c;" onclick="useSearchPin('dest')">🏴 목적지</button>
+          </div>
+          ${activeTrip ? `<button class="pin-btn-emergency" onclick="addEmergencyWaypoint()">⚡ 긴급 경유지 추가</button>` : ''}
         </div>
-        ${activeTrip ? `<button class="pin-btn-emergency" onclick="addEmergencyWaypoint()">⚡ 긴급 경유지 추가</button>` : ''}
+        <div class="pin-tail"></div>
       `;
-      // 팝업 내부 클릭이 지도 click 이벤트로 버블되지 않도록 차단
       el.addEventListener('mousedown', e => e.stopPropagation());
       el.addEventListener('click',     e => e.stopPropagation());
 
@@ -1087,7 +1131,7 @@
         position: new kakao.maps.LatLng(lat, lon),
         content:  el,
         map,
-        yAnchor: 1.4,
+        yAnchor: 1.06,
         zIndex:  20,
       });
     }
