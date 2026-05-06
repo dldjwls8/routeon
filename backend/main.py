@@ -581,14 +581,15 @@ async def add_waypoint(
     await db.refresh(t)
 
     # WebSocket으로 해당 기사에게 재경로 요청 알림
-    await manager.broadcast({
-        "type":        "replan_requested",
-        "trip_id":     trip_id,
-        "driver_id":   str(t.driver_id),
-        "new_waypoint": new_waypoint,
-        "waypoints":   current_waypoints,
-        "message":     f"새 경유지 '{req.name}'이 추가됐습니다. 경로를 재계산하세요.",
-    })
+    if current_user.organization_id:
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "type":         "replan_requested",
+            "trip_id":      trip_id,
+            "driver_id":    str(t.driver_id),
+            "new_waypoint": new_waypoint,
+            "waypoints":    current_waypoints,
+            "message":      f"새 경유지 '{req.name}'이 추가됐습니다. 경로를 재계산하세요.",
+        })
 
     return {
         "trip_id":   trip_id,
