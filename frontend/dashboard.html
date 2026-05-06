@@ -187,30 +187,7 @@
     }
     .map-search-bar .ac-dropdown { border-radius: 8px; border-top: 1px solid #ddd; margin-top: 4px; }
 
-    /* ── 운행 생성 패널 (지도 위 플로팅) ──────────── */
-    .trip-builder {
-      position: absolute; top: 16px; right: 16px; width: 272px; z-index: 15;
-      background: #fff; border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-      max-height: calc(100vh - 100px); overflow-y: auto;
-    }
-    .tb-header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 14px; background: #333; color: #fff;
-      font-size: 14px; font-weight: bold; border-radius: 12px 12px 0 0;
-    }
-    .tb-reset-btn {
-      background: rgba(255,255,255,0.15); border: none; color: #fff;
-      border-radius: 10px; padding: 3px 9px; cursor: pointer; font-size: 12px;
-    }
-    .tb-reset-btn:hover { background: rgba(255,255,255,0.3); }
-    .tb-section { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
-    .tb-section:last-child { border-bottom: none; }
-    .tb-label {
-      font-size: 11px; font-weight: 700; color: #999;
-      text-transform: uppercase; letter-spacing: 0.04em;
-      margin-bottom: 6px; display: flex; align-items: center; gap: 5px;
-    }
+    /* ── Trip Builder 공용 스타일 (우측 패널 내) ──── */
     .tb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
     .tb-point-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
     .tb-point-label {
@@ -230,17 +207,6 @@
     .tb-wp-item .wp-handle { color: #ccc; cursor: grab; }
     .tb-wp-item.dragging { opacity: 0.4; }
     .tb-wp-item.drag-over { outline: 2px dashed #e67e22; border-radius: 4px; }
-    .tb-add-wp-btn {
-      width: 100%; padding: 7px; background: #fff7e6;
-      border: 1px dashed #e67e22; border-radius: 6px;
-      color: #e67e22; font-size: 12px; cursor: pointer; margin-top: 6px;
-    }
-    .tb-add-wp-btn:hover { background: #ffecd1; }
-    .tb-footer { padding: 12px 14px; }
-    .tb-footer select, .tb-footer input[type="datetime-local"] {
-      width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px;
-      font-size: 13px; margin-bottom: 8px; box-sizing: border-box;
-    }
 
     /* ── 검색 핀 팝업 ──────────────────────────────── */
     .search-pin-popup {
@@ -291,43 +257,6 @@
       <div class="ac-dropdown" id="ac-map-search"></div>
     </div>
 
-    <!-- 운행 생성 패널 -->
-    <div class="trip-builder" id="trip-builder">
-      <div class="tb-header">
-        <span>🚛 새 운행</span>
-        <button class="tb-reset-btn" onclick="resetTripBuilder()">↺ 초기화</button>
-      </div>
-
-      <div class="tb-section">
-        <div class="tb-label"><span class="tb-dot" style="background:#27ae60;"></span>출발지 <span style="font-weight:normal; color:#bbb;">(선택)</span></div>
-        <div class="tb-point-row">
-          <div id="tb-origin-label" class="tb-point-label tb-unset">지도를 클릭하세요</div>
-          <button class="tb-icon-btn" id="tb-origin-clear" onclick="clearTbPoint('origin')" style="display:none;" title="삭제">✕</button>
-        </div>
-      </div>
-
-      <div class="tb-section">
-        <div class="tb-label"><span class="tb-dot" style="background:#e67e22;"></span>경유지</div>
-        <div id="tb-waypoints-list"></div>
-        <div style="font-size:11px; color:#ccc; margin-top:5px; text-align:center;">지도 클릭 후 '경유지로' 선택</div>
-      </div>
-
-      <div class="tb-section">
-        <div class="tb-label"><span class="tb-dot" style="background:#e74c3c;"></span>목적지 <span style="color:#e74c3c;">*</span></div>
-        <div class="tb-point-row">
-          <div id="tb-dest-label" class="tb-point-label tb-unset">지도를 클릭하세요</div>
-          <button class="tb-icon-btn" id="tb-dest-clear" onclick="clearTbPoint('dest')" style="display:none;" title="삭제">✕</button>
-        </div>
-      </div>
-
-      <div class="tb-footer">
-        <select id="tb-driver"><option value="">기사 선택</option></select>
-        <select id="tb-vehicle"><option value="">차량 선택</option></select>
-        <input type="datetime-local" id="tb-departure" title="출발 예정 시각 (선택)">
-        <button class="btn btn-approve" onclick="createTripFromMap()" style="width:100%; font-size:14px;">✅ 운행 생성</button>
-      </div>
-    </div>
-
     <div id="map-pick-banner">
       <span id="map-pick-label">📍 위치를 클릭하세요</span>
       <button class="pick-cancel" onclick="cancelMapPick()">취소</button>
@@ -357,6 +286,42 @@
 
     <div id="no-trip-box" style="display:none; color:gray; font-size:13px; margin-bottom:16px; padding:12px; background:#f8f9fa; border-radius:8px; text-align:center;">
       진행 중인 운행이 없습니다.
+    </div>
+
+    <!-- 새 운행 생성 (운행 없을 때만 표시) -->
+    <div id="new-trip-section" style="display:none; margin-bottom:20px; background:#f8f9fa; border-radius:10px; padding:16px; border:1px solid #eee;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <strong style="color:#333; font-size:14px;">🚛 새 운행 생성</strong>
+        <button onclick="resetTripBuilder()" style="background:none; border:1px solid #ddd; border-radius:12px; padding:3px 10px; cursor:pointer; font-size:11px; color:#999;">↺ 초기화</button>
+      </div>
+      <!-- 출발지 -->
+      <div style="margin-bottom:6px; background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #e8f8ee;">
+        <div style="font-size:10px; font-weight:700; color:#27ae60; margin-bottom:4px;"><span class="tb-dot" style="background:#27ae60;"></span> 출발지 <span style="font-weight:normal; color:#bbb;">(선택)</span></div>
+        <div class="tb-point-row">
+          <div id="rp-origin-label" class="tb-point-label tb-unset">지도를 클릭하세요</div>
+          <button class="tb-icon-btn" id="rp-origin-clear" onclick="clearTbPoint('origin')" style="display:none;" title="삭제">✕</button>
+        </div>
+      </div>
+      <!-- 경유지 -->
+      <div style="margin-bottom:6px; background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #fff7e6;">
+        <div style="font-size:10px; font-weight:700; color:#e67e22; margin-bottom:4px;"><span class="tb-dot" style="background:#e67e22;"></span> 경유지</div>
+        <div id="rp-waypoints-list"><div style="font-size:12px; color:#ccc;">없음</div></div>
+      </div>
+      <!-- 목적지 -->
+      <div style="margin-bottom:12px; background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #fdecea;">
+        <div style="font-size:10px; font-weight:700; color:#e74c3c; margin-bottom:4px;"><span class="tb-dot" style="background:#e74c3c;"></span> 목적지 <span style="color:#e74c3c;">*</span></div>
+        <div class="tb-point-row">
+          <div id="rp-dest-label" class="tb-point-label tb-unset">지도를 클릭하세요</div>
+          <button class="tb-icon-btn" id="rp-dest-clear" onclick="clearTbPoint('dest')" style="display:none;" title="삭제">✕</button>
+        </div>
+      </div>
+      <!-- 차량 / 시간 -->
+      <select id="rp-vehicle" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:8px; box-sizing:border-box; background:#fff;">
+        <option value="">차량 선택</option>
+      </select>
+      <input type="datetime-local" id="rp-departure" title="출발 예정 시각 (선택)"
+        style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:10px; box-sizing:border-box; background:#fff;">
+      <button class="btn btn-approve" onclick="createTripFromMap()" style="width:100%; font-size:14px;">✅ 운행 생성</button>
     </div>
 
     <div class="chat-box" id="chat-box">
@@ -687,6 +652,7 @@
 
       renderRouteNodes(trip);
       renderRemoteDispatch(trip);
+      renderNewTripSection(trip);
       await openChatWithDriver(id);
     }
 
@@ -766,6 +732,7 @@
       document.getElementById('right-panel').style.display = 'none';
       document.getElementById('route-nodes-box').style.display = 'none';
       document.getElementById('remote-dispatch-box').style.display = 'none';
+      document.getElementById('new-trip-section').style.display = 'none';
       currentDriverId = null;
       currentConversation = null;
       currentChatMessages = [];
@@ -843,6 +810,38 @@
             </div>`).join('')}
           <div style="border-top:1px solid #eee; margin:10px 0;"></div>`;
       }
+    }
+
+    async function renderNewTripSection(trip) {
+      const section = document.getElementById('new-trip-section');
+      if (!section) return;
+      const hasActiveTrip = trip && ['scheduled', 'in_progress'].includes(trip.status);
+      if (hasActiveTrip) {
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
+      await refreshVehicleSelect();
+      // 현재 선택된 지점 상태를 UI에 반영
+      const oLbl = document.getElementById('rp-origin-label');
+      const oClear = document.getElementById('rp-origin-clear');
+      if (tbOrigin) {
+        oLbl.textContent = tbOrigin.name; oLbl.classList.remove('tb-unset');
+        oClear.style.display = 'inline-block';
+      } else {
+        oLbl.textContent = '지도를 클릭하세요'; oLbl.classList.add('tb-unset');
+        oClear.style.display = 'none';
+      }
+      const dLbl = document.getElementById('rp-dest-label');
+      const dClear = document.getElementById('rp-dest-clear');
+      if (tbDest) {
+        dLbl.textContent = tbDest.name; dLbl.classList.remove('tb-unset');
+        dClear.style.display = 'inline-block';
+      } else {
+        dLbl.textContent = '지도를 클릭하세요'; dLbl.classList.add('tb-unset');
+        dClear.style.display = 'none';
+      }
+      renderTbWaypoints();
     }
 
     async function addRoute() {
@@ -956,16 +955,13 @@
     let _searchPinCoord   = null;
 
     async function initTripBuilder() {
-      // 기사 목록
-      const driverSel = document.getElementById('tb-driver');
-      driverSel.innerHTML = '<option value="">기사 선택</option>';
-      driversCache.forEach(d => {
-        driverSel.innerHTML += `<option value="${d.id}">${d.username} 기사</option>`;
-      });
-      if (currentDriverId) driverSel.value = currentDriverId;
+      await refreshVehicleSelect();
+      renderTbWaypoints();
+    }
 
-      // 차량 목록
-      const vehicleSel = document.getElementById('tb-vehicle');
+    async function refreshVehicleSelect() {
+      const vehicleSel = document.getElementById('rp-vehicle');
+      if (!vehicleSel) return;
       vehicleSel.innerHTML = '<option value="">차량 선택</option>';
       try {
         const vRes = await fetch(`${API}/vehicles`, { headers: authHeaders() });
@@ -974,36 +970,38 @@
           vehicleSel.innerHTML += `<option value="${v.id}">${v.plate_number} (${v.vehicle_type})</option>`;
         });
       } catch(e) {}
-
-      renderTbWaypoints();
     }
 
     function setTbPoint(type, name, lat, lon) {
       const point = { name, lat, lon };
       if (type === 'origin') {
         tbOrigin = point;
-        document.getElementById('tb-origin-label').textContent = name;
-        document.getElementById('tb-origin-label').classList.remove('tb-unset');
-        document.getElementById('tb-origin-clear').style.display = 'inline-block';
+        const lbl = document.getElementById('rp-origin-label');
+        if (lbl) { lbl.textContent = name; lbl.classList.remove('tb-unset'); }
+        const clr = document.getElementById('rp-origin-clear');
+        if (clr) clr.style.display = 'inline-block';
       } else if (type === 'dest') {
         tbDest = point;
-        document.getElementById('tb-dest-label').textContent = name;
-        document.getElementById('tb-dest-label').classList.remove('tb-unset');
-        document.getElementById('tb-dest-clear').style.display = 'inline-block';
+        const lbl = document.getElementById('rp-dest-label');
+        if (lbl) { lbl.textContent = name; lbl.classList.remove('tb-unset'); }
+        const clr = document.getElementById('rp-dest-clear');
+        if (clr) clr.style.display = 'inline-block';
       }
     }
 
     function clearTbPoint(type) {
       if (type === 'origin') {
         tbOrigin = null;
-        document.getElementById('tb-origin-label').textContent = '검색하거나 지도 클릭';
-        document.getElementById('tb-origin-label').classList.add('tb-unset');
-        document.getElementById('tb-origin-clear').style.display = 'none';
+        const lbl = document.getElementById('rp-origin-label');
+        if (lbl) { lbl.textContent = '지도를 클릭하세요'; lbl.classList.add('tb-unset'); }
+        const clr = document.getElementById('rp-origin-clear');
+        if (clr) clr.style.display = 'none';
       } else if (type === 'dest') {
         tbDest = null;
-        document.getElementById('tb-dest-label').textContent = '검색하거나 지도 클릭';
-        document.getElementById('tb-dest-label').classList.add('tb-unset');
-        document.getElementById('tb-dest-clear').style.display = 'none';
+        const lbl = document.getElementById('rp-dest-label');
+        if (lbl) { lbl.textContent = '지도를 클릭하세요'; lbl.classList.add('tb-unset'); }
+        const clr = document.getElementById('rp-dest-clear');
+        if (clr) clr.style.display = 'none';
       }
     }
 
@@ -1018,7 +1016,8 @@
     }
 
     function renderTbWaypoints() {
-      const el = document.getElementById('tb-waypoints-list');
+      const el = document.getElementById('rp-waypoints-list');
+      if (!el) return;
       if (tbWaypoints.length === 0) {
         el.innerHTML = '<div style="font-size:12px; color:#ccc; padding:2px 0;">없음</div>';
         return;
@@ -1059,21 +1058,20 @@
       clearTbPoint('origin');
       clearTbPoint('dest');
       renderTbWaypoints();
-      document.getElementById('tb-departure').value = '';
-      if (currentDriverId) document.getElementById('tb-driver').value = currentDriverId;
+      const dep = document.getElementById('rp-departure');
+      if (dep) dep.value = '';
     }
 
     async function createTripFromMap() {
-      const driverId  = document.getElementById('tb-driver').value;
-      const vehicleId = document.getElementById('tb-vehicle').value;
-      const departure = document.getElementById('tb-departure').value;
+      const vehicleId = document.getElementById('rp-vehicle').value;
+      const departure = document.getElementById('rp-departure').value;
 
-      if (!driverId)  return alert('기사를 선택하세요.');
-      if (!vehicleId) return alert('차량을 선택하세요.');
-      if (!tbDest)    return alert('목적지를 지도에서 선택하세요.');
+      if (!currentDriverId) return alert('좌측 패널에서 기사를 먼저 선택하세요.');
+      if (!vehicleId)        return alert('차량을 선택하세요.');
+      if (!tbDest)           return alert('목적지를 지도에서 선택하세요.');
 
       const body = {
-        driver_id:  driverId,
+        driver_id:  currentDriverId,
         vehicle_id: parseInt(vehicleId),
         dest_name:  tbDest.name,
         dest_lat:   tbDest.lat,
@@ -1097,7 +1095,8 @@
 
       alert('✅ 운행이 생성됐습니다!');
       resetTripBuilder();
-      loadDrivers();
+      await loadDrivers();
+      await showDriverDetail(currentDriverId);
     }
 
     // ════════════════════════════════════════════════
@@ -1166,6 +1165,9 @@
           <button class="pin-btn" style="background:#fdecea; color:#e74c3c;" onclick="useSearchPin('dest')">🏴 목적지</button>
         </div>
       `;
+      // 팝업 내부 클릭이 지도 click 이벤트로 버블되지 않도록 차단
+      el.addEventListener('mousedown', e => e.stopPropagation());
+      el.addEventListener('click',     e => e.stopPropagation());
 
       _searchPinOverlay = new kakao.maps.CustomOverlay({
         position: new kakao.maps.LatLng(lat, lon),
