@@ -452,7 +452,7 @@
           addr = result[0].road_address?.address_name
               || result[0].address?.address_name
               || addr;
-          name = addr;
+          name = result[0].road_address?.building_name || addr;
         }
         showSearchPin(lat, lon, name, addr);
       });
