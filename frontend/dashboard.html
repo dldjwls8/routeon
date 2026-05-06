@@ -483,14 +483,8 @@
             || result[0].address?.address_name
             || addr;
 
-        // 1순위: building_name (카카오 DB 등록 건물명)
+        // building_name이 있으면 이름으로 우선 사용, 없어도 Places로 보충
         const buildingName = result[0].road_address?.building_name;
-        if (buildingName) {
-          showSearchPin(lat, lon, buildingName, addr);
-          return;
-        }
-
-        // 2순위: 도로명+번지 키워드로 30m 이내 POI 검색
         const ra = result[0].road_address;
         const keyword = ra
           ? `${ra.road_name} ${ra.main_building_no}${ra.sub_building_no ? '-' + ra.sub_building_no : ''}`
@@ -498,10 +492,11 @@
 
         const ps = new kakao.maps.services.Places();
         ps.keywordSearch(keyword, (places, pStatus) => {
-          let name = addr, info = {};
+          let name = buildingName || addr;
+          let info = {};
           if (pStatus === kakao.maps.services.Status.OK && places.length > 0) {
             const p = places[0];
-            name = p.place_name;
+            if (!buildingName) name = p.place_name;  // building_name 없을 때만 Places 이름 사용
             info = { phone: p.phone || '', category: p.category_name || '', placeUrl: p.place_url || '' };
           }
           showSearchPin(lat, lon, name, addr, info);
