@@ -496,7 +496,7 @@
           let info = {};
           if (pStatus === kakao.maps.services.Status.OK && places.length > 0) {
             const p = places[0];
-            if (!buildingName) name = p.place_name;  // building_name 없을 때만 Places 이름 사용
+            name = p.place_name;  // Places 이름 항상 우선 (더 정확한 개별 장소명)
             info = { phone: p.phone || '', category: p.category_name || '', placeUrl: p.place_url || '' };
           }
           showSearchPin(lat, lon, name, addr, info);
