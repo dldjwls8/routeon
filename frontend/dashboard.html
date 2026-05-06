@@ -154,6 +154,9 @@
     .wp-drag-item.dragging { opacity: 0.35; cursor: grabbing; }
     .wp-drag-item.drag-over { outline: 2px dashed #FFE812; background: #fffde8 !important; border-radius: 6px; }
 
+    /* ── POI 호버 커서 ─────────────────────────────── */
+    #map.poi-hover, #map.poi-hover * { cursor: pointer !important; }
+
     /* ── 지도 검색바 ───────────────────────────────── */
     .map-search-bar {
       position: absolute; top: 16px; left: 55px; width: 250px; z-index: 15;
@@ -460,6 +463,60 @@
       const options = { center: new kakao.maps.LatLng(37.3950, 127.1110), level: 5 };
       map = new kakao.maps.Map(container, options);
       kakao.maps.event.addListener(map, 'click', onMapClick);
+      initCursorHover();
+    }
+
+    function initCursorHover() {
+      const mapEl = document.getElementById('map');
+      let debounce = null;
+      let gen = 0;  // 비동기 결과 순서 보장용
+
+      kakao.maps.event.addListener(map, 'mousemove', e => {
+        clearTimeout(debounce);
+        gen++;
+        mapEl.classList.remove('poi-hover');
+
+        const ll = e.latLng;
+        debounce = setTimeout(() => {
+          const myGen = gen;
+          const lat = ll.getLat(), lon = ll.getLng();
+          const gc = new kakao.maps.services.Geocoder();
+
+          gc.coord2Address(lon, lat, (result, status) => {
+            if (gen !== myGen) return;  // 마우스가 이미 이동했으면 버림
+            if (status !== kakao.maps.services.Status.OK) return;
+
+            // 빠른 경로: building_name 있으면 Places 검색 생략
+            if (result[0].road_address?.building_name) {
+              mapEl.classList.add('poi-hover');
+              return;
+            }
+
+            const ra = result[0].road_address;
+            if (!ra) return;
+            const keyword = `${ra.road_name} ${ra.main_building_no}`;
+
+            const ps = new kakao.maps.services.Places();
+            ps.keywordSearch(keyword, (places, pStatus) => {
+              if (gen !== myGen) return;
+              if (pStatus === kakao.maps.services.Status.OK && places.length > 0) {
+                mapEl.classList.add('poi-hover');
+              }
+            }, {
+              location: new kakao.maps.LatLng(lat, lon),
+              radius: 30,
+              sort: kakao.maps.services.SortBy.DISTANCE,
+            });
+          });
+        }, 500);
+      });
+
+      // 드래그 중엔 포인터 커서 제거
+      kakao.maps.event.addListener(map, 'dragstart', () => {
+        clearTimeout(debounce);
+        gen++;
+        mapEl.classList.remove('poi-hover');
+      });
     }
 
     function onMapClick(e) {
