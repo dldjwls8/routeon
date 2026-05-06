@@ -467,51 +467,94 @@
     }
 
     function initCursorHover() {
-      const mapEl = document.getElementById('map');
-      let debounce = null;
-      let gen = 0;  // 비동기 결과 순서 보장용
+      const mapEl    = document.getElementById('map');
+      let debounce   = null;
+      let gen        = 0;
+      const geoCache = {};  // "lat4,lon4" → coord2Address result
+      const poiCache = {};  // "kw:lat4,lon4" → boolean
+
+      const _key = (lat, lon) => `${lat.toFixed(4)},${lon.toFixed(4)}`;
+
+      // 캐시에서 즉시 커서 반영 (API 호출 없음)
+      // 반환값: true = 캐시 완전 적중(추가 API 불필요), false = 아직 미확인
+      function _applyCache(lat, lon, key) {
+        const geo = geoCache[key];
+        if (!geo) return false;
+
+        if (geo[0].road_address?.building_name) {
+          mapEl.classList.add('poi-hover');
+          return true;
+        }
+        const ra = geo[0].road_address;
+        if (!ra) { mapEl.classList.remove('poi-hover'); return true; }
+
+        const pk = `${ra.road_name} ${ra.main_building_no}:${key}`;
+        if (!(pk in poiCache)) return false;  // geocode 캐시 O, places 캐시 X
+        poiCache[pk] ? mapEl.classList.add('poi-hover') : mapEl.classList.remove('poi-hover');
+        return true;
+      }
+
+      function _placesCheck(lat, lon, key, result, myGen) {
+        if (gen !== myGen) return;
+        const ra = result[0].road_address;
+        if (!ra) return;
+        const kw = `${ra.road_name} ${ra.main_building_no}`;
+        const pk = `${kw}:${key}`;
+
+        if (pk in poiCache) {
+          if (poiCache[pk]) mapEl.classList.add('poi-hover');
+          return;
+        }
+        const ps = new kakao.maps.services.Places();
+        ps.keywordSearch(kw, (places, pStatus) => {
+          if (gen !== myGen) return;
+          const has = pStatus === kakao.maps.services.Status.OK && places.length > 0;
+          poiCache[pk] = has;
+          if (has) mapEl.classList.add('poi-hover');
+        }, { location: new kakao.maps.LatLng(lat, lon), radius: 30, sort: kakao.maps.services.SortBy.DISTANCE });
+      }
 
       kakao.maps.event.addListener(map, 'mousemove', e => {
         clearTimeout(debounce);
         gen++;
+        const ll  = e.latLng;
+        const lat = ll.getLat(), lon = ll.getLng();
+        const key = _key(lat, lon);
+
+        // 캐시 완전 적중 → 즉시 반영, API 불필요
+        if (_applyCache(lat, lon, key)) return;
         mapEl.classList.remove('poi-hover');
 
-        const ll = e.latLng;
+        const myGen = gen;
         debounce = setTimeout(() => {
-          const myGen = gen;
-          const lat = ll.getLat(), lon = ll.getLng();
+          if (gen !== myGen) return;
+
+          if (geoCache[key]) {
+            // geocode 캐시 O → Places만 조회
+            if (!geoCache[key][0].road_address?.building_name) {
+              _placesCheck(lat, lon, key, geoCache[key], myGen);
+            } else {
+              mapEl.classList.add('poi-hover');
+            }
+            return;
+          }
+
+          // geocode 캐시 X → coord2Address → Places
           const gc = new kakao.maps.services.Geocoder();
-
           gc.coord2Address(lon, lat, (result, status) => {
-            if (gen !== myGen) return;  // 마우스가 이미 이동했으면 버림
+            if (gen !== myGen) return;
             if (status !== kakao.maps.services.Status.OK) return;
+            geoCache[key] = result;
 
-            // 빠른 경로: building_name 있으면 Places 검색 생략
             if (result[0].road_address?.building_name) {
               mapEl.classList.add('poi-hover');
               return;
             }
-
-            const ra = result[0].road_address;
-            if (!ra) return;
-            const keyword = `${ra.road_name} ${ra.main_building_no}`;
-
-            const ps = new kakao.maps.services.Places();
-            ps.keywordSearch(keyword, (places, pStatus) => {
-              if (gen !== myGen) return;
-              if (pStatus === kakao.maps.services.Status.OK && places.length > 0) {
-                mapEl.classList.add('poi-hover');
-              }
-            }, {
-              location: new kakao.maps.LatLng(lat, lon),
-              radius: 30,
-              sort: kakao.maps.services.SortBy.DISTANCE,
-            });
+            _placesCheck(lat, lon, key, result, myGen);
           });
-        }, 500);
+        }, 150);
       });
 
-      // 드래그 중엔 포인터 커서 제거
       kakao.maps.event.addListener(map, 'dragstart', () => {
         clearTimeout(debounce);
         gen++;
