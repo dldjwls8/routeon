@@ -447,14 +447,40 @@
       const gc = new kakao.maps.services.Geocoder();
       gc.coord2Address(lon, lat, (result, status) => {
         let addr = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-        let name = addr;
-        if (status === kakao.maps.services.Status.OK) {
-          addr = result[0].road_address?.address_name
-              || result[0].address?.address_name
-              || addr;
-          name = result[0].road_address?.building_name || addr;
+
+        if (status !== kakao.maps.services.Status.OK) {
+          showSearchPin(lat, lon, addr, addr);
+          return;
         }
-        showSearchPin(lat, lon, name, addr);
+
+        addr = result[0].road_address?.address_name
+            || result[0].address?.address_name
+            || addr;
+
+        // 1순위: building_name (카카오 DB 등록 건물명)
+        const buildingName = result[0].road_address?.building_name;
+        if (buildingName) {
+          showSearchPin(lat, lon, buildingName, addr);
+          return;
+        }
+
+        // 2순위: 도로명+번지 키워드로 30m 이내 POI 검색
+        const ra = result[0].road_address;
+        const keyword = ra
+          ? `${ra.road_name} ${ra.main_building_no}${ra.sub_building_no ? '-' + ra.sub_building_no : ''}`
+          : addr;
+
+        const ps = new kakao.maps.services.Places();
+        ps.keywordSearch(keyword, (places, pStatus) => {
+          const name = (pStatus === kakao.maps.services.Status.OK && places.length > 0)
+            ? places[0].place_name
+            : addr;
+          showSearchPin(lat, lon, name, addr);
+        }, {
+          location: new kakao.maps.LatLng(lat, lon),
+          radius: 30,
+          sort: kakao.maps.services.SortBy.DISTANCE,
+        });
       });
     }
 
