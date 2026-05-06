@@ -1036,7 +1036,7 @@
     function showSearchPin(lat, lon, name, addr) {
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
 
-      _searchPinCoord = { lat, lon, name: addr || name };
+      _searchPinCoord = { lat, lon, name: name || addr };
       map.panTo(new kakao.maps.LatLng(lat, lon));
 
       const el = document.createElement('div');
