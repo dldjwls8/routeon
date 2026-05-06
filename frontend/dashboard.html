@@ -1734,7 +1734,8 @@
     let locationWsReconnectTimer = null;
 
     function connectLocationWebSocket() {
-      const WS_URL = 'ws://168.138.45.63:8000/ws/location';
+      const token = encodeURIComponent(getToken());
+      const WS_URL = `ws://168.138.45.63:8000/ws/location?token=${token}`;
       locationWs = new WebSocket(WS_URL);
 
       locationWs.onopen = () => {

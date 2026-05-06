@@ -58,27 +58,29 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # ────────────────────────────────────────────────
 class ConnectionManager:
     def __init__(self):
-        self.active: list[WebSocket] = []
+        self.active: dict[int, list[WebSocket]] = {}  # org_id → [ws]
 
-    async def connect(self, ws: WebSocket):
+    async def connect(self, ws: WebSocket, org_id: int):
         await ws.accept()
-        self.active.append(ws)
+        self.active.setdefault(org_id, []).append(ws)
 
-    def disconnect(self, ws: WebSocket):
-        if ws in self.active:
-            self.active.remove(ws)
+    def disconnect(self, ws: WebSocket, org_id: int):
+        sockets = self.active.get(org_id, [])
+        if ws in sockets:
+            sockets.remove(ws)
 
-    async def broadcast(self, data: dict):
-        """연결된 모든 관리자 웹에 위치 데이터 전송"""
+    async def broadcast_to_org(self, org_id: int, data: dict):
+        """같은 조직 관리자에게만 위치 데이터 전송"""
         import json
+        payload = json.dumps(data, ensure_ascii=False)
         dead = []
-        for ws in self.active:
+        for ws in list(self.active.get(org_id, [])):
             try:
-                await ws.send_text(json.dumps(data, ensure_ascii=False))
+                await ws.send_text(payload)
             except Exception:
                 dead.append(ws)
         for ws in dead:
-            self.disconnect(ws)
+            self.disconnect(ws, org_id)
 
 manager = ConnectionManager()
 chat_manager = ChatConnectionManager()
@@ -1927,14 +1929,15 @@ async def create_location_log(
 
     await db.commit()
 
-    # 4. WebSocket 브로드캐스트 — 연결된 관리자 웹에 실시간 전송
-    await manager.broadcast({
-        "user_id": req.user_id,
-        "lat":     req.lat,
-        "lon":     req.lon,
-        "speed":   req.speed,
-        "arrived_deliveries": arrived,
-    })
+    # 4. WebSocket 브로드캐스트 — 같은 조직 관리자에게만 전송
+    if current_user.organization_id:
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "user_id": req.user_id,
+            "lat":     req.lat,
+            "lon":     req.lon,
+            "speed":   req.speed,
+            "arrived_deliveries": arrived,
+        })
 
     return {
         "received": True,
@@ -1943,27 +1946,34 @@ async def create_location_log(
 
 
 @app.websocket("/ws/location")
-async def ws_location(ws: WebSocket):
+async def ws_location(
+    ws: WebSocket,
+    token: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
     """
     관리자 웹이 연결하는 WebSocket 엔드포인트.
-    기사가 POST /location-logs 호출 시 실시간으로 위치 데이터를 수신합니다.
-
-    메시지 형식:
-    {
-        "user_id": "uuid",
-        "lat": 37.123,
-        "lon": 127.456,
-        "speed": 60.0,
-        "arrived_deliveries": []
-    }
+    토큰 인증 후 조직별로 위치 데이터를 수신합니다.
     """
-    await manager.connect(ws)
+    if not token:
+        await ws.close(code=1008)
+        return
+    try:
+        current_user = await get_current_user_from_token(token, db)
+    except HTTPException:
+        await ws.close(code=1008)
+        return
+    if current_user.role != UserRole.admin or not current_user.organization_id:
+        await ws.close(code=1008)
+        return
+
+    org_id = current_user.organization_id
+    await manager.connect(ws, org_id)
     try:
         while True:
-            # 클라이언트로부터 ping 수신 (연결 유지용)
             await ws.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(ws)
+        manager.disconnect(ws, org_id)
 
 
 @app.websocket("/ws/chat")
