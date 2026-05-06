@@ -135,24 +135,6 @@
     .ac-item-name { font-size: 13px; font-weight: 600; color: #333; }
     .ac-item-addr { font-size: 11px; color: #999; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* ── 지도 픽 모드 배너 ──────────────────────── */
-    #map-pick-banner {
-      display: none; position: absolute; top: 16px; left: 50%;
-      transform: translateX(-50%); z-index: 20;
-      background: rgba(30,30,30,0.92); color: #fff;
-      padding: 11px 20px; border-radius: 24px;
-      box-shadow: 0 4px 18px rgba(0,0,0,0.35);
-      font-size: 14px; font-weight: bold; white-space: nowrap;
-      align-items: center; gap: 14px; pointer-events: auto;
-    }
-    #map-pick-banner.active { display: flex; }
-    #map-pick-banner .pick-cancel {
-      background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.35);
-      color: #fff; border-radius: 14px; padding: 4px 13px;
-      font-size: 13px; cursor: pointer; font-weight: normal;
-    }
-    #map-pick-banner .pick-cancel:hover { background: rgba(255,255,255,0.32); }
-    .map-container.pick-mode { cursor: crosshair; }
 
     /* ── 노드 상세 팝업 ───────────────────────────── */
     .node-popup {
@@ -211,14 +193,20 @@
     /* ── 검색 핀 팝업 ──────────────────────────────── */
     .search-pin-popup {
       background: #fff; border-radius: 10px; padding: 12px 14px;
-      box-shadow: 0 4px 18px rgba(0,0,0,0.2); min-width: 170px; font-size: 13px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.2); min-width: 180px; font-size: 13px;
     }
-    .search-pin-popup .pin-name { font-weight: bold; color: #333; margin-bottom: 8px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    .search-pin-popup .pin-name { font-weight: bold; color: #333; margin-bottom: 8px; white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
     .search-pin-popup .pin-btns { display: flex; gap: 5px; }
     .search-pin-popup .pin-btn {
       flex: 1; padding: 5px 0; border: none; border-radius: 12px;
       cursor: pointer; font-size: 11px; font-weight: bold;
     }
+    .search-pin-popup .pin-btn-emergency {
+      width: 100%; margin-top: 6px; padding: 6px 0; border: none;
+      border-radius: 12px; cursor: pointer; font-size: 11px; font-weight: bold;
+      background: #f3e8ff; color: #7c3aed;
+    }
+    .search-pin-popup .pin-btn-emergency:hover { background: #e9d5ff; }
   </style>
 </head>
 <body>
@@ -257,10 +245,6 @@
       <div class="ac-dropdown" id="ac-map-search"></div>
     </div>
 
-    <div id="map-pick-banner">
-      <span id="map-pick-label">📍 위치를 클릭하세요</span>
-      <button class="pick-cancel" onclick="cancelMapPick()">취소</button>
-    </div>
     <div id="map"></div>
   </div>
 
@@ -344,20 +328,6 @@
       <div id="route-nodes-list"></div>
     </div>
 
-    <!-- 원격 배차 -->
-    <div id="remote-dispatch-box" style="display:none; background:#fcfcfc; padding:18px; border-radius:10px; border:1px solid #eee;">
-      <h4 style="margin-top:0; color:#333;">+ 새 경유지 추가 (원격 배차)</h4>
-      <div id="current-waypoints-list" style="margin-bottom:12px;"></div>
-      <input type="text" id="new-dest-name" placeholder="경유지 이름 (예: 평택항 상차장)" autocomplete="off">
-      <div class="ac-wrapper" style="margin-bottom:8px;">
-        <div style="display:flex; gap:6px; align-items:stretch;">
-          <input type="text" id="new-dest-addr" placeholder="주소 검색" autocomplete="off" style="flex:1; margin:0;">
-          <button type="button" class="btn btn-setting" onclick="openMapPicker('new-dest')" style="padding:8px 10px; font-size:14px;" title="지도에서 선택">🗺</button>
-        </div>
-        <div class="ac-dropdown" id="ac-new-dest-addr"></div>
-      </div>
-      <button class="btn btn-add" onclick="addRoute()">경유지 추가</button>
-    </div>
   </div>
 
   <!-- ※ 미구현 기능: 설정 모달 (승인방식/법규정/조직코드) — 추후 구현 예정
@@ -458,11 +428,6 @@
     let _acDebounce  = {};   // inputId → setTimeout id
     let _dragSrcIdx      = null;
     let _nodePopupEl     = null;
-    let _pickHandler     = null;
-    let _pickSrcModal    = null;
-    let mapPickerMarker  = null;
-    let mapPickerCoord   = null;
-    let mapPickerTarget  = null;
 
     function initMap() {
       const container = document.getElementById('map');
@@ -474,9 +439,6 @@
     function onMapClick(e) {
       hideNodePopup();
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
-
-      // 원격배차 픽모드 중이면 _pickHandler가 처리
-      if (mapPickerTarget) return;
 
       const ll  = e.latLng;
       const lat = ll.getLat();
@@ -651,7 +613,6 @@
       }
 
       renderRouteNodes(trip);
-      renderRemoteDispatch(trip);
       renderNewTripSection(trip);
       await openChatWithDriver(id);
     }
@@ -731,7 +692,6 @@
     function hideRightPanel() {
       document.getElementById('right-panel').style.display = 'none';
       document.getElementById('route-nodes-box').style.display = 'none';
-      document.getElementById('remote-dispatch-box').style.display = 'none';
       document.getElementById('new-trip-section').style.display = 'none';
       currentDriverId = null;
       currentConversation = null;
@@ -787,31 +747,6 @@
       }).join('');
     }
 
-    function renderRemoteDispatch(trip) {
-      const box = document.getElementById('remote-dispatch-box');
-      const wpList = document.getElementById('current-waypoints-list');
-
-      if (!trip || !['scheduled', 'in_progress'].includes(trip.status)) {
-        box.style.display = 'none';
-        return;
-      }
-      box.style.display = 'block';
-
-      const waypoints = trip.waypoints || [];
-      if (waypoints.length === 0) {
-        wpList.innerHTML = '<p style="color:gray; font-size:12px; margin:0 0 8px;">등록된 경유지 없음</p>';
-      } else {
-        wpList.innerHTML = `
-          <p style="font-size:12px; color:#555; margin:0 0 6px; font-weight:600;">현재 경유지</p>
-          ${waypoints.map(w => `
-            <div style="font-size:13px; padding:5px 10px; background:#f1f3f5;
-                        border-radius:6px; margin-bottom:4px; color:#333;">
-              📦 ${w.name}
-            </div>`).join('')}
-          <div style="border-top:1px solid #eee; margin:10px 0;"></div>`;
-      }
-    }
-
     async function renderNewTripSection(trip) {
       const section = document.getElementById('new-trip-section');
       if (!section) return;
@@ -844,57 +779,6 @@
       renderTbWaypoints();
     }
 
-    async function addRoute() {
-      const name = document.getElementById('new-dest-name').value.trim();
-      const addr = document.getElementById('new-dest-addr').value.trim();
-      if (!name) return alert('목적지 이름을 입력하세요!');
-      if (!addr) return alert('주소를 입력하세요!');
-      if (!currentDriverId) return alert('기사를 먼저 선택하세요!');
-
-      // 1. 기사의 진행 중인 trip 조회
-      const tripRes = await fetch(
-        `${API}/trips?driver_id=${currentDriverId}&status=in_progress`,
-        { headers: authHeaders() }
-      );
-      const allTrips = await tripRes.json();
-      const trips = allTrips.filter(t => ['scheduled','in_progress'].includes(t.status));
-
-      if (!trips || trips.length === 0) {
-        return alert('활성 운행이 없습니다.\n먼저 운행을 생성하고 경로 최적화를 완료해주세요.');
-      }
-      const tripId = trips[0].id;
-
-      // 2. 주소 → 좌표 변환
-      let coord = _acCoords['new-dest-addr'];
-      if (!coord) {
-        const coordRes = await fetch(
-          `${API}/address/coord?query=${encodeURIComponent(addr)}`,
-          { headers: authHeaders() }
-        );
-        if (!coordRes.ok) return alert('주소를 찾을 수 없습니다.');
-        coord = await coordRes.json();
-      }
-      delete _acCoords['new-dest-addr'];
-
-      // 3. 경유지 추가 + 앱에 재경로 알림
-      const res = await fetch(`${API}/trips/${tripId}/waypoints`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ name, lat: coord.lat, lon: coord.lon })
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        return alert(`경유지 추가 실패: ${err.detail}`);
-      }
-
-      const data = await res.json();
-      alert(`✅ '${name}' 경유지가 추가됐습니다.\n기사 앱에 재경로 요청을 전송했습니다.`);
-
-      document.getElementById('new-dest-name').value = '';
-      document.getElementById('new-dest-addr').value = '';
-      await showDriverDetail(currentDriverId);
-    }
 
     async function deleteDelivery(deliveryId) {
       if(!confirm('이 배차를 삭제하시겠습니까?')) return;
@@ -1157,6 +1041,9 @@
 
       const el = document.createElement('div');
       el.className = 'search-pin-popup';
+      const activeTrip = currentDriverId && tripsCache[currentDriverId] &&
+        ['scheduled', 'in_progress'].includes(tripsCache[currentDriverId].status);
+
       el.innerHTML = `
         <div class="pin-name" title="${escapeHtml(addr || name)}">${escapeHtml(name)}</div>
         <div class="pin-btns">
@@ -1164,6 +1051,7 @@
           <button class="pin-btn" style="background:#fff7e6; color:#e67e22;" onclick="useSearchPin('waypoint')">📦 경유지</button>
           <button class="pin-btn" style="background:#fdecea; color:#e74c3c;" onclick="useSearchPin('dest')">🏴 목적지</button>
         </div>
+        ${activeTrip ? `<button class="pin-btn-emergency" onclick="addEmergencyWaypoint()">⚡ 긴급 경유지 추가</button>` : ''}
       `;
       // 팝업 내부 클릭이 지도 click 이벤트로 버블되지 않도록 차단
       el.addEventListener('mousedown', e => e.stopPropagation());
@@ -1186,6 +1074,33 @@
       else                     tbAddWaypoint(name, lat, lon);
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
       document.getElementById('map-search-input').value = '';
+    }
+
+    async function addEmergencyWaypoint() {
+      if (!_searchPinCoord || !currentDriverId) return;
+      const { name, lat, lon } = _searchPinCoord;
+
+      const trip = tripsCache[currentDriverId];
+      if (!trip || !['scheduled', 'in_progress'].includes(trip.status)) {
+        return alert('활성 운행이 없습니다.');
+      }
+
+      const res = await fetch(`${API}/trips/${trip.id}/waypoints`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ name, lat, lon }),
+      });
+
+      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
+
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`경유지 추가 실패: ${err.detail}`);
+      }
+
+      alert(`✅ '${name}' 경유지가 긴급 추가됐습니다.\n기사 앱에 재경로 요청을 전송했습니다.`);
+      await loadDrivers();
+      await showDriverDetail(currentDriverId);
     }
 
     // ── 기사 관리 모달 ──────────────────────────────
@@ -1379,7 +1294,6 @@
         // 3. kakao.maps.load() 콜백에서 지도 초기화
         kakao.maps.load(() => {
           initMap();
-          initAutocomplete();
           initMapSearch();
           loadDrivers();
           connectLocationWebSocket();
@@ -1553,142 +1467,6 @@
     // ════════════════════════════════════════════════
     // ① 자동완성
     // ════════════════════════════════════════════════
-    function initAutocomplete() {
-      setupAC('new-dest-addr', 'new-dest-name');
-    }
-
-    function setupAC(addrId, nameId) {
-      const input    = document.getElementById(addrId);
-      const dropdown = document.getElementById('ac-' + addrId);
-      if (!input || !dropdown) return;
-
-      input.addEventListener('input', () => {
-        clearTimeout(_acDebounce[addrId]);
-        const q = input.value.trim();
-        if (q.length < 2) { dropdown.style.display = 'none'; return; }
-        _acDebounce[addrId] = setTimeout(() => _acSearch(q, addrId, nameId, dropdown), 350);
-      });
-      input.addEventListener('blur', () => {
-        setTimeout(() => { dropdown.style.display = 'none'; }, 180);
-      });
-      input.addEventListener('keydown', e => {
-        if (e.key === 'Escape') dropdown.style.display = 'none';
-      });
-    }
-
-    function _acSearch(query, addrId, nameId, dropdown) {
-      const ps = new kakao.maps.services.Places();
-      ps.keywordSearch(query, (data, status) => {
-        if (status !== kakao.maps.services.Status.OK || !data.length) {
-          dropdown.style.display = 'none';
-          return;
-        }
-        _acResults[addrId] = data.slice(0, 6).map(p => ({
-          name: p.place_name,
-          addr: p.road_address_name || p.address_name,
-          lat:  parseFloat(p.y),
-          lon:  parseFloat(p.x),
-        }));
-        dropdown.innerHTML = _acResults[addrId].map((r, i) => `
-          <div class="ac-item" data-idx="${i}">
-            <div class="ac-item-name">${escapeHtml(r.name)}</div>
-            <div class="ac-item-addr">${escapeHtml(r.addr)}</div>
-          </div>
-        `).join('');
-        dropdown.style.display = 'block';
-
-        dropdown.querySelectorAll('.ac-item').forEach(item => {
-          item.addEventListener('mousedown', e => {
-            e.preventDefault();
-            const r = _acResults[addrId][parseInt(item.dataset.idx)];
-            document.getElementById(addrId).value = r.addr;
-            if (nameId) {
-              const ni = document.getElementById(nameId);
-              if (ni && !ni.value.trim()) ni.value = r.name;
-            }
-            _acCoords[addrId] = { lat: r.lat, lon: r.lon };
-            dropdown.style.display = 'none';
-          });
-        });
-      });
-    }
-
-    // ════════════════════════════════════════════════
-    // ② 지도에서 위치 선택
-    // ════════════════════════════════════════════════
-    function openMapPicker(target) {
-      if (target !== 'new-dest') return;  // 트립빌더는 지도 클릭으로 직접 처리
-      mapPickerTarget = target;
-      mapPickerCoord  = null;
-      _pickSrcModal   = null;
-
-      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
-
-      document.getElementById('map-pick-label').textContent = '📍 경유지를 지도에서 클릭하세요';
-      document.getElementById('map-pick-banner').classList.add('active');
-      document.querySelector('.map-container').classList.add('pick-mode');
-
-      _pickHandler = e => _onMapPickClick(e);
-      kakao.maps.event.addListener(map, 'click', _pickHandler);
-    }
-
-    function cancelMapPick() {
-      if (_pickHandler) {
-        kakao.maps.event.removeListener(map, 'click', _pickHandler);
-        _pickHandler = null;
-      }
-      if (mapPickerMarker) { mapPickerMarker.setMap(null); mapPickerMarker = null; }
-      document.getElementById('map-pick-banner').classList.remove('active');
-      document.querySelector('.map-container').classList.remove('pick-mode');
-      if (_pickSrcModal) {
-        document.getElementById(_pickSrcModal).style.display = 'flex';
-        _pickSrcModal = null;
-      }
-      mapPickerTarget = null;
-    }
-
-    function _onMapPickClick(e) {
-      // 리스너 즉시 제거 (중복 클릭 방지)
-      kakao.maps.event.removeListener(map, 'click', _pickHandler);
-      _pickHandler = null;
-
-      const ll = e.latLng;
-      mapPickerCoord = { lat: ll.getLat(), lon: ll.getLng() };
-
-      if (mapPickerMarker) mapPickerMarker.setMap(null);
-      mapPickerMarker = new kakao.maps.Marker({ position: ll, map });
-
-      document.getElementById('map-pick-label').textContent = '주소 조회 중…';
-
-      const gc = new kakao.maps.services.Geocoder();
-      gc.coord2Address(ll.getLng(), ll.getLat(), (result, status) => {
-        if (status === kakao.maps.services.Status.OK) {
-          mapPickerCoord.addr =
-            result[0].road_address?.address_name ||
-            result[0].address?.address_name || '';
-        }
-        _finishMapPick();
-      });
-    }
-
-    function _finishMapPick() {
-      const addr = mapPickerCoord.addr ||
-        `${mapPickerCoord.lat.toFixed(5)}, ${mapPickerCoord.lon.toFixed(5)}`;
-
-      if (mapPickerTarget === 'new-dest') {
-        document.getElementById('new-dest-addr').value = addr;
-        _acCoords['new-dest-addr'] = mapPickerCoord;
-      }
-
-      document.getElementById('map-pick-banner').classList.remove('active');
-      document.querySelector('.map-container').classList.remove('pick-mode');
-      if (_pickSrcModal) {
-        document.getElementById(_pickSrcModal).style.display = 'flex';
-        _pickSrcModal = null;
-      }
-      mapPickerTarget = null;
-    }
-
     // ════════════════════════════════════════════════
     // ④ 노드 클릭 → 상세 팝업
     // ════════════════════════════════════════════════
