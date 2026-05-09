@@ -683,9 +683,9 @@ class ExtraStopSchema(BaseModel):
 
 class OptimizeRequest(BaseModel):
     trip_id:           str
-    origin_name:       str
-    origin_lat:        float
-    origin_lon:        float
+    origin_name:       Optional[str]   = None   # 미입력 시 Redis 현재위치 사용
+    origin_lat:        Optional[float] = None
+    origin_lon:        Optional[float] = None
     initial_drive_sec: int   = 0
     is_emergency:      bool  = False
     route_mode:        str   = "auto"   # auto | local | long_distance
@@ -781,6 +781,22 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
 
+    # 출발지 결정: 직접입력 우선, 미입력 시 Redis 현재위치 사용
+    origin_name = req.origin_name
+    origin_lat  = req.origin_lat
+    origin_lon  = req.origin_lon
+    if origin_lat is None or origin_lon is None:
+        loc_val = redis.get(f"location:{current_user.id}")
+        if not loc_val:
+            raise HTTPException(
+                400,
+                "현재 위치 정보가 없습니다. GPS를 활성화하거나 출발지를 직접 입력해주세요."
+            )
+        lat_str, lon_str = loc_val.split(",")
+        origin_lat  = float(lat_str)
+        origin_lon  = float(lon_str)
+        origin_name = origin_name or f"{origin_lat:.5f}, {origin_lon:.5f}"
+
     # 노드 구성 (extra_stops 처리 포함)
     waypoints_raw: list[dict] = list(t.waypoints or [])
     extra_stops    = req.extra_stops or []
@@ -808,7 +824,7 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
         if auto_idx is not None:
             waypoints_raw.pop(auto_idx)
 
-    nodes = [{"name": req.origin_name, "lat": req.origin_lat, "lon": req.origin_lon}]
+    nodes = [{"name": origin_name, "lat": origin_lat, "lon": origin_lon}]
     nodes += waypoints_raw
     nodes.append({"name": dest_name, "lat": dest_lat, "lon": dest_lon})
 
@@ -881,9 +897,9 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
         "estimated_duration_min": round(total_sec / 60, 1),
         "total_distance_km": round(total_dist_km, 2),
     }
-    t.origin_name = req.origin_name
-    t.origin_lat  = req.origin_lat
-    t.origin_lon  = req.origin_lon
+    t.origin_name = origin_name
+    t.origin_lat  = origin_lat
+    t.origin_lon  = origin_lon
     t.status      = TripStatus.in_progress
     t.is_emergency = req.is_emergency
 
