@@ -436,16 +436,14 @@ class WaypointSchema(BaseModel):
     name: str
     lat:  float
     lon:  float
+    type: str = "unloading"   # "loading" = 상차지 | "unloading" = 하차지
 
 class TripCreate(BaseModel):
     driver_id:         str
     vehicle_id:        Optional[int]   = None
-    origin_name:       Optional[str]   = None
-    origin_lat:        Optional[float] = None
-    origin_lon:        Optional[float] = None
-    dest_name:         str
-    dest_lat:          float
-    dest_lon:          float
+    dest_name:         Optional[str]   = None
+    dest_lat:          Optional[float] = None
+    dest_lon:          Optional[float] = None
     waypoints:         Optional[list[WaypointSchema]] = None
     departure_time:    Optional[str]   = None
     vehicle_height_m:  Optional[float] = None
@@ -489,9 +487,10 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
                 current_user: User = Depends(require_admin)):
     import uuid as uuid_lib
     waypoints_json = [w.model_dump() for w in req.waypoints] if req.waypoints else []
+    if not waypoints_json:
+        raise HTTPException(400, "상차지 또는 하차지를 1개 이상 입력해주세요.")
     t = Trip(
         driver_id=uuid_lib.UUID(req.driver_id), vehicle_id=req.vehicle_id,
-        origin_name=req.origin_name, origin_lat=req.origin_lat, origin_lon=req.origin_lon,
         dest_name=req.dest_name, dest_lat=req.dest_lat, dest_lon=req.dest_lon,
         waypoints=waypoints_json, departure_time=req.departure_time,
         vehicle_height_m=req.vehicle_height_m, vehicle_weight_kg=req.vehicle_weight_kg,
@@ -574,7 +573,7 @@ async def add_waypoint(
 
     # waypoints 배열에 추가
     current_waypoints = list(t.waypoints or [])
-    new_waypoint = {"name": req.name, "lat": req.lat, "lon": req.lon}
+    new_waypoint = req.model_dump()   # type 필드(기본값 "unloading") 포함
     current_waypoints.append(new_waypoint)
     t.waypoints = current_waypoints
     await db.commit()
@@ -659,12 +658,16 @@ async def update_trip_status(
     }
 
 def _trip_schema(t: Trip) -> dict:
+    wp = t.waypoints or []
+    loadings   = sum(1 for w in wp if w.get("type") == "loading")
+    unloadings = sum(1 for w in wp if w.get("type") != "loading")
     return {
         "id": str(t.id), "driver_id": str(t.driver_id), "vehicle_id": t.vehicle_id,
         "dest_name": t.dest_name, "dest_lat": t.dest_lat, "dest_lon": t.dest_lon,
-        "waypoints": t.waypoints or [], "optimized_route": t.optimized_route,
+        "waypoints": wp, "optimized_route": t.optimized_route,
         "status": t.status, "departure_time": t.departure_time,
         "is_emergency": t.is_emergency, "created_at": t.created_at.isoformat(),
+        "loading_count": loadings, "unloading_count": unloadings,
     }
 
 
@@ -691,6 +694,9 @@ class OptimizeRequest(BaseModel):
     vehicle_length_cm: Optional[float] = None
     vehicle_width_cm:  Optional[float] = None
     extra_stops:       Optional[list[ExtraStopSchema]] = None
+    dest_name:         Optional[str]   = None   # 기사가 직접 지정하는 도착지 (선택)
+    dest_lat:          Optional[float] = None
+    dest_lon:          Optional[float] = None
 
 class ReplanRequest(BaseModel):
     trip_id:             str
@@ -705,6 +711,66 @@ class ReplanRequest(BaseModel):
     is_emergency:        bool = False
     route_mode:          str  = "auto"   # auto | local | long_distance
 
+def _resolve_dest(
+    req: "OptimizeRequest",
+    t: "Trip",
+    waypoints_raw: list[dict],
+) -> tuple[str, float, float, int | None]:
+    """
+    도착지 결정 우선순위:
+    1. req.dest_* (기사 직접 지정)
+    2. t.dest_* (관리자가 설정한 기존 목적지)
+    3. waypoints_raw 중 type=unloading 인 마지막 항목 (자동)
+    4. waypoints_raw 중 type=loading  인 마지막 항목 (자동 폴백)
+    반환: (dest_name, dest_lat, dest_lon, auto_selected_index or None)
+    """
+    if req.dest_name and req.dest_lat is not None and req.dest_lon is not None:
+        return req.dest_name, req.dest_lat, req.dest_lon, None
+    if t.dest_name and t.dest_lat is not None and t.dest_lon is not None:
+        return t.dest_name, t.dest_lat, t.dest_lon, None
+    # 자동 선택: 마지막 unloading → 없으면 마지막 loading
+    for wp_type in ("unloading", "loading"):
+        for i in range(len(waypoints_raw) - 1, -1, -1):
+            w = waypoints_raw[i]
+            if w.get("type", "unloading") == wp_type:
+                return w["name"], w["lat"], w["lon"], i
+    raise HTTPException(400, "도착지를 지정하거나 하차지를 1개 이상 추가해주세요.")
+
+
+def _apply_loading_precedence(
+    ordered: list,
+    reordered: list[list[int]],
+    reordered_dist: list[list[int]],
+) -> tuple[list, list[list[int]], list[list[int]]]:
+    """
+    상차지(loading)가 하차지(unloading)보다 반드시 앞서도록 재정렬.
+    origin(첫 번째)·destination(마지막)은 고정.
+    B1 수정: ordered 재정렬 시 reordered/reordered_dist 행렬도 같은 순서로 재배열.
+    """
+    if len(ordered) <= 2:
+        return ordered, reordered, reordered_dist
+
+    first = ordered[0]
+    last  = ordered[-1]
+    middle = ordered[1:-1]
+
+    loadings   = [n for n in middle if n.node_type == "loading"]
+    unloadings = [n for n in middle if n.node_type != "loading"]
+    new_middle = loadings + unloadings
+
+    new_ordered = [first] + new_middle + [last]
+
+    # 원래 ordered에서 각 노드의 위치 → 새 위치로 매핑
+    old_positions = {id(n): i for i, n in enumerate(ordered)}
+    perm = [old_positions[id(n)] for n in new_ordered]
+
+    n = len(new_ordered)
+    new_reordered      = [[reordered[perm[i]][perm[j]]      for j in range(n)] for i in range(n)]
+    new_reordered_dist = [[reordered_dist[perm[i]][perm[j]] for j in range(n)] for i in range(n)]
+
+    return new_ordered, new_reordered, new_reordered_dist
+
+
 @app.post("/optimize")
 async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
              current_user: User = Depends(get_current_user)):
@@ -718,21 +784,29 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     # 노드 구성 (extra_stops 처리 포함)
     waypoints_raw: list[dict] = list(t.waypoints or [])
     extra_stops    = req.extra_stops or []
-    new_dest       = None
+    new_dest_extra = None
     preferred_rest: list[dict] = []
 
     for es in extra_stops:
         if es.stop_type == "waypoint":
-            waypoints_raw.append({"name": es.name, "lat": es.lat, "lon": es.lon})
+            waypoints_raw.append({"name": es.name, "lat": es.lat, "lon": es.lon, "type": "unloading"})
         elif es.stop_type == "destination":
-            waypoints_raw.append({"name": t.dest_name, "lat": t.dest_lat, "lon": t.dest_lon})
-            new_dest = es
+            if t.dest_name:
+                waypoints_raw.append({"name": t.dest_name, "lat": t.dest_lat, "lon": t.dest_lon, "type": "unloading"})
+            new_dest_extra = es
         elif es.stop_type == "rest_preferred":
             preferred_rest.append({"name": es.name, "latitude": es.lat, "longitude": es.lon, "is_active": True})
 
-    dest_name = new_dest.name if new_dest else t.dest_name
-    dest_lat  = new_dest.lat  if new_dest else t.dest_lat
-    dest_lon  = new_dest.lon  if new_dest else t.dest_lon
+    # B2 수정: 도착지 자동 선택 시 waypoints_raw에서 해당 항목 제거
+    if new_dest_extra:
+        dest_name = new_dest_extra.name
+        dest_lat  = new_dest_extra.lat
+        dest_lon  = new_dest_extra.lon
+        auto_idx  = None
+    else:
+        dest_name, dest_lat, dest_lon, auto_idx = _resolve_dest(req, t, waypoints_raw)
+        if auto_idx is not None:
+            waypoints_raw.pop(auto_idx)
 
     nodes = [{"name": req.origin_name, "lat": req.origin_lat, "lon": req.origin_lon}]
     nodes += waypoints_raw
@@ -752,21 +826,22 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     tsp_order = solve_tsp(time_matrix)
     if tsp_order is None:
         raise HTTPException(422, "경로 계산 실패: 가능한 경로가 없습니다.")
-    dest_idx  = len(nodes) - 1
-    k         = len(tsp_order)
-    ordered   = [
+    dest_idx = len(nodes) - 1
+    k        = len(tsp_order)
+    ordered  = [
         RouteNode(
             type="origin" if idx == 0 else "waypoint",
             name=nodes[idx]["name"],
             lat=nodes[idx]["lat"],
             lon=nodes[idx]["lon"],
+            node_type=nodes[idx].get("type", "unloading") if idx != 0 else "loading",
         )
         for idx in tsp_order
     ] + [RouteNode(type="destination", name=dest_name, lat=dest_lat, lon=dest_lon)]
 
     # 시간·거리 행렬 재배열
-    n_o           = len(ordered)
-    reordered     = [[0] * n_o for _ in range(n_o)]
+    n_o            = len(ordered)
+    reordered      = [[0] * n_o for _ in range(n_o)]
     reordered_dist = [[0] * n_o for _ in range(n_o)]
     for i in range(k):
         for j in range(k):
@@ -774,6 +849,11 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
             reordered_dist[i][j] = dist_matrix[tsp_order[i]][tsp_order[j]]
         reordered[i][k]      = time_matrix[tsp_order[i]][dest_idx]
         reordered_dist[i][k] = dist_matrix[tsp_order[i]][dest_idx]
+
+    # B1 수정: 상차지 우선 순서 제약 적용 + 행렬 동시 재배열
+    ordered, reordered, reordered_dist = _apply_loading_precedence(
+        ordered, reordered, reordered_dist
+    )
 
     # 휴게소 조회 (depot 제외)
     _rr = await db.execute(
@@ -792,7 +872,7 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     )
 
     # 총 거리·시간 계산
-    total_sec  = sum(reordered[i][i + 1] for i in range(len(ordered) - 1))
+    total_sec     = sum(reordered[i][i + 1] for i in range(len(ordered) - 1))
     total_dist_km = sum(reordered_dist[i][i + 1] for i in range(len(ordered) - 1)) / 1000
 
     route_dicts = [node.to_dict() for node in final_route]
@@ -822,12 +902,12 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     await db.commit()
 
     return {
-        "trip_id":              str(t.id),
-        "route":                route_dicts,
-        "total_distance_km":    round(total_dist_km, 2),
+        "trip_id":                str(t.id),
+        "route":                  route_dicts,
+        "total_distance_km":      round(total_dist_km, 2),
         "estimated_duration_min": round(total_sec / 60, 1),
-        "rest_stops_count":     sum(1 for nd in final_route if nd.type == "rest_stop"),
-        "is_emergency":         req.is_emergency,
+        "rest_stops_count":       sum(1 for nd in final_route if nd.type == "rest_stop"),
+        "is_emergency":           req.is_emergency,
     }
 
 @app.post("/optimize/replan")

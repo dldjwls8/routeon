@@ -117,9 +117,11 @@ class RouteNode:
     # TODO(상용화): Waypoint 도착 후 실제 체류 시간(dwell_time_min)을 기록해
     #   dwell_time_min >= MIN_REST_MIN(15분) 이면 사후에 누적 운전시간을 보정하는 로직 추가
     can_rest: bool = field(default=False)
+    node_type: str = field(default="unloading")  # "loading" | "unloading" — 상/하차 구분
 
     def to_dict(self) -> dict:
-        d = {"type": self.type, "name": self.name, "lat": self.lat, "lon": self.lon}
+        d = {"type": self.type, "name": self.name, "lat": self.lat, "lon": self.lon,
+             "node_type": self.node_type}
         if self.min_rest_minutes is not None:
             d["min_rest_minutes"] = self.min_rest_minutes
         return d

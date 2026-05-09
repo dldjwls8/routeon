@@ -208,9 +208,9 @@ class Trip(Base):
     origin_lat  = Column(Float)
     origin_lon  = Column(Float)
 
-    dest_name = Column(String(200), nullable=False)
-    dest_lat  = Column(Float, nullable=False)
-    dest_lon  = Column(Float, nullable=False)
+    dest_name = Column(String(200), nullable=True)
+    dest_lat  = Column(Float, nullable=True)
+    dest_lon  = Column(Float, nullable=True)
 
     vehicle_height_m  = Column(Float)
     vehicle_weight_kg = Column(Float)

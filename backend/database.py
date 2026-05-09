@@ -74,3 +74,14 @@ async def init_db():
                 if_not_exists => TRUE
             );
         """))
+
+        # trips.dest_* 컬럼 NOT NULL 제거 (상차지/하차지 플로우 지원)
+        await conn.execute(text(
+            "ALTER TABLE trips ALTER COLUMN dest_name DROP NOT NULL;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE trips ALTER COLUMN dest_lat DROP NOT NULL;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE trips ALTER COLUMN dest_lon DROP NOT NULL;"
+        ))
