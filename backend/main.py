@@ -725,8 +725,16 @@ def _resolve_dest(
     반환: (dest_name, dest_lat, dest_lon, auto_selected_index or None)
     """
     if req.dest_name and req.dest_lat is not None and req.dest_lon is not None:
+        # 기사가 지정한 좌표와 일치하는 waypoint가 있으면 pop해서 중복 방지
+        for i, w in enumerate(waypoints_raw):
+            if abs(w["lat"] - req.dest_lat) < 1e-6 and abs(w["lon"] - req.dest_lon) < 1e-6:
+                return req.dest_name, req.dest_lat, req.dest_lon, i
         return req.dest_name, req.dest_lat, req.dest_lon, None
     if t.dest_name and t.dest_lat is not None and t.dest_lon is not None:
+        # 관리자 설정 도착지도 같은 방식으로 중복 체크
+        for i, w in enumerate(waypoints_raw):
+            if abs(w["lat"] - t.dest_lat) < 1e-6 and abs(w["lon"] - t.dest_lon) < 1e-6:
+                return t.dest_name, t.dest_lat, t.dest_lon, i
         return t.dest_name, t.dest_lat, t.dest_lon, None
     # 자동 선택: 마지막 unloading → 없으면 마지막 loading
     for wp_type in ("unloading", "loading"):
