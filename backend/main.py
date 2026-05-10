@@ -9,7 +9,7 @@ import httpx
 import redis as redis_client
 import shutil
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, cast, Float
 from pydantic import BaseModel
 
 from database import get_db, init_db
@@ -2163,3 +2163,139 @@ async def manual_complete(
     await db.commit()
 
     return {"id": delivery_id, "status": delivery.status}
+
+
+# ────────────────────────────────────────────────
+# 통계 / 애널리틱스
+# ────────────────────────────────────────────────
+def _period_cutoff(period: str) -> datetime | None:
+    """period 문자열을 cutoff datetime으로 변환. 'all' 또는 알 수 없는 값은 None 반환."""
+    if period == "7d":
+        return datetime.utcnow() - timedelta(days=7)
+    if period == "30d":
+        return datetime.utcnow() - timedelta(days=30)
+    return None
+
+
+async def _org_driver_ids(db: AsyncSession, current_user: User) -> list:
+    """현재 사용자의 조직에 속한 driver id 목록 반환. superadmin은 빈 리스트(= 전체)."""
+    if current_user.role == UserRole.superadmin:
+        return []
+    _r = await db.execute(
+        select(User.id).where(
+            User.organization_id == current_user.organization_id,
+            User.role == UserRole.driver,
+        )
+    )
+    return [row[0] for row in _r.all()]
+
+
+@app.get("/stats/summary")
+async def stats_summary(
+    period: str = "30d",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    cutoff = _period_cutoff(period)
+    driver_ids = await _org_driver_ids(db, current_user)
+
+    dist_col = cast(Trip.optimized_route["total_distance_km"].astext, Float)
+    dur_col  = cast(Trip.optimized_route["estimated_duration_min"].astext, Float)
+
+    stmt = select(
+        func.count().label("total"),
+        func.coalesce(func.sum(dist_col), 0.0).label("total_dist"),
+        func.coalesce(func.avg(dur_col),  0.0).label("avg_dur"),
+        func.count().filter(Trip.status == TripStatus.completed).label("completed"),
+        func.count().filter(Trip.status == TripStatus.scheduled).label("scheduled"),
+        func.count().filter(Trip.status == TripStatus.in_progress).label("in_progress"),
+        func.count().filter(Trip.status == TripStatus.cancelled).label("cancelled"),
+    )
+    if driver_ids:
+        stmt = stmt.where(Trip.driver_id.in_(driver_ids))
+    if cutoff:
+        stmt = stmt.where(Trip.created_at >= cutoff)
+
+    row = (await db.execute(stmt)).one()
+    total     = int(row.total or 0)
+    completed = int(row.completed or 0)
+    return {
+        "total_trips":       total,
+        "total_distance_km": round(float(row.total_dist or 0), 1),
+        "avg_duration_min":  round(float(row.avg_dur or 0), 1),
+        "completion_rate":   round(completed / total * 100, 1) if total else 0.0,
+        "by_status": {
+            "scheduled":   int(row.scheduled   or 0),
+            "in_progress": int(row.in_progress or 0),
+            "completed":   completed,
+            "cancelled":   int(row.cancelled   or 0),
+        },
+    }
+
+
+@app.get("/stats/by-driver")
+async def stats_by_driver(
+    period: str = "30d",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    cutoff = _period_cutoff(period)
+    driver_ids = await _org_driver_ids(db, current_user)
+
+    dist_col = cast(Trip.optimized_route["total_distance_km"].astext, Float)
+    dur_col  = cast(Trip.optimized_route["estimated_duration_min"].astext, Float)
+
+    stmt = (
+        select(
+            Trip.driver_id,
+            User.username,
+            func.count().label("total"),
+            func.count().filter(Trip.status == TripStatus.completed).label("completed"),
+            func.coalesce(func.sum(dist_col), 0.0).label("total_dist"),
+            func.coalesce(func.avg(dur_col),  0.0).label("avg_dur"),
+        )
+        .join(User, Trip.driver_id == User.id)
+        .group_by(Trip.driver_id, User.username)
+        .order_by(func.count().desc())
+    )
+    if driver_ids:
+        stmt = stmt.where(Trip.driver_id.in_(driver_ids))
+    if cutoff:
+        stmt = stmt.where(Trip.created_at >= cutoff)
+
+    rows = (await db.execute(stmt)).all()
+    return [
+        {
+            "driver_id":         str(r.driver_id),
+            "username":          r.username,
+            "total_trips":       int(r.total),
+            "completed_trips":   int(r.completed or 0),
+            "total_distance_km": round(float(r.total_dist or 0), 1),
+            "avg_duration_min":  round(float(r.avg_dur  or 0), 1),
+        }
+        for r in rows
+    ]
+
+
+@app.get("/stats/by-day")
+async def stats_by_day(
+    period: str = "30d",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    cutoff = _period_cutoff(period)
+    driver_ids = await _org_driver_ids(db, current_user)
+
+    day_col = func.date_trunc("day", Trip.created_at).label("day")
+    stmt = (
+        select(day_col, func.count().label("cnt"))
+        .group_by(day_col)
+        .order_by(day_col)
+    )
+    if driver_ids:
+        stmt = stmt.where(Trip.driver_id.in_(driver_ids))
+    if cutoff:
+        stmt = stmt.where(Trip.created_at >= cutoff)
+
+    rows = (await db.execute(stmt)).all()
+    return [{"date": r.day.strftime("%Y-%m-%d"), "count": int(r.cnt)} for r in rows]

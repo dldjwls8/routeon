@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 운행 통계</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    if (!localStorage.getItem('token')) location.href = '/login.html';
+    const API = 'http://168.138.45.63:8000';
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` };
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', sans-serif; background: #f4f7f6; min-height: 100vh; }
+
+    .header {
+      background: #fff;
+      border-bottom: 2px solid #FFE812;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .header a {
+      text-decoration: none;
+      color: #555;
+      font-size: 14px;
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      transition: 0.2s;
+    }
+    .header a:hover { background: #f0f0f0; }
+    .header h1 { font-size: 20px; color: #333; }
+
+    .main { max-width: 1100px; margin: 28px auto; padding: 0 20px; }
+
+    /* 기간 필터 */
+    .period-bar { display: flex; gap: 8px; margin-bottom: 24px; }
+    .period-btn {
+      padding: 8px 20px; border: 1px solid #ddd; border-radius: 20px;
+      background: #fff; cursor: pointer; font-size: 14px; font-weight: bold;
+      color: #555; transition: 0.2s;
+    }
+    .period-btn:hover { border-color: #FFE812; }
+    .period-btn.active { background: #FFE812; border-color: #FFE812; color: #333; }
+
+    /* 요약 카드 */
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: #fff; border-radius: 12px; padding: 22px 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 4px solid #ccc;
+    }
+    .card.blue   { border-color: #3498db; }
+    .card.green  { border-color: #2ecc71; }
+    .card.orange { border-color: #f39c12; }
+    .card.purple { border-color: #9b59b6; }
+    .card-label { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .card-value { font-size: 28px; font-weight: bold; color: #333; }
+    .card-unit  { font-size: 13px; color: #aaa; margin-left: 4px; }
+
+    /* 차트 행 */
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-box {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .chart-box h3 { font-size: 14px; color: #555; margin-bottom: 16px; }
+    .chart-wrap { position: relative; }
+    .no-data {
+      display: none; position: absolute; inset: 0;
+      align-items: center; justify-content: center;
+      font-size: 13px; color: #aaa; background: rgba(255,255,255,0.85);
+      border-radius: 8px;
+    }
+
+    /* 기사별 테이블 */
+    .table-box {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .table-box h3 { font-size: 14px; color: #555; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px 12px; background: #f8f9fa; color: #666; font-weight: bold; border-bottom: 2px solid #eee; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333; }
+    tr:hover td { background: #fafafa; }
+    .no-driver { text-align: center; color: #aaa; padding: 24px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <a href="/dashboard.html">← 대시보드</a>
+  <h1>📊 루트온 운행 통계</h1>
+</div>
+
+<div class="main">
+  <!-- 기간 필터 -->
+  <div class="period-bar">
+    <button class="period-btn" data-period="7d"  onclick="setPeriod('7d')">7일</button>
+    <button class="period-btn active" data-period="30d" onclick="setPeriod('30d')">30일</button>
+    <button class="period-btn" data-period="all" onclick="setPeriod('all')">전체</button>
+  </div>
+
+  <!-- 요약 카드 -->
+  <div class="cards">
+    <div class="card blue">
+      <div class="card-label">총 운행 건수</div>
+      <div class="card-value" id="c-total">-<span class="card-unit">건</span></div>
+    </div>
+    <div class="card green">
+      <div class="card-label">총 운행 거리</div>
+      <div class="card-value" id="c-dist">-<span class="card-unit">km</span></div>
+    </div>
+    <div class="card orange">
+      <div class="card-label">평균 소요 시간</div>
+      <div class="card-value" id="c-dur">-<span class="card-unit">분</span></div>
+    </div>
+    <div class="card purple">
+      <div class="card-label">완료율</div>
+      <div class="card-value" id="c-rate">-<span class="card-unit">%</span></div>
+    </div>
+  </div>
+
+  <!-- 차트 행 -->
+  <div class="charts-row">
+    <div class="chart-box">
+      <h3>일별 운행 건수</h3>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="bar-chart"></canvas>
+        <div class="no-data" id="bar-nodata">기간 내 운행 데이터가 없습니다.</div>
+      </div>
+    </div>
+    <div class="chart-box">
+      <h3>운행 상태 분포</h3>
+      <div class="chart-wrap" style="height:220px;">
+        <canvas id="donut-chart"></canvas>
+        <div class="no-data" id="donut-nodata">데이터가 없습니다.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 기사별 테이블 -->
+  <div class="table-box">
+    <h3>기사별 운행 실적</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>기사명</th>
+          <th>총 운행</th>
+          <th>완료</th>
+          <th>총 거리</th>
+          <th>평균 시간</th>
+        </tr>
+      </thead>
+      <tbody id="driver-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let currentPeriod = '30d';
+  let barChart  = null;
+  let donutChart = null;
+
+  function setPeriod(p) {
+    currentPeriod = p;
+    document.querySelectorAll('.period-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.period === p);
+    });
+    loadAll(p);
+  }
+
+  async function loadAll(period) {
+    try {
+      const [summary, byDriver, byDay] = await Promise.all([
+        fetch(`${API}/stats/summary?period=${period}`, { headers: authHeaders() }).then(r => {
+          if (r.status === 401) { location.href = '/login.html'; throw new Error('unauth'); }
+          return r.json();
+        }),
+        fetch(`${API}/stats/by-driver?period=${period}`, { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API}/stats/by-day?period=${period}`,    { headers: authHeaders() }).then(r => r.json()),
+      ]);
+      renderSummaryCards(summary);
+      renderBarChart(byDay);
+      renderDonutChart(summary.by_status);
+      renderDriverTable(byDriver);
+    } catch (e) {
+      if (e.message !== 'unauth') console.error('통계 로드 오류:', e);
+    }
+  }
+
+  function renderSummaryCards(d) {
+    document.getElementById('c-total').innerHTML = `${d.total_trips.toLocaleString()}<span class="card-unit">건</span>`;
+    document.getElementById('c-dist').innerHTML  = `${d.total_distance_km.toLocaleString()}<span class="card-unit">km</span>`;
+    document.getElementById('c-dur').innerHTML   = `${d.avg_duration_min.toLocaleString()}<span class="card-unit">분</span>`;
+    document.getElementById('c-rate').innerHTML  = `${d.completion_rate}<span class="card-unit">%</span>`;
+  }
+
+  function renderBarChart(byDay) {
+    if (barChart) { barChart.destroy(); barChart = null; }
+    const nodata = document.getElementById('bar-nodata');
+    if (!byDay.length) {
+      nodata.style.display = 'flex';
+      return;
+    }
+    nodata.style.display = 'none';
+    barChart = new Chart(document.getElementById('bar-chart'), {
+      type: 'bar',
+      data: {
+        labels: byDay.map(d => d.date),
+        datasets: [{
+          label: '운행 건수',
+          data:  byDay.map(d => d.count),
+          backgroundColor: '#3498db88',
+          borderColor:     '#3498db',
+          borderWidth: 1,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 } },
+          x: { ticks: { maxRotation: 45, font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  function renderDonutChart(byStatus) {
+    if (donutChart) { donutChart.destroy(); donutChart = null; }
+    const nodata = document.getElementById('donut-nodata');
+    const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
+    if (!total) {
+      nodata.style.display = 'flex';
+      return;
+    }
+    nodata.style.display = 'none';
+    const labels = ['출발 대기', '운행 중', '완료', '취소'];
+    const values = [byStatus.scheduled, byStatus.in_progress, byStatus.completed, byStatus.cancelled];
+    const colors = ['#f39c12', '#2ecc71', '#3498db', '#e74c3c'];
+    donutChart = new Chart(document.getElementById('donut-chart'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: colors, borderWidth: 2 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 10 } },
+        },
+        cutout: '60%',
+      },
+    });
+  }
+
+  function renderDriverTable(byDriver) {
+    const tbody = document.getElementById('driver-tbody');
+    if (!byDriver.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="no-driver">해당 기간 운행 기록이 없습니다.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = byDriver.map(d => `
+      <tr>
+        <td><strong>${d.username}</strong></td>
+        <td>${d.total_trips}건</td>
+        <td>${d.completed_trips}건</td>
+        <td>${d.total_distance_km.toLocaleString()} km</td>
+        <td>${d.avg_duration_min.toLocaleString()} 분</td>
+      </tr>
+    `).join('');
+  }
+
+  // 초기 로드
+  loadAll(currentPeriod);
+</script>
+</body>
+</html>
