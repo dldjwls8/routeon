@@ -512,6 +512,7 @@ def plan_rest_stops_from_polyline(
                 lat=stop["latitude"],
                 lon=stop["longitude"],
                 min_rest_minutes=rest_minutes,
+                node_type="rest_stop",
             ))
             stop_idx += 1
 
@@ -523,6 +524,7 @@ def plan_rest_stops_from_polyline(
             lat=stop["latitude"],
             lon=stop["longitude"],
             min_rest_minutes=rest_minutes,
+            node_type="rest_stop",
         ))
 
     result.append(ordered_nodes[-1])
@@ -708,6 +710,7 @@ async def insert_rest_stops(
                 lat=best["latitude"],
                 lon=best["longitude"],
                 min_rest_minutes=rest_minutes,
+                node_type="rest_stop",
             ))
             accumulated = 0
             remaining = remaining_after
@@ -716,6 +719,7 @@ async def insert_rest_stops(
                 name=best["name"],
                 lat=best["latitude"],
                 lon=best["longitude"],
+                node_type="rest_stop",
             )
         else:
             accumulated += remaining
