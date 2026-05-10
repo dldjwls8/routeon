@@ -429,10 +429,16 @@
 
   <script>
     let map;
-    let markers = {}; 
+    let markers = {};
     let currentDriverId = null;
-    let currentPolyline = null;   // 현재 표시 중인 경로선
-    let routeMarkers    = [];     // 경유지/휴게소 마커 목록
+    let driverPolylines     = {};  // driver_id → kakao.maps.Polyline
+    let driverRouteMarkers  = {};  // driver_id → [CustomOverlay, ...]
+
+    const DRIVER_COLORS = [
+      '#3498db','#e74c3c','#2ecc71','#f39c12',
+      '#9b59b6','#1abc9c','#e67e22','#34495e',
+    ];
+    let driverColorMap = {};  // driver_id → color string
     let chatWs = null;
     let chatPingTimer = null;
     let currentConversation = null;
@@ -630,9 +636,26 @@
           .catch(() => { tripsCache[d.id] = null; })
       );
       await Promise.all(tripPromises);
+
+      // 기사별 고정 색상 배정 (순서 기반, 새로고침 후에도 동일)
+      driversCache.forEach((d, i) => {
+        if (!driverColorMap[d.id]) {
+          driverColorMap[d.id] = DRIVER_COLORS[i % DRIVER_COLORS.length];
+        }
+      });
+
       await loadChatConversations();
       renderLeftPanel(driversCache);
       initTripBuilder();
+      drawAllRunningPolylines();
+    }
+
+    async function drawAllRunningPolylines() {
+      const running = driversCache.filter(d => tripsCache[d.id]?.status === 'in_progress');
+      await Promise.all(running.map(d => {
+        const trip = tripsCache[d.id];
+        return drawDriverPolyline(d.id, trip.id, driverColorMap[d.id]);
+      }));
     }
 
     function renderLeftPanel(drivers) {
@@ -676,11 +699,17 @@
     }
 
     function createCustomMarkerElement(name, id) {
+      const color = driverColorMap[id] || '#333';
       const content = document.createElement('div');
       content.className = 'custom-app-marker';
       content.id = `marker-${id}`;
-      content.onclick = () => showDriverDetail(id); 
+      content.style.borderColor = color;
+      content.onclick = () => showDriverDetail(id);
       content.innerHTML = `<div class="content"><span class="icon">🚚</span><span class="name">${name}</span></div>`;
+      // 말풍선 꼬리 색상도 맞춤
+      const style = document.createElement('style');
+      style.textContent = `#marker-${id}:after { border-color: ${color} transparent transparent; }`;
+      content.appendChild(style);
       return content;
     }
 
@@ -709,22 +738,31 @@
         }
       } catch(e) {}
 
-      // 운행 중인 trip 조회 → 경로선 표시
-      clearRouteDisplay();
-      try {
-        const tripRes = await fetch(
-          `${API}/trips?driver_id=${id}`,
-          // scheduled + in_progress 모두 포함
-          { headers: authHeaders() }
-        );
-        if (tripRes.ok) {
-          const trips = await tripRes.json();
-          if (trips.length > 0) {
-            const tripId = trips[0].id;
-            await drawRoutePolyline(tripId);
+      // 폴리라인 강조 + 노드 마커 표시
+      const trip = tripsCache[id];
+      if (trip) {
+        const color = driverColorMap[id] || DRIVER_COLORS[0];
+        // 아직 그려지지 않은 경우(scheduled 등) → 그리기
+        if (!driverPolylines[id]) {
+          await drawDriverPolyline(id, trip.id, color);
+        }
+        highlightDriver(id);
+        showDriverRouteMarkers(id);
+
+        // 경로 전체가 보이도록 지도 범위 조정
+        const pl = driverPolylines[id];
+        if (pl) {
+          const path = pl.getPath();
+          if (path.length > 0) {
+            const bounds = new kakao.maps.LatLngBounds();
+            path.forEach(p => bounds.extend(p));
+            map.setBounds(bounds, 80);
           }
         }
-      } catch(e) { console.warn('경로 조회 실패:', e); }
+      } else {
+        resetPolylineHighlight();
+        hideAllRouteMarkers();
+      }
 
       // 우측 패널
       const driverCard = document.getElementById(`card-${id}`);
@@ -733,7 +771,6 @@
       document.getElementById('detail-name').innerText = driverName;
 
       // 운행 정보 박스
-      const trip = tripsCache[id];
       const tripInfoBox = document.getElementById('trip-info-box');
       const noTripBox   = document.getElementById('no-trip-box');
       if (trip) {
@@ -762,42 +799,68 @@
       await openChatWithDriver(id);
     }
 
-    // 경로선 + 노드 마커 초기화
-    function clearRouteDisplay() {
+    // 특정 기사의 경로선 + 노드 마커 제거
+    function clearDriverRoute(driverId) {
       hideNodePopup();
-      if (currentPolyline) {
-        currentPolyline.setMap(null);
-        currentPolyline = null;
+      if (driverPolylines[driverId]) {
+        driverPolylines[driverId].setMap(null);
+        delete driverPolylines[driverId];
       }
-      routeMarkers.forEach(m => m.setMap(null));
-      routeMarkers = [];
+      (driverRouteMarkers[driverId] || []).forEach(m => m.setMap(null));
+      delete driverRouteMarkers[driverId];
     }
 
-    // 실제 도로 경로선 그리기
-    async function drawRoutePolyline(tripId) {
+    // 전체 경로선 + 노드 마커 제거
+    function clearAllRoutes() {
+      hideNodePopup();
+      Object.keys(driverPolylines).forEach(id => {
+        driverPolylines[id].setMap(null);
+      });
+      driverPolylines = {};
+      Object.values(driverRouteMarkers).forEach(arr => arr.forEach(m => m.setMap(null)));
+      driverRouteMarkers = {};
+    }
+
+    // 선택된 기사 폴리라인 강조, 나머지 dim
+    function highlightDriver(driverId) {
+      Object.entries(driverPolylines).forEach(([id, pl]) => {
+        if (id === driverId) {
+          pl.setOptions({ strokeWeight: 6, strokeOpacity: 0.95 });
+        } else {
+          pl.setOptions({ strokeWeight: 3, strokeOpacity: 0.25 });
+        }
+      });
+    }
+
+    // 모든 폴리라인 동등하게 표시 (선택 해제 시)
+    function resetPolylineHighlight() {
+      Object.values(driverPolylines).forEach(pl => {
+        pl.setOptions({ strokeWeight: 5, strokeOpacity: 0.75 });
+      });
+    }
+
+    // 기사별 경로선 + 노드 마커 그리기
+    async function drawDriverPolyline(driverId, tripId, color) {
+      clearDriverRoute(driverId);
+
       const res = await fetch(`${API}/trips/${tripId}/polyline`, { headers: authHeaders() });
       if (!res.ok) return;
       const data = await res.json();
 
-      // 폴리라인 그리기
       if (data.polyline && data.polyline.length > 1) {
         const path = data.polyline.map(p => new kakao.maps.LatLng(p.lat, p.lon));
-        currentPolyline = new kakao.maps.Polyline({
+        driverPolylines[driverId] = new kakao.maps.Polyline({
           path,
-          strokeWeight: 5,
-          strokeColor:  '#3498db',
-          strokeOpacity: 0.8,
-          strokeStyle:  'solid',
+          strokeWeight:  5,
+          strokeColor:   color || '#3498db',
+          strokeOpacity: 0.75,
+          strokeStyle:   'solid',
           map,
         });
-
-        // 경로 전체가 보이도록 지도 범위 조정
-        const bounds = new kakao.maps.LatLngBounds();
-        path.forEach(p => bounds.extend(p));
-        map.setBounds(bounds, 80);
       }
 
-      // 노드별 마커 표시 (출발지/경유지/목적지/휴게소)
+      // 노드 마커는 driverRouteMarkers에 저장만 (표시는 showDriverRouteMarkers로 제어)
+      driverRouteMarkers[driverId] = [];
       if (data.nodes) {
         data.nodes.forEach(node => {
           const icons = {
@@ -829,12 +892,23 @@
           const overlay = new kakao.maps.CustomOverlay({
             position: new kakao.maps.LatLng(node.lat, node.lon),
             content:  el,
-            map,
-            yAnchor: 1.5,
+            yAnchor:  1.5,
+            // map은 여기서 설정 안 함 — showDriverRouteMarkers로 on/off
           });
-          routeMarkers.push(overlay);
+          driverRouteMarkers[driverId].push(overlay);
         });
       }
+    }
+
+    // 특정 기사의 노드 마커 지도에 표시
+    function showDriverRouteMarkers(driverId) {
+      hideAllRouteMarkers();
+      (driverRouteMarkers[driverId] || []).forEach(m => m.setMap(map));
+    }
+
+    // 모든 노드 마커 숨김
+    function hideAllRouteMarkers() {
+      Object.values(driverRouteMarkers).forEach(arr => arr.forEach(m => m.setMap(null)));
     }
 
     function hideRightPanel() {
@@ -844,7 +918,9 @@
       currentDriverId = null;
       currentConversation = null;
       currentChatMessages = [];
-      clearRouteDisplay();
+      hideNodePopup();
+      hideAllRouteMarkers();
+      resetPolylineHighlight();
       document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('active'));
       document.querySelectorAll('.custom-app-marker').forEach(m => m.classList.remove('active'));
     }
