@@ -1,4 +1,4 @@
-# Claude.md — 루트온(RouteOn) Claude Prompting Guide
+# CLAUDE.md — 루트온(RouteOn) Claude Prompting Guide
 
 > 이 파일을 대화 시작 시 첨부하면 Claude가 프로젝트 맥락을 즉시 파악합니다.
 
@@ -46,7 +46,7 @@
 
 ```
 routeon/
-├── Claude.md
+├── CLAUDE.md
 ├── DB_SCHEMA.md
 ├── CHANGELOG.md
 ├── docker-compose.yml
@@ -110,10 +110,14 @@ await db.refresh(obj)
 
 ### 경로 최적화 파이프라인
 ```
-1. 관리자: POST /trips → 경유지·목적지 등록
-2. 기사:   POST /optimize → trip_id + 출발지
+1. 관리자: POST /trips → 상차지(type:loading) + 하차지(type:unloading) 경유지 등록
+           (dest_* 미입력 가능 — 기사가 /optimize 시 마지막 하차지 자동 도착지 지정)
+2. 기사:   POST /optimize → trip_id (출발지 선택 입력)
+           └─ origin 우선순위: req.origin_lat/lon → Redis location:{user_id} → HTTP 400
+           └─ dest 우선순위:   req.dest → t.dest → 마지막 unloading → 마지막 loading → HTTP 400
+           └─ _apply_loading_precedence(): 상차지 전부 → 하차지 전부 순서 강제
            └─ auto_detect_route_mode() — 50km 기준 local/long_distance
-           └─ 카카오 모빌리티 N×N (시간·거리 행렬) — TTL 캐시 1시간
+           └─ GraphHopper N×N (시간·거리 행렬) — TTL 캐시 1시간
            └─ OR-Tools TSP 경유지 순서 최적화
            └─ insert_rest_stops() — 6,000초 임계값 + find_best_rest_stop() picker
            └─ total_distance_km + estimated_duration_min 포함 응답
@@ -233,7 +237,7 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 | `GET /trips/{id}/polyline` | 로그인 | 실제 도로 경로선 좌표 |
 | `PATCH /trips/{id}/waypoints` | 관리자 | 경유지 추가 + 앱에 재경로 알림 |
 | `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 (?status=completed\|cancelled) |
-| `POST /optimize` | 로그인 | 경로 최적화 (extra_stops, route_mode 지원) |
+| `POST /optimize` | 로그인 | 경로 최적화. origin_* 미입력 시 Redis GPS 자동 사용. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로 |
 
 ### 배송/위치
@@ -318,6 +322,11 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 - [x] 다중 기업(organizations) 구조
 - [x] 슈퍼 관리자 기업 심사 (승인/반려 + 이메일 알림)
 - [x] Oracle Cloud 서버 마이그레이션
-- [ ] 앱 WS replan_requested 수신 → 자동 replan (팀원 A)
-- [ ] 관리자 웹 운행 생성 UI
+- [x] 관리자/기사 1:1 채팅 (conversations/messages, WS /ws/chat)
+- [x] 대시보드 UX 개편 — 지도 클릭 팝업, 운행 생성 인라인 패널
+- [x] GraphHopper 전환 + WS 조직 격리 버그 수정
+- [x] 지도 POI 팝업 (장소명·전화·카테고리·링크) + 호버 커서
+- [x] 운행 생성 플로우 재설계 — 상차지/하차지 분리, 기사 출발지 GPS 폴백
+- [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
+- [ ] 긴급 경유지 추가 type=unloading 기본값 E2E 검증
 - [ ] 발표 준비

@@ -102,10 +102,10 @@
 | `origin_name` | VARCHAR(200) | | 출발지 이름 (기사가 출발 시 전달) |
 | `origin_lat` | FLOAT | | 출발지 위도 |
 | `origin_lon` | FLOAT | | 출발지 경도 |
-| `dest_name` | VARCHAR(200) | NOT NULL | 목적지 이름 |
-| `dest_lat` | FLOAT | NOT NULL | 목적지 위도 |
-| `dest_lon` | FLOAT | NOT NULL | 목적지 경도 |
-| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon"}, ...]` |
+| `dest_name` | VARCHAR(200) | | 도착지 이름 (nullable — 기사가 /optimize 시 자동 결정 가능) |
+| `dest_lat` | FLOAT | | 도착지 위도 |
+| `dest_lon` | FLOAT | | 도착지 경도 |
+| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading"}, ...]` |
 | `vehicle_height_m` | FLOAT | | 차량 높이 오버라이드 |
 | `vehicle_weight_kg` | FLOAT | | 총중량 오버라이드 |
 | `vehicle_length_cm` | FLOAT | | 차량 길이 오버라이드 |
@@ -122,11 +122,12 @@
 ```json
 {
   "route": [
-    {"type": "origin",      "name": "서울",      "lat": 37.5, "lon": 127.0},
-    {"type": "waypoint",    "name": "대전 창고", "lat": 36.3, "lon": 127.3},
+    {"type": "origin",      "node_type": "loading",   "name": "서울",      "lat": 37.5, "lon": 127.0},
+    {"type": "waypoint",    "node_type": "loading",   "name": "대전 창고", "lat": 36.3, "lon": 127.3},
+    {"type": "waypoint",    "node_type": "unloading", "name": "천안 물류", "lat": 36.8, "lon": 127.1},
     {"type": "rest_stop",   "name": "금강휴게소","lat": 35.9, "lon": 127.5,
      "min_rest_minutes": 15},
-    {"type": "destination", "name": "부산",      "lat": 35.1, "lon": 129.0}
+    {"type": "destination", "node_type": "unloading", "name": "부산",      "lat": 35.1, "lon": 129.0}
   ],
   "total_distance_km": 420.5,
   "estimated_duration_min": 327.0

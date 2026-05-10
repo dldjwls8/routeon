@@ -137,25 +137,81 @@
 
 ---
 
-## v0.4 (예정)
+## v0.4 (2026-04-29)
 
 ### 관리자/기사 1:1 채팅
 
 **백엔드**
 - `conversations`, `messages` 테이블 추가
-- 같은 조직의 `admin` ↔ `driver` 조합만 허용하는 채팅 권한 가드 추가
-- 대화방 목록, 대화방 생성/조회, 메시지 히스토리, 메시지 전송, 읽음 처리 REST API 추가
-- `/ws/chat?token=` 사용자 단위 채팅 WebSocket 추가
+- 같은 조직의 `admin` ↔ `driver` 조합만 허용하는 채팅 권한 가드
+- 대화방 목록/생성/조회, 메시지 히스토리, 메시지 전송, 읽음 처리 REST API
+- `/ws/chat?token=` 사용자 단위 채팅 WebSocket
 
 **프론트엔드**
-- 관리자 대시보드 기사 상세 패널에 채팅 UI 추가
-- 기사 전용 `/driver.html` 채팅 화면 추가
-- 로그인 성공 후 기사 계정은 `/driver.html`로 이동
+- `dashboard.html` 기사 상세 패널에 채팅 UI 추가
+- 기사 전용 `driver.html` 채팅 화면 추가
+- 로그인 성공 후 `role === "driver"`는 `driver.html`로 이동
+
+---
+
+## v0.5 (2026-05-05)
+
+### 대시보드 UX 전면 개편 + GraphHopper 전환
+
+**관리자 웹**
+- 운행 생성 방식: 모달 폼 → 지도 직접 클릭(팝업 방식)으로 포인트 선택
+- 운행 생성 패널 위치: 별도 모달 → 우측 기사 패널 내 인라인으로 이전
+- 장소 검색 자동완성 + 드래그 정렬 + 노드 팝업 추가
+- 지도 클릭 시 말풍선 팝업: 장소명 우선 표시, 없으면 주소
+
+**백엔드**
+- 라우팅 엔진 전환: 카카오 모빌리티 → GraphHopper (자체 호스팅)
+- WS 조직 격리 버그 수정: 타 조직 기사 위치가 관리자에게 노출되던 문제 해결
+- 원격 배차 패널 제거 → 지도 클릭 팝업에 긴급 경유지 추가 기능 통합
+- `broadcast` → `broadcast_to_org` 누락 수정 (`PATCH /trips/{id}/waypoints`)
+
+---
+
+## v0.6 (2026-05-06)
+
+### 지도 POI 팝업 개선 + UX 최적화
+
+**관리자 웹**
+- 지도 클릭 팝업: 장소명·주소·전화번호·카테고리·카카오맵 링크 표시
+- POI 조회: Places keywordSearch 2단계 폴백 추가
+- Places API `place_name` 우선 사용 (`building_name` 덮어씌우기 제거)
+- 지도 POI 호버 시 포인터 커서 전환 + 이중 캐시로 응답속도 최적화
+
+---
+
+## v0.7 (2026-05-09)
+
+### 운행 생성 플로우 재설계 — 상차지/하차지 분리
+
+**역할 재정의**
+- 관리자: 상차지(loading) + 하차지(unloading) 경유지만 입력, 도착지 선택 사항
+- 기사: `/optimize` 호출 시 출발지 직접 입력 or 미입력 시 Redis GPS 현재위치 자동 사용
+
+**백엔드**
+- `WaypointSchema.type` 추가: `"loading"` | `"unloading"` (기본 `"unloading"`)
+- `trips.dest_name/dest_lat/dest_lon` → nullable=True (DDL + models.py)
+- `OptimizeRequest.origin_*` → Optional (미입력 시 Redis `location:{user_id}` 폴백, 없으면 HTTP 400)
+- `_resolve_dest()`: req.dest → t.dest → 마지막 unloading → 마지막 loading → HTTP 400, auto_idx 반환으로 중복 제거(B2 fix)
+- `_apply_loading_precedence()`: 상차지 → 하차지 순서 강제 + 거리/시간 행렬 동기 재배열(B1 fix)
+- `RouteNode.node_type` 추가: `"loading"` | `"unloading"` (RouteNode.type과 별개)
+- `_trip_schema`에 `loading_count` / `unloading_count` 필드 추가
+- `add_waypoint`: `req.model_dump()` 로 type 필드 포함(S1 fix)
+
+**관리자 웹**
+- 운행 생성 패널: 출발지·목적지 섹션 제거 → 상차지/하차지 섹션으로 교체
+- 지도 노드 마커: 상차지 🏗️ 주황, 하차지 📦 파란색
+- 기사 카드: `dest_name` 없을 때 `🏗️ 상차 N건 / 📦 하차 N건` 표시
 
 ---
 
 ## 예정 작업
 
-- [ ] 앱 WS replan_requested 수신 → 자동 replan (팀원 A)
-- [ ] 관리자/기사 1:1 채팅 UI 검증
+- [ ] Android 앱: `/optimize` 호출 시 `dest_name/dest_lat/dest_lon` 파라미터 지원 (팀원 A)
+- [ ] 긴급 경유지 추가(`PATCH /trips/{id}/waypoints`) type=unloading 기본값 E2E 검증
+- [ ] 실제 상차지 2개 + 하차지 2개 시나리오 E2E 테스트
 - [ ] 발표 준비
