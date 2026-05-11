@@ -14,7 +14,7 @@
 | `orgstatus` | `pending_review`, `approved`, `rejected` |
 | `tripstatus` | `scheduled`, `in_progress`, `completed`, `cancelled` |
 | `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual` |
-| `reststoptype` | `highway_rest`, `drowsy_shelter`, `depot`, `custom` |
+| `reststoptype` | `highway_rest`, `drowsy_shelter`, `depot`, `custom`, `truck_yard`, `logistics_park` |
 
 ---
 
@@ -72,7 +72,7 @@
 
 ### `rest_stops`
 
-경로 최적화 시 휴게소 후보 POI. 현재 졸음쉼터 253건 적재.
+경로 최적화 시 휴게소 후보 POI. 현재 총 409건 적재.
 
 > **주의:** 이 테이블만 좌표 컬럼명이 `latitude` / `longitude`
 
@@ -80,7 +80,7 @@
 |------|------|------|------|
 | `id` | INTEGER | PK AUTOINCREMENT | |
 | `name` | VARCHAR(100) | NOT NULL | POI 이름 |
-| `type` | reststoptype | NOT NULL | `highway_rest` / `drowsy_shelter` / `depot` / `custom` |
+| `type` | reststoptype | NOT NULL | `highway_rest`(고속도로 휴게소) / `drowsy_shelter`(졸음쉼터) / `truck_yard`(공영차고지) / `logistics_park`(물류단지) / `depot`(거점) / `custom`(수동 등록) |
 | `latitude` | FLOAT | NOT NULL | 위도 |
 | `longitude` | FLOAT | NOT NULL | 경도 |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | 경로 최적화 후보 포함 여부 |
@@ -243,10 +243,17 @@ rest_stops (독립 — trips.optimized_route JSONB에서 참조)
 
 | 테이블 | 종류 | 건수 | 출처 |
 |--------|------|------|------|
-| `rest_stops` | 졸음쉼터 (drowsy_shelter) | 253건 | 한국도로공사 공공데이터 |
+| `rest_stops` | 졸음쉼터 (`drowsy_shelter`) | 253건 | 한국도로공사 공공데이터 CSV |
+| `rest_stops` | 고속도로 휴게소 (`highway_rest`) | 75건 | 국토교통부 공공데이터 XLS |
+| `rest_stops` | 공영차고지 (`truck_yard`) | 55건 | 국토교통부 공공데이터 XLS |
+| `rest_stops` | 물류단지 (`logistics_park`) | 26건 | 국토교통부 공공데이터 XLS |
 
 ```bash
+# 졸음쉼터 (CSV)
 sudo docker exec routeon-api python seeds/seed_rest_stops.py
+
+# 휴게소 · 공영차고지 · 물류단지 (XLS, 카카오 geocoding 사용)
+sudo docker exec routeon-api python seeds/seed_rest_stops_xls.py
 ```
 
 ---

@@ -69,9 +69,14 @@ routeon/
 │   │   ├── email_service.py       기업 승인/반려 이메일 알림
 │   │   └── rest_stop_inserter.py  법정 휴게 규정 기반 휴게소 자동 삽입 (async)
 │   └── seeds/
-│       ├── seed_rest_stops.py     졸음쉼터 CSV → DB 삽입 (253건 완료)
+│       ├── seed_rest_stops.py     졸음쉼터 CSV → DB 삽입 (253건)
+│       ├── seed_rest_stops_xls.py XLS 3개(휴게소·공영차고지·물류단지) → geocoding → DB 삽입 (156건)
 │       ├── inspect_files.py       파일 컬럼 확인
-│       └── 한국도로공사_졸음쉼터_20260225.csv
+│       ├── 한국도로공사_졸음쉼터_20260225.csv
+│       ├── 휴게소정보_260325.xls
+│       ├── 공영차고지정보_260325.xls
+│       ├── 물류단지정보_260325.xls
+│       └── 물류창고정보_260325.xls  (미사용 — 5,825건, 휴식지 부적합)
 └── frontend/
     ├── index.html          랜딩 페이지
     ├── intro.html          서비스 소개
@@ -336,7 +341,7 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 - [x] 관리자 웹 (로그인, 대시보드, 카카오맵)
 - [x] PATCH /auth/me 회원 정보 수정
 - [x] lon/lng 통일
-- [x] 졸음쉼터 시드 데이터 253건
+- [x] 졸음쉼터 시드 데이터 253건 + 휴게소·공영차고지·물류단지 156건 (총 409건)
 - [x] TTL 캐시 + find_best_rest_stop picker
 - [x] extra_stops / route_mode / dist_matrix
 - [x] WebSocket 실시간 위치

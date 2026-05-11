@@ -262,6 +262,20 @@
 
 ---
 
+## v0.9.2 (2026-05-11)
+
+### 휴게소 시드 데이터 확충
+
+**백엔드**
+- `RestStopType` enum에 `truck_yard`(공영차고지), `logistics_park`(물류단지) 추가 (DB + models.py)
+- `seed_rest_stops_xls.py` 추가 — XLS 3개 파일 → 카카오 주소 geocoding → DB 삽입
+  - 휴게소정보(highway_rest) 75건, 공영차고지(truck_yard) 55건, 물류단지(logistics_park) 26건
+  - `운영중` 상태 필터링, 좌표 없는 파일은 카카오 로컬 API geocoding으로 변환
+- `requirements.txt`에 `aiohttp` 추가 (시드 스크립트 의존성 — DB 초기화 후 재시드 시 필요)
+- rest_stops 총 **409건** (기존 졸음쉼터 253건 + 신규 156건)
+
+---
+
 ## 예정 작업
 
 ### 진행 중 / 단기
