@@ -2100,10 +2100,21 @@ async def ws_location(
         await manager.connect_driver(ws, org_id)
     else:
         await manager.connect(ws, org_id)
+
+    async def heartbeat():
+        try:
+            while True:
+                await asyncio.sleep(20)
+                await ws.send_text('{"type":"ping"}')
+        except Exception:
+            pass
+
+    hb = asyncio.create_task(heartbeat())
     try:
         while True:
             await ws.receive_text()
     except WebSocketDisconnect:
+        hb.cancel()
         manager.disconnect(ws, org_id)
 
 
@@ -2113,22 +2124,31 @@ async def ws_chat(
     token: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    if not token:
+    async def _chat_reject():
+        await ws.accept()
         await ws.close(code=1008)
-        return
 
+    if not token:
+        await _chat_reject(); return
     try:
         current_user = await get_current_user_from_token(token, db)
     except HTTPException:
-        await ws.close(code=1008)
-        return
-
+        await _chat_reject(); return
     if current_user.role not in (UserRole.admin, UserRole.driver):
-        await ws.close(code=1008)
-        return
+        await _chat_reject(); return
 
     user_id = str(current_user.id)
     await chat_manager.connect(user_id, ws)
+
+    async def chat_heartbeat():
+        try:
+            while True:
+                await asyncio.sleep(20)
+                await ws.send_json({"type": "ping"})
+        except Exception:
+            pass
+
+    hb = asyncio.create_task(chat_heartbeat())
     try:
         await ws.send_json({"type": "chat.ready", "user_id": user_id})
         while True:
@@ -2147,6 +2167,7 @@ async def ws_chat(
                 except Exception:
                     pass
     except WebSocketDisconnect:
+        hb.cancel()
         chat_manager.disconnect(user_id, ws)
 
 

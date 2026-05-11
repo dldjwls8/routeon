@@ -14,4 +14,4 @@ COPY . .
 EXPOSE 8000
 
 # 실행
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--ws-ping-interval", "20", "--ws-ping-timeout", "30"]
