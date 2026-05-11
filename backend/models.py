@@ -50,6 +50,8 @@ class RestStopType(str, enum.Enum):
     drowsy_shelter = "drowsy_shelter"
     depot          = "depot"
     custom         = "custom"
+    truck_yard     = "truck_yard"
+    logistics_park = "logistics_park"
 
 
 # ────────────────────────────────────────────────
