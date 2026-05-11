@@ -275,3 +275,18 @@ class Location(Base):
                          nullable=False, primary_key=True)
 
     user = relationship("User", back_populates="locations")
+
+
+# ────────────────────────────────────────────────
+# presets  (경유지 조합 프리셋)
+# ────────────────────────────────────────────────
+class Preset(Base):
+    __tablename__ = "presets"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    name            = Column(String(100), nullable=False)
+    waypoints       = Column(JSONB, nullable=False, default=list)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    organization = relationship("Organization")

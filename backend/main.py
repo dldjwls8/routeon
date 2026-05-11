@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from database import get_db, init_db
 from models import (
     User, Delivery, Trip, Vehicle, RestStop, Location, Organization,
-    Conversation, Message,
+    Conversation, Message, Preset,
     DeliveryStatus, TripStatus, RestStopType, UserRole, OrgStatus
 )
 from auth import (
@@ -427,6 +427,68 @@ async def delete_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db),
     if not v:
         raise HTTPException(404, "차량을 찾을 수 없습니다.")
     v.is_active = False
+    await db.commit()
+
+
+# ────────────────────────────────────────────────
+# 프리셋 (waypoint 조합 저장)
+# ────────────────────────────────────────────────
+class PresetCreate(BaseModel):
+    name:      str
+    waypoints: list[dict]
+
+@app.get("/presets")
+async def get_presets(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """같은 조직의 프리셋 목록 반환."""
+    _r = await db.execute(
+        select(Preset)
+        .where(Preset.organization_id == current_user.organization_id)
+        .order_by(Preset.created_at.desc())
+    )
+    presets = _r.scalars().all()
+    return [{"id": p.id, "name": p.name, "waypoints": p.waypoints, "created_at": p.created_at} for p in presets]
+
+@app.post("/presets", status_code=201)
+async def create_preset(
+    req: PresetCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """현재 상차지/하차지 조합을 프리셋으로 저장."""
+    if not req.name.strip():
+        raise HTTPException(400, "프리셋 이름을 입력하세요.")
+    if not req.waypoints:
+        raise HTTPException(400, "경유지가 없습니다.")
+    p = Preset(
+        organization_id=current_user.organization_id,
+        name=req.name.strip(),
+        waypoints=req.waypoints,
+    )
+    db.add(p)
+    await db.commit()
+    await db.refresh(p)
+    return {"id": p.id, "name": p.name, "waypoints": p.waypoints, "created_at": p.created_at}
+
+@app.delete("/presets/{preset_id}", status_code=204)
+async def delete_preset(
+    preset_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """프리셋 삭제 (같은 조직만)."""
+    _r = await db.execute(
+        select(Preset).where(
+            Preset.id == preset_id,
+            Preset.organization_id == current_user.organization_id,
+        )
+    )
+    p = _r.scalar_one_or_none()
+    if not p:
+        raise HTTPException(404, "프리셋을 찾을 수 없습니다.")
+    await db.delete(p)
     await db.commit()
 
 
