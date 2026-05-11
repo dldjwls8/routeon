@@ -58,23 +58,43 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # ────────────────────────────────────────────────
 class ConnectionManager:
     def __init__(self):
-        self.active: dict[int, list[WebSocket]] = {}  # org_id → [ws]
+        self.active:  dict[int, list[WebSocket]] = {}  # org_id → [ws] (admin)
+        self.drivers: dict[int, list[WebSocket]] = {}  # org_id → [ws] (driver)
 
     async def connect(self, ws: WebSocket, org_id: int):
         await ws.accept()
         self.active.setdefault(org_id, []).append(ws)
 
+    async def connect_driver(self, ws: WebSocket, org_id: int):
+        await ws.accept()
+        self.drivers.setdefault(org_id, []).append(ws)
+
     def disconnect(self, ws: WebSocket, org_id: int):
-        sockets = self.active.get(org_id, [])
-        if ws in sockets:
-            sockets.remove(ws)
+        for pool in (self.active, self.drivers):
+            sockets = pool.get(org_id, [])
+            if ws in sockets:
+                sockets.remove(ws)
+                return
 
     async def broadcast_to_org(self, org_id: int, data: dict):
-        """같은 조직 관리자에게만 위치 데이터 전송"""
+        """같은 조직 관리자에게 위치 데이터 전송"""
         import json
         payload = json.dumps(data, ensure_ascii=False)
         dead = []
         for ws in list(self.active.get(org_id, [])):
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws, org_id)
+
+    async def broadcast_replan_to_org(self, org_id: int, data: dict):
+        """같은 조직 기사(앱)에게 replan 이벤트 전송"""
+        import json
+        payload = json.dumps(data, ensure_ascii=False)
+        dead = []
+        for ws in list(self.drivers.get(org_id, [])):
             try:
                 await ws.send_text(payload)
             except Exception:
@@ -579,16 +599,18 @@ async def add_waypoint(
     await db.commit()
     await db.refresh(t)
 
-    # WebSocket으로 해당 기사에게 재경로 요청 알림
+    # WebSocket으로 재경로 요청 알림 — 관리자 웹 + 기사 앱 모두 전송
     if current_user.organization_id:
-        await manager.broadcast_to_org(current_user.organization_id, {
+        replan_data = {
             "type":         "replan_requested",
             "trip_id":      trip_id,
             "driver_id":    str(t.driver_id),
             "new_waypoint": new_waypoint,
             "waypoints":    current_waypoints,
             "message":      f"새 경유지 '{req.name}'이 추가됐습니다. 경로를 재계산하세요.",
-        })
+        }
+        await manager.broadcast_to_org(current_user.organization_id, replan_data)
+        await manager.broadcast_replan_to_org(current_user.organization_id, replan_data)
 
     return {
         "trip_id":   trip_id,
@@ -2060,20 +2082,24 @@ async def ws_location(
     관리자 웹이 연결하는 WebSocket 엔드포인트.
     토큰 인증 후 조직별로 위치 데이터를 수신합니다.
     """
-    if not token:
+    async def _reject():
+        await ws.accept()
         await ws.close(code=1008)
-        return
+
+    if not token:
+        await _reject(); return
     try:
         current_user = await get_current_user_from_token(token, db)
     except HTTPException:
-        await ws.close(code=1008)
-        return
-    if current_user.role != UserRole.admin or not current_user.organization_id:
-        await ws.close(code=1008)
-        return
+        await _reject(); return
+    if current_user.role not in (UserRole.admin, UserRole.driver) or not current_user.organization_id:
+        await _reject(); return
 
     org_id = current_user.organization_id
-    await manager.connect(ws, org_id)
+    if current_user.role == UserRole.driver:
+        await manager.connect_driver(ws, org_id)
+    else:
+        await manager.connect(ws, org_id)
     try:
         while True:
             await ws.receive_text()
