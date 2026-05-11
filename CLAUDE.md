@@ -275,6 +275,7 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 | `POST /rest-spots` | 없음 | 근처 휴식 장소 검색 (카카오 로컬) |
 | `POST /location-logs` | 로그인 | GPS 수신 + 자동 완료 + WS broadcast (5초 주기) |
 | `GET /location-logs/{user_id}` | 관리자 | 기사 현재 위치 (Redis) |
+| `GET /nearby-drivers?lat=&lon=&radius_km=` | 관리자 | 상차지 기준 반경 내 같은 조직 기사 목록 (Redis 위치 기준, 기본 10km) |
 | `WS /ws/location` | 로그인 | 실시간 위치 + 재경로 알림 WebSocket. 관리자→GPS 수신, 기사→replan_requested 수신 |
 
 ### 통계
@@ -361,6 +362,7 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 - [x] 전체 기사 폴리라인 동시 표시 + 실시간 관제 (기사별 색상 팔레트, dim/highlight)
 - [x] 통계/애널리틱스 대시보드 (stats.html, /stats/* API 3개)
 - [x] WS 버그 수정 — driver 403, 20초 끊김 (heartbeat + uvicorn ping + nginx timeout)
+- [x] 상차지 인근 기사 확인 — GET /nearby-drivers (Redis 위치 기준, 반경 필터, 거리순 정렬)
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [ ] 긴급 경유지 추가 type=unloading 기본값 E2E 검증
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

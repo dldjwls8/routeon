@@ -47,6 +47,26 @@ redis      = redis_client.Redis(host=REDIS_HOST, port=6379, decode_responses=Tru
 
 ARRIVAL_RADIUS_M = 50  # 도착 감지 반경 (m)
 
+
+def _haversine(a: "LatLng", b: "LatLng") -> float:
+    """두 LatLng 사이의 거리(미터)를 반환."""
+    R = 6_371_000
+    lat1, lon1 = math.radians(a.lat), math.radians(a.lon)
+    lat2, lon2 = math.radians(b.lat), math.radians(b.lon)
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(h))
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """두 좌표 사이의 거리(km)를 반환."""
+    R = 6_371.0
+    rlat1, rlon1 = math.radians(lat1), math.radians(lon1)
+    rlat2, rlon2 = math.radians(lat2), math.radians(lon2)
+    dlat, dlon = rlat2 - rlat1, rlon2 - rlon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(h))
+
 # 파일 업로드 설정
 UPLOAD_DIR      = Path("/app/uploads/docs")
 ALLOWED_EXTS    = {".pdf", ".jpg", ".jpeg", ".png"}
@@ -2182,6 +2202,57 @@ async def get_location_logs(
         raise HTTPException(404, "위치 정보가 없습니다. (미전송 또는 TTL 만료)")
     lat, lon = val.split(",")
     return {"user_id": user_id, "lat": float(lat), "lon": float(lon)}
+
+
+@app.get("/nearby-drivers")
+async def nearby_drivers(
+    lat: float,
+    lon: float,
+    radius_km: float = 10.0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    상차지 좌표 기준 반경 내 같은 조직 기사 목록 반환.
+    Redis 위치(TTL 5분)가 없는 기사는 제외.
+    """
+    # 같은 조직 driver 전체 조회
+    _r = await db.execute(
+        select(User).where(
+            User.organization_id == current_user.organization_id,
+            User.role == UserRole.driver,
+        )
+    )
+    drivers = _r.scalars().all()
+
+    # in_progress trip이 있는 기사 ID 집합
+    _r2 = await db.execute(
+        select(Trip.driver_id).where(
+            Trip.status == TripStatus.in_progress,
+        )
+    )
+    busy_ids = {row for row in _r2.scalars().all()}
+
+    result = []
+    for driver in drivers:
+        val = redis.get(f"location:{driver.id}")
+        if not val:
+            continue
+        dlat, dlon = map(float, val.split(","))
+        dist_km = _haversine_km(lat, lon, dlat, dlon)
+        if dist_km > radius_km:
+            continue
+        result.append({
+            "driver_id":  str(driver.id),
+            "username":   driver.username,
+            "lat":        dlat,
+            "lon":        dlon,
+            "distance_km": round(dist_km, 2),
+            "is_busy":    driver.id in busy_ids,
+        })
+
+    result.sort(key=lambda x: x["distance_km"])
+    return result
 
 
 @app.patch("/deliveries/{delivery_id}/complete")
