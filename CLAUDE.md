@@ -146,6 +146,12 @@ await db.refresh(obj)
 }
 ```
 
+### WS 메시지 형식 (heartbeat)
+서버가 20초마다 클라이언트에 전송. 앱은 무시하거나 `{"type":"pong"}`으로 응답.
+```json
+{"type": "ping"}
+```
+
 ### GPS 흐름
 ```
 Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
@@ -153,7 +159,17 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
                                              → 50m 도착 감지 → Delivery.done
                                              → WS broadcast → 관리자 웹 마커
 관리자 웹  → WS /ws/location → 실시간 수신 → 지도 마커 업데이트
+기사 앱   → WS /ws/location → replan_requested 수신 (관리자 연결 풀과 별도 관리)
 관리자 웹  → GET /location-logs/{user_id} → Redis 현재 위치
+```
+
+### ConnectionManager 구조
+```
+manager.active   — org_id → [ws]  관리자 연결 (GPS 위치 업데이트 수신)
+manager.drivers  — org_id → [ws]  기사 연결 (replan_requested 수신)
+
+broadcast_to_org(org_id, data)       → admin에게만 전송
+broadcast_replan_to_org(org_id, data) → driver에게만 전송
 ```
 
 ### 관리자 웹 경로선
@@ -254,7 +270,7 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 | `POST /rest-spots` | 없음 | 근처 휴식 장소 검색 (카카오 로컬) |
 | `POST /location-logs` | 로그인 | GPS 수신 + 자동 완료 + WS broadcast (5초 주기) |
 | `GET /location-logs/{user_id}` | 관리자 | 기사 현재 위치 (Redis) |
-| `WS /ws/location` | 없음 | 실시간 위치 + 재경로 알림 WebSocket |
+| `WS /ws/location` | 로그인 | 실시간 위치 + 재경로 알림 WebSocket. 관리자→GPS 수신, 기사→replan_requested 수신 |
 
 ### 통계
 | 엔드포인트 | 권한 | 설명 |
@@ -296,10 +312,13 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 - insert_rest_stops() → async, 반드시 await
 - main.py 단일 파일 구조 유지 (추후 리팩토링 예정)
 - 카카오 API Key 프론트엔드 하드코딩 금지 → /config 엔드포인트 경유
-- Nginx: /api/* → FastAPI, /ws/* → WebSocket 프록시
+- Nginx: /api/* → FastAPI, /ws/* → WebSocket 프록시 (proxy_read/send_timeout 3600s)
 - GPS 전송 주기: 5초 (앱 설정)
 - 기업 등록 서류: backend/uploads/{org_id}/ 에 저장
 - 슈퍼관리자 계정은 superadmin/create-account로 직접 생성
+- WS heartbeat: 서버가 20초마다 {"type":"ping"} 전송 — 앱은 무시하거나 {"type":"pong"} 응답
+- WS /ws/location: admin→GPS위치 수신, driver→replan_requested 수신 (ConnectionManager 풀 분리)
+- ws.close() 호출 전 반드시 ws.accept() 먼저 호출할 것 (순서 어기면 HTTP 403 반환)
 ```
 
 ---
@@ -336,6 +355,7 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
 - [x] 운행 생성 플로우 재설계 — 상차지/하차지 분리, 기사 출발지 GPS 폴백
 - [x] 전체 기사 폴리라인 동시 표시 + 실시간 관제 (기사별 색상 팔레트, dim/highlight)
 - [x] 통계/애널리틱스 대시보드 (stats.html, /stats/* API 3개)
+- [x] WS 버그 수정 — driver 403, 20초 끊김 (heartbeat + uvicorn ping + nginx timeout)
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [ ] 긴급 경유지 추가 type=unloading 기본값 E2E 검증
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

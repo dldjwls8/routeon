@@ -244,6 +244,24 @@
 
 ---
 
+## v0.9.1 (2026-05-11)
+
+### WebSocket 버그 수정
+
+**버그 수정**
+- `driver` 토큰으로 `/ws/location` 연결 시 HTTP 403 반환되던 문제 수정
+  - `ws.accept()` 없이 `ws.close()` 호출하면 HTTP 403이 반환되는 FastAPI 동작 수정 → `_reject()` 헬퍼로 `accept()` → `close(1008)` 순서 통일
+  - `driver` role도 `/ws/location` 연결 허용 (기사 앱이 `replan_requested` 수신하기 위해 필요)
+  - `ConnectionManager`에 driver 연결 풀 분리: `connect_driver()` + `broadcast_replan_to_org()` 추가
+  - `PATCH /trips/{id}/waypoints`: `broadcast_replan_to_org()`로 기사 앱에도 `replan_requested` 전송
+- WebSocket 20초 주기 연결 끊김 수정
+  - Nginx `/ws/` 블록에 `proxy_send_timeout 3600s` 추가 (기본값 60s로 유휴 종료되던 문제)
+  - uvicorn `--ws-ping-interval 20 --ws-ping-timeout 30` 추가 (프레임 레벨 Ping/Pong 자동 처리)
+  - `/ws/location`, `/ws/chat` 서버 측 heartbeat 추가 — 20초마다 `{"type":"ping"}` 전송
+  - `/ws/chat` `ws.accept()` 없이 `ws.close()` 호출하던 버그도 함께 수정
+
+---
+
 ## 예정 작업
 
 ### 진행 중 / 단기
