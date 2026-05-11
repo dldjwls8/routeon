@@ -446,7 +446,7 @@
     let map;
     let markers = {};
     let currentDriverId = null;
-    let driverPolylines     = {};  // driver_id → kakao.maps.Polyline
+    let driverPolylines     = {};  // driver_id → [kakao.maps.Polyline, ...]
     let driverRouteMarkers  = {};  // driver_id → [CustomOverlay, ...]
 
     const DRIVER_COLORS = [
@@ -814,13 +814,42 @@
       await openChatWithDriver(id);
     }
 
+    // 구간 출발 노드 타입에 따른 색상 결정
+    function _segmentColor(fromNode) {
+      if (!fromNode) return '#95a5a6';
+      if (fromNode.type === 'origin')    return '#27ae60';
+      if (fromNode.type === 'rest_stop') return '#8e44ad';
+      if (fromNode.type === 'waypoint')
+        return fromNode.node_type === 'loading' ? '#e67e22' : '#2980b9';
+      return '#95a5a6';
+    }
+
+    // 폴리라인 좌표를 노드 기준으로 구간 분리
+    function _splitPolyline(polyline, nodes) {
+      if (polyline.length < 2 || nodes.length < 2) return [];
+      const dist2 = (a, b) => (a.lat - b.lat) ** 2 + (a.lon - b.lon) ** 2;
+      const indices = [];
+      let from = 0;
+      for (const node of nodes) {
+        let best = from, min = Infinity;
+        for (let j = from; j < polyline.length; j++) {
+          const d = dist2(polyline[j], node);
+          if (d < min) { min = d; best = j; }
+        }
+        indices.push(best);
+        from = best;
+      }
+      return nodes.slice(0, -1).map((n, i) => ({
+        fromNode: n,
+        points: polyline.slice(indices[i], indices[i + 1] + 1),
+      }));
+    }
+
     // 특정 기사의 경로선 + 노드 마커 제거
     function clearDriverRoute(driverId) {
       hideNodePopup();
-      if (driverPolylines[driverId]) {
-        driverPolylines[driverId].setMap(null);
-        delete driverPolylines[driverId];
-      }
+      (driverPolylines[driverId] || []).forEach(pl => pl.setMap(null));
+      delete driverPolylines[driverId];
       (driverRouteMarkers[driverId] || []).forEach(m => m.setMap(null));
       delete driverRouteMarkers[driverId];
     }
@@ -828,9 +857,7 @@
     // 전체 경로선 + 노드 마커 제거
     function clearAllRoutes() {
       hideNodePopup();
-      Object.keys(driverPolylines).forEach(id => {
-        driverPolylines[id].setMap(null);
-      });
+      Object.values(driverPolylines).forEach(pls => pls.forEach(pl => pl.setMap(null)));
       driverPolylines = {};
       Object.values(driverRouteMarkers).forEach(arr => arr.forEach(m => m.setMap(null)));
       driverRouteMarkers = {};
@@ -838,20 +865,20 @@
 
     // 선택된 기사 폴리라인 강조, 나머지 dim
     function highlightDriver(driverId) {
-      Object.entries(driverPolylines).forEach(([id, pl]) => {
-        if (id === driverId) {
-          pl.setOptions({ strokeWeight: 6, strokeOpacity: 0.95 });
-        } else {
-          pl.setOptions({ strokeWeight: 3, strokeOpacity: 0.25 });
-        }
+      Object.entries(driverPolylines).forEach(([id, pls]) => {
+        const focused = id === driverId;
+        pls.forEach(pl => pl.setOptions({
+          strokeWeight:  focused ? 6 : 3,
+          strokeOpacity: focused ? 0.95 : 0.2,
+        }));
       });
     }
 
     // 모든 폴리라인 동등하게 표시 (선택 해제 시)
     function resetPolylineHighlight() {
-      Object.values(driverPolylines).forEach(pl => {
-        pl.setOptions({ strokeWeight: 5, strokeOpacity: 0.75 });
-      });
+      Object.values(driverPolylines).forEach(pls =>
+        pls.forEach(pl => pl.setOptions({ strokeWeight: 5, strokeOpacity: 0.75 }))
+      );
     }
 
     // 기사별 경로선 + 노드 마커 그리기
@@ -862,16 +889,18 @@
       if (!res.ok) return;
       const data = await res.json();
 
-      if (data.polyline && data.polyline.length > 1) {
-        const path = data.polyline.map(p => new kakao.maps.LatLng(p.lat, p.lon));
-        driverPolylines[driverId] = new kakao.maps.Polyline({
-          path,
+      if (data.polyline && data.polyline.length > 1 && data.nodes) {
+        const segments = _splitPolyline(data.polyline, data.nodes);
+        driverPolylines[driverId] = segments.map(seg => new kakao.maps.Polyline({
+          path:          seg.points.map(p => new kakao.maps.LatLng(p.lat, p.lon)),
           strokeWeight:  5,
-          strokeColor:   color || '#3498db',
+          strokeColor:   _segmentColor(seg.fromNode),
           strokeOpacity: 0.75,
           strokeStyle:   'solid',
           map,
-        });
+        }));
+      } else {
+        driverPolylines[driverId] = [];
       }
 
       // 노드 마커는 driverRouteMarkers에 저장만 (표시는 showDriverRouteMarkers로 제어)
