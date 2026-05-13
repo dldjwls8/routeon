@@ -324,9 +324,15 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 - 실시간 전송 실패는 DB 저장을 롤백하지 않는다. 재접속 시 REST 히스토리로 복구한다.
 
 프론트엔드 진입점:
-- 관리자: `/dashboard.html` 기사 카드 선택 → 우측 패널의 1:1 채팅 영역
+- 관리자: `/dashboard.html` 기사 카드의 💬 버튼 클릭 → `/chat.html?driver_id=xxx` 새 탭으로 열기
 - 기사: `/driver.html` → 같은 조직 관리자 목록에서 선택, 기본값은 첫 번째 관리자
 - 로그인 후 `role === "driver"`는 `/driver.html`, 그 외 관리 계정은 `/dashboard.html`로 이동한다.
+
+chat.html 구조:
+- 좌측: 채팅 가능 상대 목록 (GET /chat/partners) + unread 배지 + 이름 검색
+- 우측: 메시지창 — 날짜 구분선, 위로 스크롤 시 이전 메시지 페이지네이션
+- WS /ws/chat 연결 + 자동 재연결. 한글 IME 중복 전송 방지(e.isComposing), 줄바꿈 표시(white-space: pre-wrap)
+- dashboard.html에서 채팅 WS 연결 제거 — chat.html에서만 관리
 
 ---
 
@@ -387,8 +393,9 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 - [x] 상차지 인근 기사 확인 — GET /nearby-drivers (Redis 위치 기준, 반경 필터, 거리순 정렬)
 - [x] 관리자 프리셋 — GET/POST/DELETE /presets, 대시보드 불러오기·저장·삭제 UI
 - [x] 폴리라인 개선 — 기사별 단일 색상 + 지나온 구간 실시간 투명화 (GPS 수신마다 setPath 재분할)
+- [x] 채팅 UI 분리 — chat.html 별도 페이지 (기사 카드 💬 버튼 → 새 탭 열기, IME 버그·줄바꿈 수정)
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
-- [ ] 긴급 경유지 추가 type=unloading 기본값 E2E 검증
+- [ ] 긴급 배차 개선 — 상차지(type=loading) 추가 지원 (현재는 하차지만 가능, 관리자 웹 UI + PATCH /trips/{id}/waypoints 모두 수정 필요)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] 상차지 인근 기사 확인 기능
 - [ ] 관리자 프리셋 기능 (상차지/하차지 조합 저장)
