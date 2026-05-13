@@ -185,6 +185,7 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 → GET /trips/{id}/polyline → 카카오 모빌리티 실제 도로 좌표
 → 카카오맵에 기사별 고유 색상 경로선 + 노드 마커(🏁📦☕🏴) 표시
    노드 마커: 드롭핀 형태, 이모지 아이콘만 표시, hover 시 이름, 클릭 시 showNodePopup()
+   마커 zIndex: 노드(5) < 기사 위치(10) < 검색 핀(20)
 
 경로선 분리 (기사 색상 유지, opacity로 구분):
   passed    — 기사가 지나온 구간, opacity 0.25 (흐림)
