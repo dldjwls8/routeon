@@ -125,6 +125,7 @@ await db.refresh(obj)
            └─ GraphHopper N×N (시간·거리 행렬) — TTL 캐시 1시간
            └─ OR-Tools TSP 경유지 순서 최적화
            └─ insert_rest_stops() — 6,000초 임계값 + find_best_rest_stop() picker
+           └─ 휴식지 후보: highway_rest 전용 (75건) — 졸음쉼터·공영차고지·물류단지 제외
            └─ total_distance_km + estimated_duration_min 포함 응답
            └─ trip.status → in_progress 변경
 3. 기사:   POST /optimize/replan → 운행 중 재경로

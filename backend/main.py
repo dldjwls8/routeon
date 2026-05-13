@@ -983,12 +983,13 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
         ordered, reordered, reordered_dist
     )
 
-    # 휴게소 조회 (depot 제외)
+    # 휴게소 조회 (highway_rest만 사용)
     _rr = await db.execute(
-        select(RestStop).where(RestStop.is_active == True, RestStop.type != "depot")
+        select(RestStop).where(RestStop.is_active == True, RestStop.type == "highway_rest")
     )
     rest_candidates = preferred_rest + [
-        {"name": r.name, "latitude": r.latitude, "longitude": r.longitude, "is_active": True}
+        {"name": r.name, "latitude": r.latitude, "longitude": r.longitude, "is_active": True,
+         "type": r.type}
         for r in _rr.scalars().all()
     ]
 
@@ -1079,10 +1080,11 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
         reordered_dist[i][k] = dist_matrix[tsp_order[i]][dest_idx]
 
     _rr = await db.execute(
-        select(RestStop).where(RestStop.is_active == True, RestStop.type != "depot")
+        select(RestStop).where(RestStop.is_active == True, RestStop.type == "highway_rest")
     )
     rest_candidates = [
-        {"name": r.name, "latitude": r.latitude, "longitude": r.longitude, "is_active": True}
+        {"name": r.name, "latitude": r.latitude, "longitude": r.longitude, "is_active": True,
+         "type": r.type}
         for r in _rr.scalars().all()
     ]
     final_route = await insert_rest_stops(
