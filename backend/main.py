@@ -1670,7 +1670,14 @@ async def create_or_get_chat_conversation(
     conversation.admin = current_user if current_user.role == UserRole.admin else partner
     conversation.driver = current_user if current_user.role == UserRole.driver else partner
     unread = await _count_unread_messages(db, conversation, current_user)
-    return _conversation_schema(conversation, current_user, unread)
+    _r2 = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_msg = _r2.scalar_one_or_none()
+    return _conversation_schema(conversation, current_user, unread, last_msg)
 
 
 @app.get("/chat/conversations/{conversation_id}/messages")

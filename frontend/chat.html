@@ -326,7 +326,8 @@
       if (!r.ok) { setSubStatus('대화방을 열 수 없습니다.'); return; }
 
       const conv = await r.json();
-      convByPartner[partnerId] = conv;
+      const prev = convByPartner[partnerId];
+      convByPartner[partnerId] = { ...conv, last_message: conv.last_message ?? prev?.last_message };
       currentConvId = conv.id;
       messages = [];
       await fetchMessages(conv.id);
