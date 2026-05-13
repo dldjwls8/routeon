@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 설정</title>
+  <script>
+    const API = 'http://168.138.45.63:8000';
+
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+    }
+
+    function redirectToLogin() {
+      location.href = '/login.html';
+    }
+
+    if (!getToken()) redirectToLogin();
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', sans-serif; background: #f4f7f6; min-height: 100vh; color: #333; }
+
+    .header {
+      background: #fff;
+      border-bottom: 2px solid #FFE812;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .header a {
+      text-decoration: none;
+      color: #555;
+      font-size: 14px;
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      transition: 0.2s;
+    }
+    .header a:hover { background: #f0f0f0; }
+    .header h1 { font-size: 20px; color: #333; }
+
+    .main { max-width: 920px; margin: 28px auto; padding: 0 20px 40px; }
+    .section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 22px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 18px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .section h2 { font-size: 17px; color: #333; }
+    .section-sub { font-size: 12px; color: #888; margin-top: 4px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 12px;
+      padding: 4px 9px;
+      background: #f1f3f5;
+      color: #777;
+      font-size: 12px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .info-grid { display: grid; grid-template-columns: 130px 1fr; gap: 10px 14px; align-items: center; }
+    .label { font-size: 13px; color: #777; font-weight: bold; }
+    .value { font-size: 15px; color: #333; min-width: 0; }
+    .org-code-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .org-code {
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: #222;
+      background: #fffde8;
+      border: 1px solid #FFE812;
+      border-radius: 8px;
+      padding: 9px 13px;
+      user-select: all;
+    }
+    .btn {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: 0.2s;
+      color: #fff;
+      background: #34495e;
+    }
+    .btn:hover:not(:disabled) { opacity: 0.9; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-yellow { background: #f1c40f; color: #333; }
+    .btn-blue { background: #3498db; }
+    .btn-danger { background: #e67e22; }
+    .form-grid { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; margin-bottom: 14px; }
+    .form-stack { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: start; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      min-width: 0;
+    }
+    input:focus { outline: none; border-color: #FFE812; box-shadow: 0 0 0 2px rgba(255,232,18,0.25); }
+    .field-caption { font-size: 12px; color: #888; margin: 0 0 8px; }
+    .message { display: none; margin-top: 12px; font-size: 13px; line-height: 1.45; }
+    .message.show { display: block; }
+    .message.info { color: #666; }
+    .message.success { color: #247a3d; }
+    .message.error { color: #c0392b; }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px;
+      border: 1px solid #eee;
+      border-radius: 8px;
+      background: #f8f9fa;
+    }
+    .toggle-label { font-size: 15px; font-weight: bold; }
+    .toggle-desc { font-size: 12px; color: #888; margin-top: 3px; }
+    .switch { position: relative; display: inline-block; width: 52px; height: 28px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: not-allowed;
+      inset: 0;
+      background: #d8dde2;
+      transition: 0.2s;
+      border-radius: 28px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      transition: 0.2s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .top-message { margin-bottom: 14px; }
+
+    @media (max-width: 720px) {
+      .header { padding: 14px 16px; }
+      .main { margin: 18px auto; padding: 0 14px 28px; }
+      .section { padding: 18px 16px; }
+      .info-grid, .form-grid, .form-stack { grid-template-columns: 1fr; }
+      .section-head { align-items: flex-start; flex-direction: column; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <a href="/dashboard.html">← 대시보드</a>
+  <h1>⚙️ 루트온 설정</h1>
+</div>
+
+<div class="main">
+  <div class="message top-message" id="page-message"></div>
+
+  <section class="section" aria-labelledby="org-section-title">
+    <div class="section-head">
+      <div>
+        <h2 id="org-section-title">조직코드 관리</h2>
+        <p class="section-sub">기사 가입에 사용하는 조직코드를 확인합니다.</p>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="label">기업명</div>
+      <div class="value" id="org-name">-</div>
+      <div class="label">조직코드</div>
+      <div class="value org-code-row">
+        <span class="org-code" id="org-code-value">-</span>
+        <button class="btn btn-blue" id="copy-org-code-btn" type="button" disabled>복사</button>
+        <button class="btn btn-danger" id="reissue-org-code-btn" type="button" disabled>재발급</button>
+      </div>
+    </div>
+    <div class="message" id="org-message"></div>
+  </section>
+
+  <section class="section" aria-labelledby="account-section-title">
+    <div class="section-head">
+      <div>
+        <h2 id="account-section-title">계정 정보</h2>
+        <p class="section-sub">현재 관리자 계정의 전화번호와 비밀번호를 변경합니다.</p>
+      </div>
+    </div>
+    <div class="info-grid" style="margin-bottom:18px;">
+      <div class="label">아이디</div>
+      <div class="value" id="account-username">-</div>
+      <div class="label">현재 전화번호</div>
+      <div class="value" id="account-phone">-</div>
+    </div>
+    <form id="phone-form">
+      <p class="field-caption">전화번호 변경</p>
+      <div class="form-grid">
+        <input id="phone-input" type="text" autocomplete="tel" placeholder="변경할 전화번호">
+        <button class="btn btn-yellow" id="update-phone-btn" type="submit" disabled>전화번호 저장</button>
+      </div>
+    </form>
+    <form id="password-form">
+      <p class="field-caption">비밀번호 변경</p>
+      <div class="form-stack">
+        <input id="current-password-input" type="password" autocomplete="current-password" placeholder="현재 비밀번호">
+        <input id="new-password-input" type="password" autocomplete="new-password" placeholder="새 비밀번호 (4자 이상)">
+        <button class="btn btn-blue" id="update-password-btn" type="submit" disabled>비밀번호 저장</button>
+      </div>
+    </form>
+    <div class="message" id="account-message"></div>
+  </section>
+
+  <section class="section" aria-labelledby="ops-section-title">
+    <div class="section-head">
+      <div>
+        <h2 id="ops-section-title">운영 설정</h2>
+        <p class="section-sub">운영 관련 옵션을 관리합니다.</p>
+      </div>
+      <span class="badge">준비 중</span>
+    </div>
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">기사 자동승인</div>
+        <div class="toggle-desc">기능 준비 중으로 현재는 변경할 수 없습니다.</div>
+      </div>
+      <label class="switch" title="준비 중">
+        <input id="auto-approve-toggle" type="checkbox" disabled>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </section>
+</div>
+
+<script>
+  let currentOrgCode = '';
+
+  function requireAdmin(user) {
+    if (!user || user.role !== 'admin') {
+      showMessage('page-message', '관리자 계정만 설정 페이지에 접근할 수 있습니다.', 'error');
+      setTimeout(() => {
+        location.href = user && user.role === 'driver' ? '/driver.html' : '/login.html';
+      }, 800);
+      return false;
+    }
+    return true;
+  }
+
+  async function initSettingsPage() {
+    try {
+      const user = await loadCurrentUser();
+      if (!requireAdmin(user)) return;
+      renderCurrentUser(user);
+      const org = await loadOrganization();
+      renderOrganization(org);
+    } catch (e) {
+      console.error('설정 페이지 초기화 오류:', e);
+      showMessage('page-message', e.message || '설정 정보를 불러오지 못했습니다.', 'error');
+    }
+  }
+
+  async function loadCurrentUser() {
+    const response = await fetch(`${API}/auth/me`, { headers: authHeaders() });
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new Error('로그인이 필요합니다.');
+    }
+    if (!response.ok) throw new Error(await parseErrorMessage(response, '계정 정보를 불러오지 못했습니다.'));
+    return response.json();
+  }
+
+  async function loadOrganization() {
+    const response = await fetch(`${API}/organizations/me`, { headers: authHeaders() });
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new Error('로그인이 필요합니다.');
+    }
+    if (!response.ok) throw new Error(await parseErrorMessage(response, '조직 정보를 불러오지 못했습니다.'));
+    return response.json();
+  }
+
+  function renderCurrentUser(user) {
+    document.getElementById('account-username').textContent = user.username || '-';
+    document.getElementById('account-phone').textContent = user.phone || '-';
+    document.getElementById('phone-input').value = user.phone || '';
+  }
+
+  function renderOrganization(org) {
+    currentOrgCode = org.org_code || '';
+    document.getElementById('org-name').textContent = org.name || '-';
+    document.getElementById('org-code-value').textContent = currentOrgCode || '-';
+    document.getElementById('copy-org-code-btn').disabled = !currentOrgCode;
+    document.getElementById('reissue-org-code-btn').disabled = false;
+    document.getElementById('update-phone-btn').disabled = false;
+    document.getElementById('update-password-btn').disabled = false;
+  }
+
+  async function copyOrgCode() {
+    if (!currentOrgCode) {
+      showMessage('org-message', '복사할 조직코드가 없습니다.', 'error');
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(currentOrgCode);
+      } else {
+        copyTextFallback(currentOrgCode);
+      }
+      showMessage('org-message', `조직코드 [${currentOrgCode}]가 복사됐습니다.`, 'success');
+    } catch (e) {
+      showMessage('org-message', '자동 복사에 실패했습니다. 조직코드를 선택해 직접 복사해주세요.', 'error');
+    }
+  }
+
+  async function reissueOrgCode() {
+    if (!confirm('조직코드를 새로 발급하시겠습니까?\n기존 코드로는 더 이상 가입할 수 없으며 되돌릴 수 없습니다.')) return;
+
+    const button = document.getElementById('reissue-org-code-btn');
+    setLoading(button, true);
+    showMessage('org-message', '조직코드를 재발급하는 중입니다.', 'info');
+
+    try {
+      const response = await fetch(`${API}/organizations/regen-code`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '조직코드 재발급에 실패했습니다.'));
+
+      const data = await response.json();
+      currentOrgCode = data.org_code || '';
+      document.getElementById('org-code-value').textContent = currentOrgCode || '-';
+      document.getElementById('copy-org-code-btn').disabled = !currentOrgCode;
+      showMessage('org-message', `새 조직코드 [${currentOrgCode}]가 발급됐습니다.`, 'success');
+    } catch (e) {
+      showMessage('org-message', e.message || '조직코드 재발급에 실패했습니다.', 'error');
+    } finally {
+      setLoading(button, false);
+    }
+  }
+
+  async function updatePhone(event) {
+    event.preventDefault();
+    const phone = getInputValue('phone-input');
+    if (!phone) {
+      showMessage('account-message', '변경할 전화번호를 입력해주세요.', 'error');
+      return;
+    }
+
+    const button = document.getElementById('update-phone-btn');
+    setLoading(button, true);
+    showMessage('account-message', '전화번호를 저장하는 중입니다.', 'info');
+
+    try {
+      const response = await fetch(`${API}/auth/me`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ phone }),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '전화번호 변경에 실패했습니다.'));
+
+      const user = await response.json();
+      renderCurrentUser(user);
+      showMessage('account-message', '전화번호가 변경됐습니다.', 'success');
+    } catch (e) {
+      showMessage('account-message', e.message || '전화번호 변경에 실패했습니다.', 'error');
+    } finally {
+      setLoading(button, false);
+    }
+  }
+
+  async function updatePassword(event) {
+    event.preventDefault();
+    const currentPassword = getInputValue('current-password-input');
+    const newPassword = getInputValue('new-password-input');
+
+    if (!currentPassword) {
+      showMessage('account-message', '현재 비밀번호를 입력해주세요.', 'error');
+      return;
+    }
+    if (!newPassword) {
+      showMessage('account-message', '새 비밀번호를 입력해주세요.', 'error');
+      return;
+    }
+    if (newPassword.length < 4) {
+      showMessage('account-message', '새 비밀번호는 4자 이상이어야 합니다.', 'error');
+      return;
+    }
+
+    const button = document.getElementById('update-password-btn');
+    setLoading(button, true);
+    showMessage('account-message', '비밀번호를 저장하는 중입니다.', 'info');
+
+    try {
+      const response = await fetch(`${API}/auth/me`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '비밀번호 변경에 실패했습니다.'));
+
+      resetPasswordForm();
+      showMessage('account-message', '비밀번호가 변경됐습니다. 다음 로그인 시 새 비밀번호가 적용됩니다.', 'success');
+    } catch (e) {
+      showMessage('account-message', e.message || '비밀번호 변경에 실패했습니다.', 'error');
+    } finally {
+      setLoading(button, false);
+    }
+  }
+
+  function setLoading(buttonOrId, isLoading) {
+    const button = typeof buttonOrId === 'string' ? document.getElementById(buttonOrId) : buttonOrId;
+    if (!button) return;
+    if (isLoading) {
+      button.dataset.originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = '처리 중...';
+      return;
+    }
+    button.disabled = false;
+    if (button.dataset.originalText) button.textContent = button.dataset.originalText;
+  }
+
+  function resetPasswordForm() {
+    document.getElementById('current-password-input').value = '';
+    document.getElementById('new-password-input').value = '';
+  }
+
+  function getInputValue(id) {
+    return document.getElementById(id).value.trim();
+  }
+
+  function copyTextFallback(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    if (!copied) throw new Error('copy failed');
+  }
+
+  function showMessage(targetId, message, type = 'info') {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    el.textContent = message || '';
+    el.className = `message ${type} ${message ? 'show' : ''}`;
+  }
+
+  async function parseErrorMessage(response, fallback) {
+    try {
+      const data = await response.json();
+      if (typeof data.detail === 'string') return data.detail;
+      if (data.detail) return JSON.stringify(data.detail);
+      if (data.message) return data.message;
+    } catch (_) {}
+    return fallback;
+  }
+
+  document.getElementById('copy-org-code-btn').addEventListener('click', copyOrgCode);
+  document.getElementById('reissue-org-code-btn').addEventListener('click', reissueOrgCode);
+  document.getElementById('phone-form').addEventListener('submit', updatePhone);
+  document.getElementById('password-form').addEventListener('submit', updatePassword);
+  document.addEventListener('DOMContentLoaded', initSettingsPage);
+</script>
+</body>
+</html>

@@ -40,8 +40,8 @@
     
     #driver-list { flex-grow: 1; overflow-y: auto; padding: 15px 25px; } 
     
-    .left-footer { padding: 20px 25px; border-top: 1px solid #eee; background: #fafafa; display: flex; gap: 10px; }
-    .left-footer .btn { flex: 1; font-size: 14px; padding: 12px; }
+    .left-footer { padding: 16px; border-top: 1px solid #eee; background: #fafafa; display: flex; gap: 6px; flex-wrap: wrap; }
+    .left-footer .btn { flex: 1 1 calc(50% - 6px); min-width: 102px; font-size: 12px; padding: 10px 8px; white-space: nowrap; }
 
     .map-container { flex-grow: 1; position: relative; }
     #map { width: 100%; height: 100%; }
@@ -243,15 +243,6 @@
       <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
       <span class="title-text">관리자페이지</span>
     </div>
-    <!-- 조직코드 표시 -->
-    <div id="org-code-box" style="margin: 0 16px 12px; background:#fffde8; border:1.5px solid #FFE812; border-radius:8px; padding:10px 14px;">
-      <div style="font-size:11px; color:#888; margin-bottom:4px; font-weight:600;">📋 기사 가입용 조직코드</div>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span id="org-code-value" style="font-size:16px; font-weight:900; color:#333; font-family:monospace; letter-spacing:0.05em;">-</span>
-        <button onclick="copyOrgCode()" title="복사" style="background:none; border:none; cursor:pointer; font-size:16px; padding:2px;">📋</button>
-        <button onclick="reissueOrgCode()" title="재발급" style="background:none; border:none; cursor:pointer; font-size:16px; padding:2px;">🔄</button>
-      </div>
-    </div>
     
     <div id="driver-list"></div>
 
@@ -259,6 +250,7 @@
       <button class="btn btn-setting" onclick="openDriverModal()">👥 기사 관리</button>
       <button class="btn btn-setting" onclick="openVehicleModal()" style="background:#2980b9;">🚗 차량 관리</button>
       <button class="btn btn-setting" onclick="location.href='/stats.html'" style="background:#8e44ad;">📊 통계</button>
+      <button class="btn btn-setting" onclick="location.href='/settings.html'">⚙️ 설정</button>
       <button class="btn btn-delete" onclick="logout()">로그아웃</button>
     </div>
   </div>
@@ -1063,36 +1055,15 @@
       showDriverDetail(currentDriverId);
     }
 
-    // ── 조직코드 ──────────────────────────────────────
-    async function loadOrgCode() {
+    // ── 기업명 표시 ───────────────────────────────────
+    async function loadOrgName() {
       try {
         const res = await fetch(`${API}/organizations/me`, { headers: authHeaders() });
         if (!res.ok) return;
         const org = await res.json();
-        document.getElementById('org-code-value').textContent = org.org_code || '-';
-        // 헤더에 기업명 표시
         const titleEl = document.querySelector('.title-text');
         if (titleEl && org.name) titleEl.textContent = org.name;
       } catch(e) {}
-    }
-
-    function copyOrgCode() {
-      const code = document.getElementById('org-code-value').textContent;
-      if (code === '-') return;
-      navigator.clipboard.writeText(code).then(() => {
-        alert(`조직코드 [${code}]가 복사됐습니다.\n기사님들에게 공유해주세요.`);
-      });
-    }
-
-    async function reissueOrgCode() {
-      if (!confirm('조직코드를 새로 발급하시겠습니까?\n기존 코드로는 더 이상 가입할 수 없습니다.')) return;
-      const res = await fetch(`${API}/organizations/regen-code`, {
-        method: 'POST', headers: authHeaders()
-      });
-      if (!res.ok) return alert('재발급 실패');
-      const data = await res.json();
-      document.getElementById('org-code-value').textContent = data.org_code;
-      alert(`새 조직코드: ${data.org_code}`);
     }
 
     function logout() {
@@ -1647,7 +1618,7 @@
           });
           connectLocationWebSocket();
           connectChatWebSocket();
-          loadOrgCode();
+          loadOrgName();
         });
       };
       script.onerror = () => {

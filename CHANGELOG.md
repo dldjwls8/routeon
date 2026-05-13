@@ -276,6 +276,24 @@
 
 ---
 
+## v1.0.0 (2026-05-13)
+
+### 설정 페이지 신규 + 대시보드 UI 정리
+
+**프론트엔드 (`frontend/settings.html` 신규)**
+- 조직코드 관리 — 현재 코드 표시·복사·재발급 (HTTP 환경 clipboard fallback 포함)
+- 계정 정보 — 전화번호 변경, 비밀번호 변경 (현재 비밀번호 확인 + 4자 최소 프론트 차단)
+- 운영 설정 — 기사 자동승인 토글 (UI 전용, disabled + "준비 중" 뱃지)
+- 관리자 전용 인증 가드 (토큰 없음 → `/login.html`, role≠admin → 리다이렉트)
+
+**프론트엔드 (`frontend/dashboard.html`)**
+- 좌측 패널 `#org-code-box` 제거 → 설정 페이지로 이전
+- `loadOrgCode()` → `loadOrgName()`으로 축소 (기업명 헤더 표시 유지)
+- 하단 `left-footer`에 ⚙️ 설정 버튼 추가 (`/settings.html` 이동)
+- 버튼 5개 배치를 위한 CSS 조정 (`flex-wrap`, `font-size: 12px`)
+
+---
+
 ## v0.9.9 (2026-05-13)
 
 ### 대시보드 실시간 반영 개선

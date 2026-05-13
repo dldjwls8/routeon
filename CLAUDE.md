@@ -83,6 +83,7 @@ routeon/
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 (카카오맵 + 실시간 위치 + 경로선)
+    ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
     └── superadmin.html     슈퍼 관리자 (기업 심사)
 ```
 
@@ -344,6 +345,13 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 - 기사: `/driver.html` → 같은 조직 관리자 목록에서 선택, 기본값은 첫 번째 관리자
 - 로그인 후 `role === "driver"`는 `/driver.html`, 그 외 관리 계정은 `/dashboard.html`로 이동한다.
 
+settings.html 구조 (관리자 전용):
+- 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
+- 섹션 ①: 조직코드 관리 — `GET /organizations/me` 조회, 복사(clipboard/fallback), `POST /organizations/regen-code` 재발급
+- 섹션 ②: 계정 정보 — `GET /auth/me`로 초기값 채움, 전화번호·비밀번호 변경 `PATCH /auth/me`
+- 섹션 ③: 운영 설정 — 기사 자동승인 토글 (disabled, "준비 중" 뱃지, API 호출 없음)
+- dashboard.html 좌측 하단 ⚙️ 버튼 → `/settings.html` 이동
+
 chat.html 구조:
 - 좌측: 채팅 가능 상대 목록 (GET /chat/partners) + unread 배지 + 이름 검색
 - 우측: 메시지창 — 날짜 구분선, 위로 스크롤 시 이전 메시지 페이지네이션
@@ -419,6 +427,7 @@ dashboard.html 채팅 알림 WS:
 - [x] 채팅 UI 분리 — chat.html 별도 페이지 (기사 카드 💬 버튼 → 새 탭 열기, IME 버그·줄바꿈 수정)
 - [x] 채팅 새 메시지 배지 실시간 갱신 — dashboard WS /ws/chat 경량 연결, chat.read 수신 시 즉시 배지 초기화
 - [x] 대시보드 실시간 반영 — trip.started/trip.replanned WS 브로드캐스트, 운행 완료·취소 후 폴리라인 즉시 제거, 기사 강퇴·배송 삭제 즉시 반영
+- [x] 설정 페이지 (settings.html) — 조직코드 관리, 계정 정보 변경, 기사 자동승인 토글 UI (관리자 전용 인증 가드)
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [ ] 긴급 배차 개선 — 상차지(type=loading) 추가 지원 (현재는 하차지만 가능, 관리자 웹 UI + PATCH /trips/{id}/waypoints 모두 수정 필요)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
