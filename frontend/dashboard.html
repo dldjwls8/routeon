@@ -1632,7 +1632,16 @@
         kakao.maps.load(() => {
           initMap();
           initMapSearch();
-          loadDrivers();
+          loadDrivers().then(() => {
+            const sel = new URLSearchParams(location.search).get('select_driver');
+            if (sel) {
+              showDriverDetail(sel);
+              setTimeout(() => {
+                const card = document.getElementById(`card-${sel}`);
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 300);
+            }
+          });
           document.addEventListener('keydown', e => {
             if (e.key === 'Escape') hideSearchPin();
           });

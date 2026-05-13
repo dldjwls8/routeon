@@ -105,6 +105,8 @@
     }
     .driver-name { font-size: 15px; font-weight: 600; color: #1e293b; }
     .driver-sub { font-size: 12px; color: #94a3b8; }
+    .dashboard-link-btn { margin-left: auto; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 11px; font-size: 12px; color: #475569; cursor: pointer; white-space: nowrap; }
+    .dashboard-link-btn:hover { background: #e2e8f0; color: #1e293b; }
 
     /* 메시지 영역 */
     .messages-area {
@@ -334,8 +336,13 @@
       await markRead();
     }
 
+    function openInDashboard(driverId) {
+      window.open(`/dashboard.html?select_driver=${driverId}`, '_blank');
+    }
+
     function renderChatMain(partner) {
-      const name = partner?.username || '상대방';
+      const name      = partner?.username || '상대방';
+      const isDriver  = partner?.role === 'driver';
       document.getElementById('chat-main').innerHTML = `
         <div class="chat-main-header">
           <div class="conv-avatar" style="width:36px;height:36px;font-size:14px;">${escHtml(name[0].toUpperCase())}</div>
@@ -343,6 +350,7 @@
             <div class="driver-name">${escHtml(name)}</div>
             <div class="driver-sub" id="driver-sub">불러오는 중...</div>
           </div>
+          ${isDriver ? `<button class="dashboard-link-btn" onclick="openInDashboard('${partner.id}')">📍 대시보드에서 보기</button>` : ''}
         </div>
         <div class="messages-area" id="messages-area">
           <div class="top-loader" id="top-loader" style="display:none">이전 메시지 불러오는 중...</div>
