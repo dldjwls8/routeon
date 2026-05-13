@@ -199,7 +199,13 @@
       box-shadow: 0 6px 24px rgba(0,0,0,0.22);
       min-width: 240px; max-width: 280px; cursor: default;
     }
-    .search-pin-popup .pin-body { padding: 14px 16px 12px; }
+    .search-pin-popup .pin-body { padding: 14px 16px 12px; position: relative; }
+    .search-pin-popup .pin-close-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: none; cursor: pointer;
+      font-size: 13px; color: #aaa; line-height: 1; padding: 2px 4px;
+    }
+    .search-pin-popup .pin-close-btn:hover { color: #333; }
     .search-pin-popup .pin-category {
       font-size: 11px; color: #3498db; font-weight: 700; margin-bottom: 4px;
     }
@@ -445,7 +451,8 @@
   <script>
     let map;
     let markers = {};
-    let currentDriverId = null;
+    let currentDriverId   = null;
+    let _polylineClicked  = false;
     let driverPolylines      = {};  // driver_id → [passedPolyline, remainingPolyline]
     let driverPolylinePoints = {};  // driver_id → [{lat, lon}, ...]
     let driverRouteMarkers  = {};  // driver_id → [CustomOverlay, ...]
@@ -574,6 +581,7 @@
     }
 
     function onMapClick(e) {
+      if (_polylineClicked) { _polylineClicked = false; return; }
       hideNodePopup();
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
 
@@ -913,6 +921,9 @@
           strokeWeight: 5, strokeColor: color, strokeOpacity: 0.85,
           strokeStyle: 'solid', map,
         });
+        const onPlClick = () => { _polylineClicked = true; showDriverDetail(driverId); };
+        kakao.maps.event.addListener(passedPl,    'click', onPlClick);
+        kakao.maps.event.addListener(remainingPl, 'click', onPlClick);
         driverPolylines[driverId] = [passedPl, remainingPl];
       } else {
         driverPolylines[driverId] = [];
@@ -1373,6 +1384,7 @@
       el.className = 'search-pin-popup';
       el.innerHTML = `
         <div class="pin-body">
+          <button class="pin-close-btn" onclick="hideSearchPin()" title="닫기">✕</button>
           ${catShort ? `<div class="pin-category">${escapeHtml(catShort)}</div>` : ''}
           <div class="pin-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
           ${addr && addr !== name ? `<div class="pin-info-row">📍 ${escapeHtml(addr)}</div>` : ''}
@@ -1397,6 +1409,11 @@
         yAnchor: 1.06,
         zIndex:  20,
       });
+    }
+
+    function hideSearchPin() {
+      if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
+      _searchPinCoord = null;
     }
 
     function useSearchPin(type) {
@@ -1628,6 +1645,9 @@
           initMap();
           initMapSearch();
           loadDrivers();
+          document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') hideSearchPin();
+          });
           connectLocationWebSocket();
           connectChatWebSocket();
           loadOrgCode();

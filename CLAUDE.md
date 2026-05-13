@@ -179,7 +179,7 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 
 ### 관리자 웹 경로선
 ```
-기사 카드 클릭
+기사 카드 클릭 또는 지도의 폴리라인 클릭
 → GET /trips?driver_id={id}&status=in_progress
 → GET /trips/{id}/polyline → 카카오 모빌리티 실제 도로 좌표
 → 카카오맵에 기사별 고유 색상 경로선 + 노드 마커(🏁📦☕🏴) 표시
@@ -191,6 +191,14 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 GPS 수신(POST /location-logs → WS broadcast)마다 splitPolylineAtPosition()으로
 setPath()를 사용해 기존 Polyline 객체 재활용 (재생성 없음)
 driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
+
+폴리라인 클릭 시 _polylineClicked 플래그로 onMapClick 이벤트 중복 차단
+```
+
+### 지도 클릭 팝업 (검색 핀)
+```
+지도 클릭 → onMapClick → 카카오 Geocoder/Places API → showSearchPin()
+팝업 닫기: X 버튼 클릭 또는 ESC 키 → hideSearchPin()
 ```
 
 ### Trip status 값

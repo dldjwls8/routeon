@@ -295,6 +295,20 @@
 
 ---
 
+## v0.9.4 (2026-05-13)
+
+### 지도 UX 개선
+
+**프론트엔드**
+- 폴리라인 클릭 시 해당 기사 카드 자동 선택 + 우측 상세 패널 표시
+  - passed/remaining 두 Polyline 모두 `kakao.maps.event.addListener` click 등록
+  - `_polylineClicked` 플래그로 폴리라인 클릭 시 `onMapClick` 이벤트 중복 차단
+- 지도 클릭 팝업(검색 핀) 닫기 방법 추가
+  - 팝업 우상단 **X 버튼** 추가 (`hideSearchPin()` 호출)
+  - **ESC 키**로 팝업 닫기 (`keydown` 이벤트 전역 등록)
+
+---
+
 ## 예정 작업
 
 ### 진행 중 / 단기
