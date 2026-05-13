@@ -1030,6 +1030,12 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
                 d.sequence = i
                 d.status   = DeliveryStatus.in_progress
     await db.commit()
+    if current_user.organization_id:
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "type": "trip.started",
+            "driver_id": str(current_user.id),
+            "trip_id": str(t.id),
+        })
 
     return {
         "trip_id":                str(t.id),
@@ -1106,6 +1112,12 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
     }
     t.is_emergency = req.is_emergency
     await db.commit()
+    if current_user.organization_id:
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "type": "trip.replanned",
+            "driver_id": str(current_user.id),
+            "trip_id": str(t.id),
+        })
 
     return {
         "trip_id":                str(t.id),
