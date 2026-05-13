@@ -221,11 +221,16 @@
     let currentConvId    = null;
     let messages         = [];
     let isLoadingMore    = false;
+    let myUserId         = null;
 
     // ────────────────────────────────────────────────
     // 초기화
     // ────────────────────────────────────────────────
     async function init() {
+      try {
+        const r = await fetch(`${API}/auth/me`, { headers: authHdrs() });
+        if (r.ok) myUserId = (await r.json()).id;
+      } catch (_) {}
       await Promise.all([loadPartners(), loadConversations()]);
       renderList();
       connectWs();
@@ -278,12 +283,19 @@
         const unread  = conv?.unread_count || 0;
         const timeStr = conv?.updated_at ? fmtTime(conv.updated_at) : '';
         const active  = p.id === currentPartnerId ? 'active' : '';
+        const lastMsg = conv?.last_message;
+        let preview = '대화를 시작하세요';
+        if (lastMsg) {
+          const isMe = lastMsg.sender_id === myUserId;
+          const text = lastMsg.content.replace(/\n/g, ' ');
+          preview = (isMe ? '나: ' : '') + escHtml(text);
+        }
         return `
           <div class="conv-item ${active}" onclick="selectPartner('${p.id}')">
             <div class="conv-avatar">${escHtml(p.username[0].toUpperCase())}</div>
             <div class="conv-info">
               <div class="conv-name">${escHtml(p.username)}</div>
-              <div class="conv-preview">${conv ? '대화 내역 있음' : '대화를 시작하세요'}</div>
+              <div class="conv-preview">${preview}</div>
             </div>
             <div class="conv-meta">
               <span class="conv-time">${escHtml(timeStr)}</span>
@@ -494,20 +506,28 @@
         const el = document.getElementById('ws-status');
         if (el) el.textContent = '연결됨';
       } else if (ev.type === 'chat.message') {
+        // 파트너 ID 추출 — conversation 역방향 조회
+        const matchedConv = Object.values(convByPartner).find(c => c.id === ev.conversation_id);
+        const pid = matchedConv?.partner.id;
+
         if (ev.conversation_id === currentConvId) {
           appendMessage(ev.message);
           markRead();
         } else {
-          const pid = ev.driver_id;
-          if (convByPartner[pid]) {
-            convByPartner[pid].unread_count = (convByPartner[pid].unread_count || 0) + 1;
-            convByPartner[pid].updated_at = ev.message?.created_at || new Date().toISOString();
+          if (matchedConv) {
+            matchedConv.unread_count = (matchedConv.unread_count || 0) + 1;
           } else {
             loadConversations().then(() => renderList(document.getElementById('search-input').value));
             return;
           }
-          renderList(document.getElementById('search-input').value);
         }
+
+        // last_message + updated_at 항상 갱신 (현재 대화방 포함)
+        if (matchedConv) {
+          matchedConv.last_message = ev.message;
+          matchedConv.updated_at   = ev.message.created_at || new Date().toISOString();
+        }
+        renderList(document.getElementById('search-input').value);
       }
     }
 

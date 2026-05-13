@@ -250,6 +250,7 @@ def _conversation_schema(
     conversation: Conversation,
     current_user: User,
     unread_count: int = 0,
+    last_message: "Message | None" = None,
 ) -> dict:
     partner_id = conversation.driver_id if current_user.id == conversation.admin_id else conversation.admin_id
     partner_role = UserRole.driver if current_user.id == conversation.admin_id else UserRole.admin
@@ -266,6 +267,7 @@ def _conversation_schema(
             "role": partner_role.value,
         },
         "unread_count": unread_count,
+        "last_message": _message_schema(last_message) if last_message else None,
         "admin_last_read_at": conversation.admin_last_read_at.isoformat() if conversation.admin_last_read_at else None,
         "driver_last_read_at": conversation.driver_last_read_at.isoformat() if conversation.driver_last_read_at else None,
         "created_at": conversation.created_at.isoformat(),
@@ -1631,8 +1633,28 @@ async def list_chat_conversations(
     )
     _r = await db.execute(stmt)
     conversations = _r.scalars().all()
+
+    # 각 대화방의 최신 메시지 일괄 조회 (서브쿼리 1회)
+    last_msg_map: dict = {}
+    if conversations:
+        conv_ids = [c.id for c in conversations]
+        sub = (
+            select(Message.conversation_id, func.max(Message.created_at).label("max_at"))
+            .where(Message.conversation_id.in_(conv_ids))
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+        _r2 = await db.execute(
+            select(Message).join(
+                sub,
+                (Message.conversation_id == sub.c.conversation_id) &
+                (Message.created_at == sub.c.max_at),
+            )
+        )
+        last_msg_map = {msg.conversation_id: msg for msg in _r2.scalars().all()}
+
     return [
-        _conversation_schema(c, current_user, await _count_unread_messages(db, c, current_user))
+        _conversation_schema(c, current_user, await _count_unread_messages(db, c, current_user), last_msg_map.get(c.id))
         for c in conversations
     ]
 
