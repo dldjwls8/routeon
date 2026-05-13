@@ -1,234 +1,213 @@
-# 상세 구현 계획: drivers.html + vehicles.html 신규 생성 및 dashboard 모달 제거
+# 상세 구현 계획: dashboard.html 하단 메뉴 아이콘 탭바 개편
 
-## 1단계: 기사 관리 전용 페이지 생성
+## 1단계: 하단 메뉴 구조와 스타일 기준 확정
 
 ### 단계 목표
-`frontend/drivers.html`을 새로 만들어 승인 대기 기사와 소속 기사 관리를 대시보드 모달 밖의 독립 페이지로 제공한다.
+`dashboard.html` 좌측 하단 메뉴를 1행 5분할 아이콘 탭바로 바꾸기 위한 CSS/마크업 설계를 현재 전역 버튼 스타일과 충돌하지 않게 확정한다.
 
-### 변경할 파일 목록과 작업
+### 변경할 파일 목록과 각 파일에서 할 작업
 
-- `frontend/drivers.html` 신규 생성
-  - `settings.html`의 독립 페이지 구조를 참고해 `<head>`, 인증 유틸, 카드형 섹션, 메시지 표시 영역을 포함한 HTML 문서를 작성한다.
-  - 상단 헤더에 `← 대시보드로 돌아가기` 링크를 두고 `/dashboard.html`로 이동하게 한다.
-  - `<script>` 상단에 `API = 'http://168.138.45.63:8000'`, `getToken()`, `authHeaders()`, `redirectToLogin()`을 둔다.
-  - 토큰이 없으면 즉시 `/login.html`로 이동하는 1차 가드를 둔다.
-  - 페이지 초기화 시 `GET /auth/me`를 호출해 `role === 'admin'`인지 확인하고, 관리자가 아니면 접근 차단 메시지를 표시한 뒤 `/dashboard.html` 또는 `/login.html`로 리다이렉트한다.
-  - 승인 대기 섹션을 만든다.
-    - `GET /users?role=pending`으로 목록을 조회한다.
-    - 컬럼은 아이디, 전화번호, 조직코드, 관리 액션으로 구성한다.
-    - 승인 버튼은 `POST /auth/approve/{id}` 호출 후 승인 대기 목록과 소속 기사 목록을 모두 갱신한다.
-    - 거절 버튼은 `DELETE /users/{id}` 호출 후 승인 대기 목록을 갱신한다.
-  - 소속 기사 섹션을 만든다.
-    - `GET /users?role=driver`로 목록을 조회한다.
-    - 컬럼은 아이디, 전화번호, 관리 액션으로 구성한다.
-    - 탈퇴 버튼은 `DELETE /users/{id}` 호출 후 소속 기사 목록을 갱신한다.
-  - 각 목록은 로딩, 비어 있음, 오류 상태를 테이블 행으로 표현한다.
-  - 삭제/승인 같은 파괴적 또는 상태 변경 액션에는 `confirm()`을 사용한다.
-  - `settings.html`과 유사한 카드형 레이아웃을 쓰되, 본문은 테이블 중심으로 구성한다.
+- `frontend/dashboard.html`
+  - 기존 `.left-footer`와 `.left-footer .btn` 규칙의 역할을 확인한다.
+  - 전역 `.btn`, `.btn-setting`, `.btn-delete` 규칙은 유지하고, 좌측 하단 메뉴 전용 스타일은 `.left-footer` 하위 선택자로만 스코프를 제한한다.
+  - 신규 메뉴 버튼 클래스명을 `nav-btn`으로 정한다.
+  - 아이콘과 라벨을 분리하기 위한 내부 요소 구조를 정한다.
+    - 아이콘: `<span class="nav-icon" aria-hidden="true">...</span>`
+    - 라벨: `<span class="nav-label">...</span>`
+  - 버튼 접근성 기준을 정한다.
+    - 각 버튼에 `title` 속성을 둔다.
+    - 이모지는 장식으로 처리하고, 실제 의미는 짧은 한글 라벨과 `title`이 담당하게 한다.
+  - 로그아웃은 기존 `logout()` 호출을 유지하고, 다른 4개 버튼은 기존 `location.href` 이동을 유지한다.
+
+- `CHANGELOG.md`
+  - 최신 변경 이력을 추가할 위치를 정한다.
+  - 기존 버전 순서나 과거 항목은 재정렬하지 않는다.
 
 ### 새로 만들 함수/클래스의 시그니처
 
-```js
-function getToken()
-function authHeaders()
-function redirectToLogin()
-async function initDriversPage()
-async function loadCurrentUser()
-function requireAdmin(user)
-async function loadDriverManagementData()
-async function loadPendingDrivers()
-async function loadApprovedDrivers()
-function renderPendingDrivers(users)
-function renderApprovedDrivers(users)
-async function approveDriver(userId)
-async function rejectDriver(userId)
-async function removeDriver(userId)
-async function deleteUser(userId, successMessage)
-function setTableLoading(tbodyId, colspan, message = '로딩 중...')
-function setTableEmpty(tbodyId, colspan, message)
-function showMessage(targetId, message, type = 'info')
-async function parseErrorMessage(response, fallback)
-function escapeHtml(value)
+새 JS 함수나 클래스는 만들지 않는다.
+
+신규 CSS 클래스 후보:
+
+```css
+.left-footer .nav-btn
+.left-footer .nav-btn:hover
+.left-footer .nav-icon
+.left-footer .nav-label
+.left-footer .nav-btn.logout
+.left-footer .nav-btn.logout:hover
 ```
 
-클래스는 새로 만들지 않는다.
-
-### 의존성
-이 단계는 다른 구현 단계에 의존하지 않는다. 다만 기존 백엔드 API `GET /auth/me`, `GET /users`, `POST /auth/approve/{id}`, `DELETE /users/{id}`가 현재 스펙대로 동작해야 한다.
-
-### 단계 완료 검증 방법
-
-- 수동 확인
-  - 토큰 없이 `/drivers.html`에 접근하면 `/login.html`로 이동하는지 확인한다.
-  - 관리자 토큰으로 접근하면 승인 대기와 소속 기사 섹션이 표시되고 콘솔 오류가 없는지 확인한다.
-  - 기사 또는 권한 없는 계정 토큰으로 접근하면 관리자 전용 접근 차단 흐름이 동작하는지 확인한다.
-  - 승인 대기 기사 승인 시 `POST /auth/approve/{id}`가 호출되고 승인 대기 목록에서 사라지며 소속 기사 목록에 반영되는지 확인한다.
-  - 승인 대기 기사 거절 시 `DELETE /users/{id}`가 호출되고 목록에서 제거되는지 확인한다.
-  - 소속 기사 탈퇴 시 `DELETE /users/{id}`가 호출되고 목록에서 제거되는지 확인한다.
-- 테스트 명령어
-
-```bash
-grep -n "function initDriversPage\|async function approveDriver\|async function removeDriver" frontend/drivers.html
-grep -n "users?role=pending\|users?role=driver\|auth/approve" frontend/drivers.html
-```
-
-## 2단계: 차량 관리 전용 페이지 생성
-
-### 단계 목표
-`frontend/vehicles.html`을 새로 만들어 차량 등록, 목록 조회, 삭제를 대시보드 모달 밖의 독립 페이지로 제공한다.
-
-### 변경할 파일 목록과 작업
-
-- `frontend/vehicles.html` 신규 생성
-  - `settings.html`의 상단 헤더와 카드형 레이아웃을 참고해 독립 HTML 문서를 작성한다.
-  - 상단 헤더에 `← 대시보드로 돌아가기` 링크를 두고 `/dashboard.html`로 이동하게 한다.
-  - `drivers.html`과 동일한 관리자 인증 가드를 구현한다.
-  - 차량 등록 폼을 만든다.
-    - 필수 입력: 번호판 `plate_number`, 차종 `vehicle_type`, 총중량 `weight_kg`, 높이 `height_m`
-    - 선택 입력: 길이 `length_cm`, 폭 `width_cm`
-    - 필수 필드 누락, 숫자 필드가 숫자가 아닌 값, 0 이하 숫자는 프론트에서 먼저 차단한다.
-    - 제출 시 `POST /vehicles`에 JSON 바디를 보낸다.
-    - 성공 시 폼을 초기화하고 차량 목록을 즉시 갱신한다.
-  - 등록된 차량 목록 섹션을 만든다.
-    - `GET /vehicles`로 목록을 조회한다.
-    - 컬럼은 번호판, 차종, 총중량, 높이, 길이, 폭, 관리 액션으로 구성한다.
-    - 삭제 버튼은 `DELETE /vehicles/{id}` 호출 후 목록을 갱신한다.
-  - 로딩, 비어 있음, 오류 상태를 테이블 행과 인라인 메시지로 표현한다.
-  - 중복 제출 방지를 위해 등록/삭제 요청 중 관련 버튼을 비활성화한다.
-
-### 새로 만들 함수/클래스의 시그니처
-
-```js
-function getToken()
-function authHeaders()
-function redirectToLogin()
-async function initVehiclesPage()
-async function loadCurrentUser()
-function requireAdmin(user)
-async function loadVehicles()
-function renderVehicles(vehicles)
-async function registerVehicle(event)
-function buildVehiclePayload()
-function validateVehiclePayload(payload)
-async function deleteVehicle(vehicleId)
-function resetVehicleForm()
-function getInputValue(id)
-function getOptionalNumber(id)
-function setLoading(buttonOrId, isLoading)
-function setTableLoading(tbodyId, colspan, message = '로딩 중...')
-function setTableEmpty(tbodyId, colspan, message)
-function showMessage(targetId, message, type = 'info')
-async function parseErrorMessage(response, fallback)
-function formatNumber(value, suffix = '')
-function escapeHtml(value)
-```
-
-클래스는 새로 만들지 않는다.
-
-### 의존성
-이 단계는 1단계와 직접 의존하지 않지만, 인증 가드와 메시지/테이블 렌더링 방식은 1단계에서 확정한 패턴과 일관되게 맞춘다. 기존 백엔드 API `GET /vehicles`, `POST /vehicles`, `DELETE /vehicles/{id}`가 현재 스펙대로 동작해야 한다.
-
-### 단계 완료 검증 방법
-
-- 수동 확인
-  - 토큰 없이 `/vehicles.html`에 접근하면 `/login.html`로 이동하는지 확인한다.
-  - 관리자 토큰으로 접근하면 차량 등록 폼과 차량 목록이 표시되고 콘솔 오류가 없는지 확인한다.
-  - 필수 필드 누락 시 `POST /vehicles` 호출 없이 오류 메시지가 표시되는지 확인한다.
-  - 숫자 필드에 잘못된 값 또는 0 이하 값을 입력하면 제출이 차단되는지 확인한다.
-  - 정상 등록 시 `POST /vehicles`가 호출되고 폼이 비워지며 목록이 갱신되는지 확인한다.
-  - 차량 삭제 시 `DELETE /vehicles/{id}`가 호출되고 목록에서 제거되는지 확인한다.
-- 테스트 명령어
-
-```bash
-grep -n "function initVehiclesPage\|async function registerVehicle\|async function deleteVehicle" frontend/vehicles.html
-grep -n "GET /vehicles\|POST /vehicles" frontend/vehicles.html || true
-grep -n "vehicles" frontend/vehicles.html
-```
-
-## 3단계: 대시보드 모달 제거, 페이지 이동 연결, 문서 갱신
-
-### 단계 목표
-`frontend/dashboard.html`의 기사·차량 관리 모달과 관련 JS를 제거하고 하단 버튼을 신규 페이지 이동으로 바꾼 뒤 문서에 새 페이지를 반영한다.
-
-### 변경할 파일 목록과 작업
-
-- `frontend/dashboard.html` 수정
-  - 좌측 하단 버튼 클릭 동작을 변경한다.
-    - `👥 기사 관리`: `openDriverModal()` 호출 제거 후 `location.href='/drivers.html'`로 이동
-    - `🚗 차량 관리`: `openVehicleModal()` 호출 제거 후 `location.href='/vehicles.html'`로 이동
-  - `#driver-modal` HTML 블록 전체를 제거한다.
-  - `#vehicle-modal` HTML 블록 전체를 제거한다.
-  - 모달 전용 CSS를 정리한다.
-    - 제거 대상 후보: `.modal-overlay`, `.modal-content`, `.modal-header`, `.setting-group`
-    - 테이블, `.btn-sm`, `.btn-warn` 등 다른 대시보드 UI에서 여전히 쓰는지 확인 후 미사용일 때만 제거한다.
-  - 기사 관리 모달 함수들을 제거한다.
-    - `openDriverModal()`
-    - `approveDriver(userId)`
-    - `closeDriverModal()`
-  - 차량 관리 모달 함수들을 제거한다.
-    - `openVehicleModal()`
-    - `closeVehicleModal()`
-    - `loadVehicles()`
-    - `registerVehicle()`
-    - `deleteVehicle(vehicleId)`
-  - `kickDriver(id)`를 제거한다.
-    - 이 함수 안의 마커 제거, 우측 패널 닫기, `loadDrivers()` 호출은 대시보드 모달 탈퇴 플로우에만 필요했던 부수 효과다.
-    - 제거 후 `kickDriver(` 호출이 남아 있지 않은지 반드시 확인한다.
-  - `loadDrivers()`는 대시보드 실시간 렌더링에 계속 필요하므로 건드리지 않는다.
-  - `loadOrgName()`, `connectLocationWebSocket()`, `connectChatWebSocket()`, 지도/운행 관련 함수들은 이번 변경 범위 밖이므로 유지한다.
-
-- `CLAUDE.md` 수정
-  - `frontend/` 디렉터리 구조 설명에 다음 파일을 추가한다.
-    - `drivers.html` 관리자 기사 관리 페이지
-    - `vehicles.html` 관리자 차량 관리 페이지
-  - `dashboard.html` 설명에서 기사/차량 관리 모달 표현이 남아 있으면 별도 페이지 이동 방식으로 갱신한다.
-
-- `CHANGELOG.md` 수정
-  - 최신 버전 섹션에 프론트엔드 변경 이력을 추가한다.
-    - `drivers.html` 신규
-    - `vehicles.html` 신규
-    - `dashboard.html` 기사/차량 관리 모달 제거 및 하단 버튼 페이지 이동으로 변경
-  - 기존 버전 순서가 날짜/버전 기준으로 혼재되어 있으므로 새 항목은 파일 상단의 최신 변경 영역에 추가하되, 기존 항목 재정렬은 하지 않는다.
-
-### 새로 만들 함수/클래스의 시그니처
-
-`frontend/dashboard.html`에는 새 함수나 클래스를 만들지 않는다. 버튼은 기존 하단 메뉴 패턴처럼 인라인 이동으로 처리한다.
+적용할 HTML 구조 후보:
 
 ```html
-<button class="btn btn-setting" onclick="location.href='/drivers.html'">👥 기사 관리</button>
-<button class="btn btn-setting" onclick="location.href='/vehicles.html'" style="background:#2980b9;">🚗 차량 관리</button>
+<button class="nav-btn" type="button" title="기사 관리" onclick="location.href='/drivers.html'">
+  <span class="nav-icon" aria-hidden="true">👥</span>
+  <span class="nav-label">기사</span>
+</button>
 ```
 
-문서 파일에는 함수나 클래스가 없다.
-
 ### 의존성
-1단계와 2단계 완료에 의존한다. 대시보드에서 모달을 제거하기 전에 `/drivers.html`과 `/vehicles.html`이 관리자 인증, 목록 조회, 주요 액션을 수행할 수 있어야 한다.
+이 단계는 다른 단계에 의존하지 않는다. 다만 2단계에서 실제 CSS와 HTML을 작성할 때 이 단계에서 정한 클래스명과 구조를 그대로 사용한다.
 
 ### 단계 완료 검증 방법
 
 - 수동 확인
-  - `/dashboard.html` 하단 `👥 기사 관리` 버튼 클릭 시 `/drivers.html`로 이동하는지 확인한다.
-  - `/dashboard.html` 하단 `🚗 차량 관리` 버튼 클릭 시 `/vehicles.html`로 이동하는지 확인한다.
-  - 대시보드 최초 로드, 지도 표시, 기사 목록 렌더링, 기사 상세 패널, 실시간 위치 WS 연결에 콘솔 오류가 없는지 확인한다.
-  - `drivers.html`과 `vehicles.html`의 상단 뒤로가기 링크로 `/dashboard.html`에 돌아올 수 있는지 확인한다.
-- 정적 검증 명령어
+  - `frontend/dashboard.html`에서 하단 메뉴 버튼 5개의 현재 이동 대상과 호출 함수가 확인되어야 한다.
+  - `.btn`, `.btn-setting`, `.btn-delete`가 다른 UI에서도 쓰일 수 있으므로 전역 규칙을 직접 바꾸지 않는 방향이 확정되어야 한다.
+- 정적 확인 명령어
 
 ```bash
-grep -n "openDriverModal\|closeDriverModal\|approveDriver\|openVehicleModal\|closeVehicleModal\|loadVehicles\|registerVehicle\|deleteVehicle\|kickDriver" frontend/dashboard.html
-grep -n "driver-modal\|vehicle-modal\|pending-list\|vehicle-list" frontend/dashboard.html
-grep -n "drivers.html\|vehicles.html" frontend/dashboard.html CLAUDE.md CHANGELOG.md
+grep -n "left-footer\|btn-setting\|btn-delete\|logout()" frontend/dashboard.html
 ```
 
-첫 번째와 두 번째 명령은 결과가 없어야 한다. 세 번째 명령은 신규 페이지 링크와 문서 반영 위치를 보여야 한다.
+## 2단계: dashboard.html 하단 메뉴 탭바 구현
+
+### 단계 목표
+`frontend/dashboard.html`의 좌측 하단 버튼 5개를 1행 균등 분할 아이콘+소형 라벨 탭바로 교체한다.
+
+### 변경할 파일 목록과 각 파일에서 할 작업
+
+- `frontend/dashboard.html`
+  - `.left-footer` CSS를 2컬럼 wrap 버튼 격자에서 1행 탭바로 교체한다.
+    - `display: grid`
+    - `grid-template-columns: repeat(5, minmax(0, 1fr))`
+    - `gap`은 4~6px 수준으로 축소
+    - `padding`은 기존 16px보다 작게 조정
+    - `flex-wrap` 기반 규칙은 제거
+  - `.left-footer .btn`에 의존하던 2컬럼 폭 규칙을 제거하거나 `.left-footer .nav-btn` 규칙으로 대체한다.
+  - `.left-footer .nav-btn` 스타일을 추가한다.
+    - 세로 배치: 아이콘 위, 라벨 아래
+    - 작은 높이와 패딩으로 수직 공간 절감
+    - 배경은 흰색 또는 `#fafafa` 계열로 통일
+    - 기본 텍스트 색상은 `#333` 계열
+    - border, hover, focus-visible 상태를 추가해 버튼임을 유지
+  - `.left-footer .nav-icon` 스타일을 추가한다.
+    - 이모지 크기 약 18~20px
+    - line-height를 고정해 버튼 높이 흔들림을 줄인다.
+  - `.left-footer .nav-label` 스타일을 추가한다.
+    - 9~10px 한글 라벨
+    - `white-space: nowrap`
+    - 버튼 폭이 좁아도 2글자 또는 3글자 라벨이 깨지지 않도록 정렬한다.
+  - 로그아웃 버튼 전용 스타일을 `.left-footer .nav-btn.logout`으로 추가한다.
+    - 전역 `.btn-delete`에 의존하지 않게 하되, 빨간 계열의 위험 액션 시각 신호는 유지한다.
+  - `<div class="left-footer">` 내부 버튼 5개 마크업을 교체한다.
+    - 기사 관리: `/drivers.html`, title `기사 관리`, 아이콘 `👥`, 라벨 `기사`
+    - 차량 관리: `/vehicles.html`, title `차량 관리`, 아이콘 `🚗`, 라벨 `차량`
+    - 통계: `/stats.html`, title `통계`, 아이콘 `📊`, 라벨 `통계`
+    - 설정: `/settings.html`, title `설정`, 아이콘 `⚙️`, 라벨 `설정`
+    - 로그아웃: `logout()`, title `로그아웃`, 아이콘은 `🚪` 또는 `⎋`, 라벨 `로그아웃`
+  - 기존 인라인 배경색 스타일(`style="background:#2980b9;"`, `style="background:#8e44ad;"`)을 제거한다.
+  - 버튼의 기존 이동 대상과 로그아웃 함수 호출은 변경하지 않는다.
+  - 다른 좌측 패널, 지도, 기사 목록, 우측 패널 관련 JS/CSS는 건드리지 않는다.
+
+### 새로 만들 함수/클래스의 시그니처
+
+새 JS 함수나 클래스는 만들지 않는다.
+
+신규 CSS 클래스:
+
+```css
+.left-footer .nav-btn { ... }
+.left-footer .nav-btn:hover { ... }
+.left-footer .nav-btn:focus-visible { ... }
+.left-footer .nav-icon { ... }
+.left-footer .nav-label { ... }
+.left-footer .nav-btn.logout { ... }
+.left-footer .nav-btn.logout:hover { ... }
+```
+
+교체할 버튼 마크업 형태:
+
+```html
+<button class="nav-btn" type="button" title="기사 관리" onclick="location.href='/drivers.html'">
+  <span class="nav-icon" aria-hidden="true">👥</span>
+  <span class="nav-label">기사</span>
+</button>
+<button class="nav-btn logout" type="button" title="로그아웃" onclick="logout()">
+  <span class="nav-icon" aria-hidden="true">🚪</span>
+  <span class="nav-label">로그아웃</span>
+</button>
+```
+
+### 의존성
+1단계에서 확정한 클래스명, 버튼 구조, 접근성 기준에 의존한다. 링크 대상과 `logout()` 함수는 기존 구현을 그대로 사용하므로 백엔드나 다른 프론트엔드 페이지 변경에는 의존하지 않는다.
+
+### 단계 완료 검증 방법
+
+- 수동 확인
+  - `/dashboard.html`을 열었을 때 좌측 하단 메뉴가 1행 5개로 표시되는지 확인한다.
+  - 각 버튼에 아이콘과 짧은 한글 라벨이 표시되는지 확인한다.
+  - 각 버튼에 마우스를 올렸을 때 브라우저 기본 `title` 툴팁으로 기능을 확인할 수 있는지 확인한다.
+  - 기사, 차량, 통계, 설정 버튼 클릭 시 기존과 같은 URL로 이동하는지 확인한다.
+  - 로그아웃 버튼 클릭 시 기존 `logout()` 흐름이 동작하는지 확인한다.
+  - 좌측 패널 하단 높이가 기존 2행 wrap 버튼보다 줄었는지 확인한다.
+  - 브라우저 콘솔에 새 오류가 없는지 확인한다.
+- 정적 확인 명령어
+
+```bash
+grep -n "nav-btn\|nav-icon\|nav-label" frontend/dashboard.html
+grep -n "location.href='/drivers.html'\|location.href='/vehicles.html'\|location.href='/stats.html'\|location.href='/settings.html'\|logout()" frontend/dashboard.html
+grep -n "left-footer .btn\|flex-wrap\|style=\"background:#2980b9\|style=\"background:#8e44ad" frontend/dashboard.html
+```
+
+마지막 명령은 기존 하단 메뉴용 2컬럼 규칙과 인라인 색상이 남아 있는지 확인하기 위한 것이다. 남아 있다면 다른 영역에 필요한 규칙인지 확인하고, 하단 메뉴 전용 잔재라면 제거한다.
+
+## 3단계: 변경 이력 기록과 최종 검증
+
+### 단계 목표
+하단 메뉴 개편 내용을 `CHANGELOG.md`에 기록하고, 실제 화면과 정적 검색으로 범위 밖 변경이 없는지 확인한다.
+
+### 변경할 파일 목록과 각 파일에서 할 작업
+
+- `CHANGELOG.md`
+  - 최신 변경 섹션을 파일 상단의 기존 버전 목록 흐름에 맞춰 추가한다.
+  - 변경 내용은 프론트엔드 중심으로 한 줄 또는 짧은 목록으로 기록한다.
+    - `dashboard.html` 좌측 하단 메뉴를 1행 아이콘 탭바로 변경
+    - 아이콘 하단 짧은 라벨과 `title` 툴팁 추가
+    - 기사/차량/통계/설정/로그아웃 동작은 기존과 동일하게 유지
+  - 과거 버전 항목의 순서와 내용은 수정하지 않는다.
+
+- `frontend/dashboard.html`
+  - 2단계 구현 후 최종 점검만 수행한다.
+  - 누락된 `title`, 잘못된 `onclick`, 남아 있는 하단 메뉴 인라인 스타일이 있으면 최소 수정한다.
+  - 실제 코드 변경은 하단 메뉴 CSS/HTML 범위에 한정한다.
+
+### 새로 만들 함수/클래스의 시그니처
+
+새 JS 함수나 클래스는 만들지 않는다.
+
+문서 변경만 수행하므로 추가 시그니처는 없다.
+
+### 의존성
+2단계 구현이 완료되어야 변경 이력을 정확히 기록할 수 있다. 3단계는 구현 내용 검증과 문서화 단계이므로 1단계와 2단계 결과에 의존한다.
+
+### 단계 완료 검증 방법
+
+- 수동 확인
+  - `CHANGELOG.md` 최신 영역에 하단 메뉴 개편 내용이 추가되어 있는지 확인한다.
+  - `/dashboard.html` 화면에서 좌측 하단 메뉴가 5개 탭으로 한 줄에 균등 배치되는지 확인한다.
+  - 브라우저 폭을 줄여도 좌측 패널 내부에서 버튼 라벨이 겹치거나 줄바꿈으로 레이아웃이 깨지지 않는지 확인한다.
+  - 키보드 Tab 이동 시 각 버튼에 focus-visible 상태가 보이는지 확인한다.
+  - 변경 전후 5개 메뉴의 이동 대상과 로그아웃 동작이 동일한지 확인한다.
+- 정적 확인 명령어
+
+```bash
+grep -n "하단 메뉴\|아이콘 탭바\|dashboard.html" CHANGELOG.md
+grep -n "title=\"기사 관리\"\|title=\"차량 관리\"\|title=\"통계\"\|title=\"설정\"\|title=\"로그아웃\"" frontend/dashboard.html
+grep -n "class=\"nav-btn" frontend/dashboard.html
+git diff -- frontend/dashboard.html CHANGELOG.md .orchestrate/02-detailed-plan.md
+```
 
 ## 위험 요소
 
-- `dashboard.html`의 `kickDriver()`는 단순 삭제 API 래퍼가 아니라 선택 기사 패널 닫기와 마커 제거를 함께 수행한다. 함수 제거 후 참조가 남으면 즉시 런타임 오류가 나므로 `grep`으로 호출 잔존 여부를 확인해야 한다.
-- 대시보드와 별도 페이지가 동시에 열린 경우, `drivers.html`에서 기사 탈퇴를 해도 열린 대시보드는 다음 `loadDrivers()` 또는 WS 이벤트 전까지 오래된 기사 상태를 잠시 보여줄 수 있다. 이번 범위에서는 이를 허용한다.
-- `DELETE /users/{id}`는 pending 거절과 driver 탈퇴를 같은 API로 처리한다. 잘못된 목록의 id가 전달되지 않도록 버튼 렌더링 함수와 확인 문구를 분리해야 한다.
-- `GET /auth/me`의 `role` 응답이 enum 문자열로 내려오는지 확인이 필요하다. 현재 코드상 `UserRole` enum이 직렬화되지만 기존 프론트 흐름은 문자열 비교를 가정한다.
-- 차량 API는 현재 전체 활성 차량을 조회하며 조직별 필터가 없다. 기존 API 변경은 범위 밖이므로 페이지 분리 후에도 같은 동작을 유지한다.
-- `Vehicle.id`가 숫자라고 가정해도 DOM 인라인 핸들러에서 따옴표 없이 전달하면 안전하지만, 향후 UUID로 바뀌면 깨질 수 있다. 신규 페이지에서는 문자열 전달 방식으로 작성하면 변화에 더 강하다.
-- 모달 CSS 제거 시 `table`, `.btn-sm` 같은 공용 스타일을 함께 제거하면 대시보드의 다른 표 또는 버튼이 영향을 받을 수 있다. 실제 사용처를 확인한 뒤 모달 전용 스타일만 제거해야 한다.
-- 신규 페이지가 정적 HTML이므로 프론트엔드 Nginx 설정에서 파일 직접 접근이 가능해야 한다. 기존 `settings.html`, `stats.html`와 같은 배포 방식이면 문제없다.
-- 문서 갱신 단계에서 `CLAUDE.md`와 `CHANGELOG.md`의 기존 내용 순서를 과도하게 정리하면 불필요한 변경이 커진다. 새 페이지 설명과 변경 이력만 최소 범위로 추가해야 한다.
+- 전역 `.btn`, `.btn-setting`, `.btn-delete`를 직접 수정하면 대시보드의 다른 버튼과 다른 페이지 버튼까지 영향을 받을 수 있다. 하단 메뉴 전용 스타일은 `.left-footer` 하위로 제한해야 한다.
+- 기존 하단 메뉴는 일부 버튼에 인라인 배경색을 사용한다. 이를 남겨 두면 통일된 탭바 디자인이 깨질 수 있으므로 2단계에서 제거 여부를 확인해야 한다.
+- 이모지만 표시하면 기능이 불명확할 수 있다. 짧은 한글 라벨과 `title`을 함께 제공해 접근성과 사용성을 유지한다.
+- `로그아웃`은 4글자라 다른 2글자 라벨보다 폭을 더 차지한다. `font-size`, `white-space`, `min-width: 0` 설정을 통해 5분할 폭 안에서 깨지지 않게 해야 한다.
+- 이모지 렌더링 크기는 OS와 브라우저마다 다를 수 있다. `.nav-icon`의 `font-size`, `line-height`, 고정 정렬을 지정해 버튼 높이 흔들림을 줄인다.
+- `⚙️` 같은 variation selector 포함 이모지는 브라우저에 따라 폭이 다르게 보일 수 있다. 라벨과 버튼 정렬이 중심이 되도록 스타일을 잡아야 한다.
+- `button` 기본 스타일이나 기존 `.btn` 상속을 섞으면 패딩, 색상, 글자 굵기가 예상과 다르게 보일 수 있다. 새 마크업은 `class="nav-btn"` 중심으로 두고 기존 `.btn` 클래스는 제거하는 편이 충돌 위험이 낮다.
+- `type="button"`을 누락하면 향후 좌측 패널 안에 form이 생겼을 때 의도치 않은 submit이 발생할 수 있다. 모든 메뉴 버튼에 명시한다.
+- 이번 범위는 `dashboard.html` 하단 메뉴와 `CHANGELOG.md`만이다. `drivers.html`, `vehicles.html`, `stats.html`, `settings.html`의 하단 메뉴 또는 내비게이션을 함께 정리하면 변경 범위가 커진다.
+- 현재 페이지 active 스타일은 이번 계획에서 생략한다. 나중에 추가할 경우 현재 URL 판별 JS나 서버 사이드 라우팅 없이 정적 HTML에서 일관되게 처리할 방식을 별도로 정해야 한다.

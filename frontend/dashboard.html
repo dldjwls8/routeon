@@ -40,8 +40,61 @@
     
     #driver-list { flex-grow: 1; overflow-y: auto; padding: 15px 25px; } 
     
-    .left-footer { padding: 16px; border-top: 1px solid #eee; background: #fafafa; display: flex; gap: 6px; flex-wrap: wrap; }
-    .left-footer .btn { flex: 1 1 calc(50% - 6px); min-width: 102px; font-size: 12px; padding: 10px 8px; white-space: nowrap; }
+    .left-footer {
+      padding: 10px 12px;
+      border-top: 1px solid #eee;
+      background: #fafafa;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 5px;
+    }
+    .left-footer .nav-btn {
+      min-width: 0;
+      min-height: 52px;
+      padding: 6px 4px;
+      border: 1px solid #e4e7eb;
+      border-radius: 6px;
+      background: #fff;
+      color: #333;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    }
+    .left-footer .nav-btn:hover {
+      background: #fffde8;
+      border-color: #FFE812;
+      transform: translateY(-1px);
+    }
+    .left-footer .nav-btn:focus-visible {
+      outline: 2px solid #3498db;
+      outline-offset: 2px;
+    }
+    .left-footer .nav-icon {
+      font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+      font-size: 19px;
+      line-height: 20px;
+    }
+    .left-footer .nav-label {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 9px;
+      line-height: 1.1;
+      font-weight: 700;
+    }
+    .left-footer .nav-btn.logout {
+      color: #c0392b;
+      border-color: #f4c7c3;
+    }
+    .left-footer .nav-btn.logout:hover {
+      background: #fff5f4;
+      border-color: #e74c3c;
+    }
 
     .map-container { flex-grow: 1; position: relative; }
     #map { width: 100%; height: 100%; }
@@ -238,11 +291,26 @@
     <div id="driver-list"></div>
 
     <div class="left-footer">
-      <button class="btn btn-setting" onclick="location.href='/drivers.html'">👥 기사 관리</button>
-      <button class="btn btn-setting" onclick="location.href='/vehicles.html'" style="background:#2980b9;">🚗 차량 관리</button>
-      <button class="btn btn-setting" onclick="location.href='/stats.html'" style="background:#8e44ad;">📊 통계</button>
-      <button class="btn btn-setting" onclick="location.href='/settings.html'">⚙️ 설정</button>
-      <button class="btn btn-delete" onclick="logout()">로그아웃</button>
+      <button class="nav-btn" type="button" title="기사 관리" onclick="location.href='/drivers.html'">
+        <span class="nav-icon" aria-hidden="true">👥</span>
+        <span class="nav-label">기사</span>
+      </button>
+      <button class="nav-btn" type="button" title="차량 관리" onclick="location.href='/vehicles.html'">
+        <span class="nav-icon" aria-hidden="true">🚗</span>
+        <span class="nav-label">차량</span>
+      </button>
+      <button class="nav-btn" type="button" title="통계" onclick="location.href='/stats.html'">
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span class="nav-label">통계</span>
+      </button>
+      <button class="nav-btn" type="button" title="설정" onclick="location.href='/settings.html'">
+        <span class="nav-icon" aria-hidden="true">⚙️</span>
+        <span class="nav-label">설정</span>
+      </button>
+      <button class="nav-btn logout" type="button" title="로그아웃" onclick="logout()">
+        <span class="nav-icon" aria-hidden="true">🚪</span>
+        <span class="nav-label">로그아웃</span>
+      </button>
     </div>
   </div>
 

@@ -1,80 +1,64 @@
-# 메인 계획: drivers.html + vehicles.html 신규 생성 (기사·차량 관리 별도 페이지 분리)
+# 메인 계획: dashboard.html 하단 메뉴 아이콘 전면 개편
 
 ## 목표
 
-현재 dashboard.html 안에 모달 팝업으로 구현된 기사 관리(승인 대기·소속 기사)와 차량 관리(등록·목록·삭제)를
-각각 독립 HTML 페이지로 분리한다.
-dashboard.html 하단 메뉴 버튼을 클릭하면 해당 페이지로 이동하며, 작업 완료 후 다시 대시보드로 돌아올 수 있다.
+`dashboard.html` 좌측 패널 하단의 텍스트 버튼 5개(기사관리·차량관리·통계·설정·로그아웃)를
+아이콘+라벨 조합의 컴팩트 탭바 스타일로 교체한다.
+좌측 패널의 수직 공간을 아끼면서 기능 접근성을 유지하는 것이 목적이다.
 
 ## 범위
 
 ### 포함되는 것
-- `frontend/drivers.html` 신규 생성
-  - 관리자 인증 가드 (토큰 없음 → /login.html, role ≠ admin → 리다이렉트)
-  - 승인 대기 섹션: `GET /users?role=pending` 목록, ✅ 승인(`POST /auth/approve/{id}`), 거절(`DELETE /users/{id}`)
-  - 소속 기사 섹션: `GET /users?role=driver` 목록, 탈퇴(`DELETE /users/{id}`)
-  - 상단 "← 대시보드로 돌아가기" 뒤로가기 버튼
-- `frontend/vehicles.html` 신규 생성
-  - 관리자 인증 가드 (동일)
-  - 차량 등록 폼: 번호판·차종·총중량·높이(필수), 길이·폭(선택) → `POST /vehicles`
-  - 등록된 차량 목록: `GET /vehicles`, 삭제(`DELETE /vehicles/{id}`)
-  - 상단 "← 대시보드로 돌아가기" 버튼
 - `frontend/dashboard.html` 수정
-  - 하단 `👥 기사 관리` 버튼: `openDriverModal()` → `/drivers.html`으로 이동
-  - 하단 `🚗 차량 관리` 버튼: `openVehicleModal()` → `/vehicles.html`으로 이동
-  - 기존 `#driver-modal`, `#vehicle-modal` HTML 블록 제거
-  - 기존 JS 함수 제거: `openDriverModal`, `closeDriverModal`, `approveDriver`, `openVehicleModal`, `closeVehicleModal`, `loadVehicles`, `registerVehicle`, `deleteVehicle`
-  - `kickDriver()` 제거 — 단, 이 함수는 맵 상태 정리 로직(마커 제거, 우측 패널 닫기)을 포함하므로 **제거 후 남은 의존성이 없는지 확인** 필요
+  - `.left-footer` CSS 교체: 2컬럼 wrap 버튼 격자 → 1행 균등 분할 아이콘 탭바
+  - 버튼 HTML 교체: 텍스트+이모지 혼합 → 아이콘(이모지)만 표시, `title` 툴팁으로 레이블 유지
+  - 각 아이콘 아래 짧은 한글 라벨(예: 기사, 차량, 통계, 설정, 로그아웃) 선택적 표시 검토
+  - 현재 페이지 강조 스타일(active indicator) 선택적 검토
+- `CHANGELOG.md` 변경 이력 추가
 
 ### 포함되지 않는 것
-- 기사 정보 수정(전화번호 변경 등) — 현재 미구현이므로 이번 범위 밖
-- 차량 수정 기능 — 현재 미구현이므로 이번 범위 밖
-- 기사·차량 검색/필터 — 추후 과제
-- 백엔드 API 변경 — 없음 (기존 API 재활용)
+- 링크 대상·JS 동작 변경 없음 (`location.href`, `logout()` 그대로 유지)
+- 다른 HTML 파일(drivers.html, vehicles.html, settings.html 등) 수정 없음
+- 반응형 모바일 레이아웃 전면 재설계 — 단순 스타일 조정 수준에서 처리
+- 아이콘 라이브러리 외부 CDN 도입 금지 — 기존 이모지 유지 또는 Unicode 기호 사용
+- 백엔드 API 변경 없음
 
 ## 제약 조건
 
 ### 기술적 제약
-- 바닐라 HTML/JS만 사용 (프레임워크 없음)
-- API 베이스 URL: `http://168.138.45.63:8000` (하드코딩, settings.html·dashboard.html과 동일 방식)
-- 인증 방식: `localStorage.getItem('token')` + `Authorization: Bearer` 헤더
-- dashboard.html의 `loadDrivers()`는 대시보드 실시간 렌더링에 여전히 사용됨 — 이번 변경으로 건드리지 않음
+- 바닐라 HTML/JS/CSS만 사용 (외부 프레임워크·라이브러리 추가 금지)
+- 아이콘 라이브러리 CDN 추가 금지 — 이모지(Unicode) 사용
+- 기존 `.btn`, `.btn-setting`, `.btn-delete` CSS가 좌측 패널 외 다른 곳에서도 사용될 수 있으므로
+  `.left-footer` 스코프 내에서만 오버라이드하거나 `.nav-btn` 같은 신규 클래스 추가로 처리
 
 ### 비기술적 제약
-- settings.html을 UI/UX 참고 레퍼런스로 활용 (카드형 레이아웃, 메시지 표시 방식)
-- 모달 제거 후 dashboard.html이 정상 작동해야 함 (`kickDriver` 의존성 제거 검증 필수)
+- 변경 전후 5개 버튼의 기능(이동 대상·동작)이 동일해야 함
+- `title` 속성 또는 아이콘 하단 짧은 라벨로 접근성 유지 (아이콘만 있을 때 기능 불명확 방지)
 
-## 영향 받는 파일
+## 영향 받는 영역
 
-- `frontend/drivers.html` — 신규 (약 300~400줄 예상)
-- `frontend/vehicles.html` — 신규 (약 200~300줄 예상)
-- `frontend/dashboard.html` — 수정 (약 −80줄 예상: modal HTML + JS 함수 제거)
-- `CLAUDE.md` — 신규 파일 설명 추가
-- `CHANGELOG.md` — 변경 이력 추가
+- `frontend/dashboard.html`
+  - CSS: `.left-footer`, `.left-footer .btn` 규칙 교체 + 신규 `.nav-btn` 계열 스타일 추가
+  - HTML: `<div class="left-footer">` 내 버튼 5개 마크업 교체
+- `CHANGELOG.md` — 변경 이력 1줄 추가
 
 ## 성공 기준
 
-- [ ] `drivers.html` 접근 시 관리자 외 계정은 리다이렉트된다
-- [ ] 승인 대기 기사를 승인하면 목록이 즉시 갱신된다
-- [ ] 소속 기사를 탈퇴 처리하면 목록에서 즉시 제거된다
-- [ ] `vehicles.html` 접근 시 관리자 외 계정은 리다이렉트된다
-- [ ] 필수 필드 누락 시 차량 등록이 차단된다
-- [ ] 차량 등록 후 목록이 즉시 갱신된다
-- [ ] 차량 삭제 후 목록에서 즉시 제거된다
-- [ ] dashboard.html에서 모달이 완전히 제거되고 해당 버튼 클릭 시 새 페이지로 이동된다
-- [ ] dashboard.html에서 `kickDriver`, `openDriverModal` 등 제거된 함수 참조가 남아있지 않다
+- [ ] 하단 메뉴가 1행에 5개 아이콘으로 균등 배치된다 (2행 wrap 제거)
+- [ ] 각 아이콘에 `title` 속성 또는 하단 라벨이 있어 마우스 오버 시 기능을 알 수 있다
+- [ ] 5개 버튼의 링크/동작이 변경 전과 동일하다
+- [ ] `.btn-setting`, `.btn-delete` 등 기존 전역 CSS 클래스가 다른 요소에 영향 없이 유지된다
+- [ ] 좌측 패널 하단이 현재보다 수직 공간을 적게 차지한다 (패딩·높이 축소)
 
 ## 열린 질문
 
-1. **`kickDriver()` 처리**: 대시보드에서 기사를 탈퇴시킬 때 맵 마커 제거·패널 닫기 등의 부수 효과가 있었다.
-   별도 페이지에서는 단순 `DELETE /users/{id}` API 호출만 하면 되지만,
-   대시보드가 열린 상태에서 다른 탭의 drivers.html에서 탈퇴를 처리하면 대시보드는 다음 `loadDrivers()` 호출 전까지 오래된 상태를 유지한다.
-   이를 허용할지, 아니면 대시보드에서도 WS 이벤트 등으로 즉시 처리할지 결정 필요.
-   → **권장: 현재 수준(다음 loadDrivers 시 갱신)으로 허용** — 별도 WS 이벤트 추가는 과도한 복잡도
+1. **아이콘 하단 짧은 라벨 표시 여부**: 아이콘만 두면 시각적으로 더 컴팩트하지만 처음 보는 사용자에게 불명확할 수 있다.
+   `title` 툴팁만으로 충분한지, 아이콘 아래 8~10px 소형 라벨을 함께 표시할지 결정 필요.
+   → 권장: 아이콘 아래 `font-size: 10px` 한글 라벨 병기 (이모지 크기 20px + 라벨 10px, 총 높이 절감 가능)
 
-2. **페이지 UI 스타일 통일**: settings.html 스타일을 그대로 재사용할지,
-   dashboard.html 스타일(카드·테이블 혼합)을 참고해 더 데이터 집약적으로 구성할지.
-   → 기사/차량 관리는 테이블 형태가 적합하므로 settings.html 카드 레이아웃을 틀로 삼되 내용은 테이블 위주로 구성 권장
+2. **현재 페이지 active 스타일 여부**: 현재 dashboard.html에서 보고 있을 때 로그아웃 버튼만 빼고 나머지는 "다른 페이지 이동" 버튼이다. 별도 강조 불필요.
+   → 권장: 이번 범위에서는 active 상태 구분 생략
 
-3. **페이지 이동 방식**: 버튼 클릭 시 현재 탭에서 이동 vs 새 탭 열기.
-   → settings.html과 동일하게 **현재 탭에서 이동** 권장 (새 탭은 chat.html처럼 창이 계속 쌓이는 플로우에 적합)
+3. **각 버튼 배경색 유지 여부**: 현재 5개 버튼이 각각 다른 배경색(회색·파란·보라·회색·빨강)을 갖는다.
+   아이콘 탭바로 전환 시 배경색을 통일(단색 탭바)할지, 아이콘 색상만으로 구분할지 결정 필요.
+   → 권장: 탭바 배경을 단색(#fafafa 또는 흰색)으로 통일, 아이콘 이모지 자체 색상으로 구분 유지. 로그아웃만 빨간 아이콘 색상 처리.
