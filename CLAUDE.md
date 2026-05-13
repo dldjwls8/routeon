@@ -128,7 +128,9 @@ await db.refresh(obj)
            └─ 휴식지 후보: highway_rest 전용 (75건) — 졸음쉼터·공영차고지·물류단지 제외
            └─ total_distance_km + estimated_duration_min 포함 응답
            └─ trip.status → in_progress 변경
+           └─ WS broadcast → 관리자에게 trip.started 이벤트 (대시보드 즉시 갱신)
 3. 기사:   POST /optimize/replan → 운행 중 재경로
+           └─ WS broadcast → 관리자에게 trip.replanned 이벤트 (폴리라인 즉시 재그리기)
 ```
 
 ### 원격 배차 (경유지 추가) 흐름
@@ -151,6 +153,20 @@ await db.refresh(obj)
   "message": "새 경유지가 추가됐습니다. 경로를 재계산하세요."
 }
 ```
+
+### WS 메시지 형식 (trip.started)
+기사가 `POST /optimize` 완료 시 → 같은 조직 관리자 WS 전체에 브로드캐스트.
+```json
+{"type": "trip.started", "driver_id": "uuid", "trip_id": "uuid"}
+```
+대시보드: `handleTripStarted()` → `loadDrivers()` + `showDriverDetail()` 호출.
+
+### WS 메시지 형식 (trip.replanned)
+기사가 `POST /optimize/replan` 완료 시 → 같은 조직 관리자 WS 전체에 브로드캐스트.
+```json
+{"type": "trip.replanned", "driver_id": "uuid", "trip_id": "uuid"}
+```
+대시보드: `handleTripReplanned()` → `clearDriverRoute()` + `loadDrivers()` + `showDriverDetail()` 호출.
 
 ### WS 메시지 형식 (heartbeat)
 서버가 20초마다 클라이언트에 전송. 앱은 무시하거나 `{"type":"pong"}`으로 응답.
@@ -334,6 +350,13 @@ chat.html 구조:
 - WS /ws/chat 연결 + 자동 재연결. 한글 IME 중복 전송 방지(e.isComposing), 줄바꿈 표시(white-space: pre-wrap)
 - dashboard.html에서 채팅 WS 연결 제거 — chat.html에서만 관리
 
+dashboard.html 채팅 알림 WS:
+- WS /ws/chat 경량 연결 (수신 전용, 전송 없음) — `connectChatWebSocket()`
+- `chat.message` 수신 시: `sender_id ≠ currentUserId`면 해당 기사 카드 unread 배지 +1
+- `chat.read` 수신 시: `reader_id === currentUserId`면 해당 기사 카드 배지 → 0
+- `convDriverMap` (conversation_id → driver_id) 으로 대화방과 기사 카드를 매핑
+- 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
+
 ---
 
 ## 주의사항
@@ -394,6 +417,8 @@ chat.html 구조:
 - [x] 관리자 프리셋 — GET/POST/DELETE /presets, 대시보드 불러오기·저장·삭제 UI
 - [x] 폴리라인 개선 — 기사별 단일 색상 + 지나온 구간 실시간 투명화 (GPS 수신마다 setPath 재분할)
 - [x] 채팅 UI 분리 — chat.html 별도 페이지 (기사 카드 💬 버튼 → 새 탭 열기, IME 버그·줄바꿈 수정)
+- [x] 채팅 새 메시지 배지 실시간 갱신 — dashboard WS /ws/chat 경량 연결, chat.read 수신 시 즉시 배지 초기화
+- [x] 대시보드 실시간 반영 — trip.started/trip.replanned WS 브로드캐스트, 운행 완료·취소 후 폴리라인 즉시 제거, 기사 강퇴·배송 삭제 즉시 반영
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [ ] 긴급 배차 개선 — 상차지(type=loading) 추가 지원 (현재는 하차지만 가능, 관리자 웹 UI + PATCH /trips/{id}/waypoints 모두 수정 필요)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
