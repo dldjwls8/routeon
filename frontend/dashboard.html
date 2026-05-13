@@ -968,6 +968,7 @@
             position: new kakao.maps.LatLng(node.lat, node.lon),
             content:  el,
             yAnchor:  1.2,
+            zIndex:   5,
             // map은 여기서 설정 안 함 — showDriverRouteMarkers로 on/off
           });
           driverRouteMarkers[driverId].push(overlay);
@@ -1920,7 +1921,7 @@
             const name = driver ? driver.username : user_id.slice(0, 6);
             const markerContent = createCustomMarkerElement(name, user_id);
             const overlay = new kakao.maps.CustomOverlay({
-              position, content: markerContent, map, yAnchor: 1.15
+              position, content: markerContent, map, yAnchor: 1.15, zIndex: 10
             });
             markers[user_id] = overlay;
           })
@@ -1928,7 +1929,7 @@
             // 드라이버 정보 없어도 마커는 생성
             const markerContent = createCustomMarkerElement(user_id.slice(0, 6), user_id);
             const overlay = new kakao.maps.CustomOverlay({
-              position, content: markerContent, map, yAnchor: 1.15
+              position, content: markerContent, map, yAnchor: 1.15, zIndex: 10
             });
             markers[user_id] = overlay;
           });
