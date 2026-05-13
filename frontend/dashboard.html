@@ -100,18 +100,9 @@
     .custom-app-marker:after { content: ''; position: absolute; border-style: solid; border-width: 10px 8px 0; border-color: #333 transparent transparent; display: block; width: 0; z-index: 1; bottom: -10px; left: 50%; transform: translateX(-50%); }
     .custom-app-marker.active:after { border-color: #FFE812 transparent transparent; }
 
-    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
-    .modal-content { background: #fff; width: 600px; max-height: 80vh; border-radius: 12px; padding: 30px; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #FFE812; padding-bottom: 10px; margin-bottom: 20px; }
-    .modal-header h2 { margin: 0; }
-    .setting-group { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee; }
-    .setting-group label { display: block; font-weight: bold; margin-bottom: 10px; color: #333; }
-    
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; font-size: 14px; }
     th { background: #f1f3f5; }
-    .btn-sm { padding: 4px 8px; font-size: 12px; margin-right: 4px; }
-    .btn-warn { background: #e67e22; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
 
     /* ── 자동완성 드롭다운 ──────────────────────── */
     .ac-wrapper { position: relative; }
@@ -247,8 +238,8 @@
     <div id="driver-list"></div>
 
     <div class="left-footer">
-      <button class="btn btn-setting" onclick="openDriverModal()">👥 기사 관리</button>
-      <button class="btn btn-setting" onclick="openVehicleModal()" style="background:#2980b9;">🚗 차량 관리</button>
+      <button class="btn btn-setting" onclick="location.href='/drivers.html'">👥 기사 관리</button>
+      <button class="btn btn-setting" onclick="location.href='/vehicles.html'" style="background:#2980b9;">🚗 차량 관리</button>
       <button class="btn btn-setting" onclick="location.href='/stats.html'" style="background:#8e44ad;">📊 통계</button>
       <button class="btn btn-setting" onclick="location.href='/settings.html'">⚙️ 설정</button>
       <button class="btn btn-delete" onclick="logout()">로그아웃</button>
@@ -338,85 +329,6 @@
       <div id="route-nodes-list"></div>
     </div>
 
-  </div>
-
-  <!-- ※ 미구현 기능: 설정 모달 (승인방식/법규정/조직코드) — 추후 구현 예정
-  <div class="modal-overlay" id="settings-modal-legacy">
-    ... 승인 방식, 법 규정, 조직코드 설정 UI (백엔드 연동 미완성)
-  </div>
-  -->
-
-  <!-- 운행 생성 모달 -->
-  <!-- 기사 관리 모달 -->
-  <div class="modal-overlay" id="vehicle-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>🚗 차량 관리</h2>
-        <button onclick="closeVehicleModal()" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
-      </div>
-      <!-- 차량 등록 폼 -->
-      <div style="margin-bottom:24px;">
-        <h4 style="margin-bottom:12px;">차량 등록</h4>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div>
-            <label style="font-size:13px; color:#555;">번호판 <span style="color:red;">*</span></label>
-            <input id="v-plate" type="text" placeholder="예) 12가 3456" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:13px; color:#555;">차종 <span style="color:red;">*</span></label>
-            <input id="v-type" type="text" placeholder="예) 5톤카고, 15톤탑차" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:13px; color:#555;">총중량 (kg) <span style="color:red;">*</span></label>
-            <input id="v-weight" type="number" placeholder="예) 10000" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:13px; color:#555;">차량 높이 (m) <span style="color:red;">*</span></label>
-            <input id="v-height" type="number" step="0.1" placeholder="예) 3.5" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:13px; color:#555;">길이 (cm)</label>
-            <input id="v-length" type="number" placeholder="선택" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:13px; color:#555;">폭 (cm)</label>
-            <input id="v-width" type="number" placeholder="선택" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box;">
-          </div>
-        </div>
-        <button class="btn btn-approve" onclick="registerVehicle()" style="margin-top:14px; width:100%; background:#2980b9;">등록</button>
-      </div>
-      <hr style="margin:0 0 20px;">
-      <!-- 등록된 차량 목록 -->
-      <h4 style="margin-bottom:12px;">등록된 차량</h4>
-      <table>
-        <thead><tr><th>번호판</th><th>차종</th><th>총중량</th><th>높이</th><th>관리</th></tr></thead>
-        <tbody id="vehicle-list"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="driver-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>👥 기사 관리</h2>
-        <button onclick="closeDriverModal()" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
-      </div>
-      <!-- 승인 대기 -->
-      <div id="pending-section" style="margin-bottom:20px;">
-        <h4 style="color:#e67e22; margin-bottom:10px;">⏳ 승인 대기</h4>
-        <table>
-          <thead><tr><th>아이디</th><th>전화번호</th><th>조직코드</th><th>승인</th></tr></thead>
-          <tbody id="pending-list"></tbody>
-        </table>
-      </div>
-      <hr style="margin:20px 0;">
-      <!-- 승인된 기사 -->
-      <h4 style="margin-bottom:10px;">✅ 소속 기사</h4>
-      <table>
-        <thead><tr><th>아이디</th><th>전화번호</th><th>관리</th></tr></thead>
-        <tbody id="driver-manage-list"></tbody>
-      </table>
-    </div>
   </div>
 
   <script>
@@ -1408,131 +1320,6 @@
       await showDriverDetail(currentDriverId);
     }
 
-    // ── 기사 관리 모달 ──────────────────────────────
-    async function openDriverModal() {
-      document.getElementById('driver-modal').style.display = 'flex';
-      document.getElementById('pending-list').innerHTML       = '<tr><td colspan="4" style="text-align:center; color:gray;">로딩 중...</td></tr>';
-      document.getElementById('driver-manage-list').innerHTML = '<tr><td colspan="3" style="text-align:center; color:gray;">로딩 중...</td></tr>';
-
-      // 승인 대기 목록
-      const pRes = await fetch(`${API}/users?role=pending`, { headers: authHeaders() });
-      const pending = pRes.ok ? await pRes.json() : [];
-      document.getElementById('pending-list').innerHTML = pending.length === 0
-        ? '<tr><td colspan="4" style="text-align:center; color:gray;">승인 대기 없음</td></tr>'
-        : pending.map(u => `
-          <tr>
-            <td><strong>${u.username}</strong></td>
-            <td>${u.phone || '-'}</td>
-            <td>${u.org_code || '-'}</td>
-            <td>
-              <button class="btn btn-approve btn-sm" style="background:#27ae60; padding:5px 10px; font-size:12px;"
-                onclick="approveDriver('${u.id}')">✅ 승인</button>
-              <button class="btn btn-delete btn-sm" onclick="kickDriver('${u.id}')">거절</button>
-            </td>
-          </tr>
-        `).join('');
-
-      // 승인된 기사 목록
-      const dRes = await fetch(`${API}/users?role=driver`, { headers: authHeaders() });
-      const drivers = dRes.ok ? await dRes.json() : [];
-      document.getElementById('driver-manage-list').innerHTML = drivers.length === 0
-        ? '<tr><td colspan="3" style="text-align:center; color:gray;">등록된 기사 없음</td></tr>'
-        : drivers.map(d => `
-          <tr>
-            <td><strong>${d.username}</strong></td>
-            <td>${d.phone || '-'}</td>
-            <td><button class="btn btn-delete btn-sm" onclick="kickDriver('${d.id}')">탈퇴</button></td>
-          </tr>
-        `).join('');
-    }
-
-    async function approveDriver(userId) {
-      if (!confirm('이 기사를 승인하시겠습니까?')) return;
-      const res = await fetch(`${API}/auth/approve/${userId}`, {
-        method: 'POST', headers: authHeaders()
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        return alert(`승인 실패: ${err.detail}`);
-      }
-      alert('✅ 승인됐습니다.');
-      openDriverModal();
-      loadDrivers();
-    }
-
-    function closeDriverModal() {
-      document.getElementById('driver-modal').style.display = 'none';
-      loadDrivers();
-    }
-
-    // ── 차량 관리 ────────────────────────────────
-    async function openVehicleModal() {
-      document.getElementById('vehicle-modal').style.display = 'flex';
-      await loadVehicles();
-    }
-
-    function closeVehicleModal() {
-      document.getElementById('vehicle-modal').style.display = 'none';
-    }
-
-    async function loadVehicles() {
-      const tbody = document.getElementById('vehicle-list');
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">로딩 중...</td></tr>';
-      const res = await fetch(`${API}/vehicles`, { headers: authHeaders() });
-      const vehicles = res.ok ? await res.json() : [];
-      tbody.innerHTML = vehicles.length === 0
-        ? '<tr><td colspan="5" style="text-align:center; color:gray;">등록된 차량 없음</td></tr>'
-        : vehicles.map(v => `
-          <tr>
-            <td><strong>${v.plate_number}</strong></td>
-            <td>${v.vehicle_type}</td>
-            <td>${v.weight_kg.toLocaleString()}kg</td>
-            <td>${v.height_m}m</td>
-            <td><button class="btn btn-delete btn-sm" onclick="deleteVehicle(${v.id})">삭제</button></td>
-          </tr>
-        `).join('');
-    }
-
-    async function registerVehicle() {
-      const plate  = document.getElementById('v-plate').value.trim();
-      const type   = document.getElementById('v-type').value.trim();
-      const weight = parseFloat(document.getElementById('v-weight').value);
-      const height = parseFloat(document.getElementById('v-height').value);
-      const length = document.getElementById('v-length').value;
-      const width  = document.getElementById('v-width').value;
-
-      if (!plate || !type || isNaN(weight) || isNaN(height)) {
-        return alert('번호판, 차종, 총중량, 높이는 필수입니다.');
-      }
-
-      const body = { plate_number: plate, vehicle_type: type, weight_kg: weight, height_m: height };
-      if (length) body.length_cm = parseFloat(length);
-      if (width)  body.width_cm  = parseFloat(width);
-
-      const res = await fetch(`${API}/vehicles`, {
-        method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        return alert(`등록 실패: ${err.detail}`);
-      }
-      ['v-plate','v-type','v-weight','v-height','v-length','v-width'].forEach(id => {
-        document.getElementById(id).value = '';
-      });
-      await loadVehicles();
-    }
-
-    async function deleteVehicle(vehicleId) {
-      if (!confirm('이 차량을 삭제하시겠습니까?')) return;
-      const res = await fetch(`${API}/vehicles/${vehicleId}`, {
-        method: 'DELETE', headers: authHeaders()
-      });
-      if (!res.ok) return alert('삭제 실패');
-      await loadVehicles();
-    }
-
     // ── 운행 완료/취소 ──────────────────────────────
     async function completeTripCurrent() {
       const tripId = document.getElementById('trip-info-box')._tripId;
@@ -1558,28 +1345,6 @@
       alert('운행이 취소됐습니다.');
       await loadDrivers();
       await showDriverDetail(currentDriverId);
-    }
-
-    // ── 미구현 기능 (추후 구현 예정) ─────────────────
-    // async function openSettings() { ... }  // 승인 방식, 법 규정, 조직코드 설정
-    // async function saveSettings() { ... }  // 설정 저장 API 미구현
-
-    async function kickDriver(id) {
-      if(!confirm('해당 기사를 강제 탈퇴시키겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
-
-      if(currentDriverId === id) hideRightPanel();
-
-      if(markers[id]) {
-        markers[id].setMap(null);
-        delete markers[id];
-      }
-
-      await fetch(`${API}/users/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders()
-      });
-      await openDriverModal();
-      loadDrivers();
     }
 
     window.onload = async () => {

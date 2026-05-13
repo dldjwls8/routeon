@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 기사 관리</title>
+  <script>
+    const API = 'http://168.138.45.63:8000';
+
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+    }
+
+    function redirectToLogin() {
+      location.href = '/login.html';
+    }
+
+    if (!getToken()) redirectToLogin();
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', sans-serif; background: #f4f7f6; min-height: 100vh; color: #333; }
+
+    .header {
+      background: #fff;
+      border-bottom: 2px solid #FFE812;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .header a {
+      text-decoration: none;
+      color: #555;
+      font-size: 14px;
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      transition: 0.2s;
+    }
+    .header a:hover { background: #f0f0f0; }
+    .header h1 { font-size: 20px; color: #333; }
+
+    .main { max-width: 980px; margin: 28px auto; padding: 0 20px 40px; }
+    .section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 22px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 18px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .section h2 { font-size: 17px; color: #333; }
+    .section-sub { font-size: 12px; color: #888; margin-top: 4px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 12px;
+      padding: 4px 9px;
+      background: #f1f3f5;
+      color: #777;
+      font-size: 12px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; }
+    th, td { padding: 11px 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: middle; }
+    th { background: #f8f9fa; color: #555; font-size: 13px; }
+    .state-cell { text-align: center; color: #888; padding: 22px 10px; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn {
+      padding: 9px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 13px;
+      transition: 0.2s;
+      color: #fff;
+      background: #34495e;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { opacity: 0.9; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-green { background: #27ae60; }
+    .btn-danger { background: #e74c3c; }
+    .btn-warn { background: #e67e22; }
+    .message { display: none; margin-top: 12px; font-size: 13px; line-height: 1.45; }
+    .message.show { display: block; }
+    .message.info { color: #666; }
+    .message.success { color: #247a3d; }
+    .message.error { color: #c0392b; }
+    .top-message { margin-bottom: 14px; }
+
+    @media (max-width: 720px) {
+      .header { padding: 14px 16px; align-items: flex-start; flex-direction: column; }
+      .main { margin: 18px auto; padding: 0 14px 28px; }
+      .section { padding: 18px 16px; }
+      .section-head { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <a href="/dashboard.html">← 대시보드로 돌아가기</a>
+  <h1>👥 기사 관리</h1>
+</div>
+
+<div class="main">
+  <div class="message top-message" id="page-message"></div>
+
+  <section class="section" aria-labelledby="pending-section-title">
+    <div class="section-head">
+      <div>
+        <h2 id="pending-section-title">승인 대기</h2>
+        <p class="section-sub">조직코드로 가입한 기사 계정을 승인하거나 거절합니다.</p>
+      </div>
+      <span class="badge" id="pending-count">0명</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>아이디</th><th>전화번호</th><th>조직코드</th><th>관리</th></tr>
+        </thead>
+        <tbody id="pending-list"></tbody>
+      </table>
+    </div>
+    <div class="message" id="pending-message"></div>
+  </section>
+
+  <section class="section" aria-labelledby="approved-section-title">
+    <div class="section-head">
+      <div>
+        <h2 id="approved-section-title">소속 기사</h2>
+        <p class="section-sub">현재 조직에 소속된 기사 계정을 관리합니다.</p>
+      </div>
+      <span class="badge" id="approved-count">0명</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>아이디</th><th>전화번호</th><th>관리</th></tr>
+        </thead>
+        <tbody id="approved-list"></tbody>
+      </table>
+    </div>
+    <div class="message" id="approved-message"></div>
+  </section>
+</div>
+
+<script>
+  async function initDriversPage() {
+    try {
+      const user = await loadCurrentUser();
+      if (!requireAdmin(user)) return;
+      await loadDriverManagementData();
+    } catch (e) {
+      console.error('기사 관리 페이지 초기화 오류:', e);
+      showMessage('page-message', e.message || '기사 관리 정보를 불러오지 못했습니다.', 'error');
+    }
+  }
+
+  async function loadCurrentUser() {
+    const response = await fetch(`${API}/auth/me`, { headers: authHeaders() });
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new Error('로그인이 필요합니다.');
+    }
+    if (!response.ok) throw new Error(await parseErrorMessage(response, '계정 정보를 불러오지 못했습니다.'));
+    return response.json();
+  }
+
+  function requireAdmin(user) {
+    if (!user || user.role !== 'admin') {
+      showMessage('page-message', '관리자 계정만 기사 관리 페이지에 접근할 수 있습니다.', 'error');
+      setTimeout(() => {
+        location.href = user && user.role === 'driver' ? '/driver.html' : '/login.html';
+      }, 800);
+      return false;
+    }
+    return true;
+  }
+
+  async function loadDriverManagementData() {
+    await Promise.all([loadPendingDrivers(), loadApprovedDrivers()]);
+  }
+
+  async function loadPendingDrivers() {
+    setTableLoading('pending-list', 4);
+    showMessage('pending-message', '', 'info');
+    try {
+      const response = await fetch(`${API}/users?role=pending`, { headers: authHeaders() });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '승인 대기 목록을 불러오지 못했습니다.'));
+      renderPendingDrivers(await response.json());
+    } catch (e) {
+      setTableEmpty('pending-list', 4, '승인 대기 목록을 불러오지 못했습니다.');
+      showMessage('pending-message', e.message || '승인 대기 목록을 불러오지 못했습니다.', 'error');
+      document.getElementById('pending-count').textContent = '0명';
+    }
+  }
+
+  async function loadApprovedDrivers() {
+    setTableLoading('approved-list', 3);
+    showMessage('approved-message', '', 'info');
+    try {
+      const response = await fetch(`${API}/users?role=driver`, { headers: authHeaders() });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '소속 기사 목록을 불러오지 못했습니다.'));
+      renderApprovedDrivers(await response.json());
+    } catch (e) {
+      setTableEmpty('approved-list', 3, '소속 기사 목록을 불러오지 못했습니다.');
+      showMessage('approved-message', e.message || '소속 기사 목록을 불러오지 못했습니다.', 'error');
+      document.getElementById('approved-count').textContent = '0명';
+    }
+  }
+
+  function renderPendingDrivers(users) {
+    document.getElementById('pending-count').textContent = `${users.length}명`;
+    if (!users.length) {
+      setTableEmpty('pending-list', 4, '승인 대기 기사가 없습니다.');
+      return;
+    }
+    document.getElementById('pending-list').innerHTML = users.map(user => `
+      <tr>
+        <td><strong>${escapeHtml(user.username)}</strong></td>
+        <td>${escapeHtml(user.phone || '-')}</td>
+        <td>${escapeHtml(user.org_code || '-')}</td>
+        <td>
+          <div class="actions">
+            <button class="btn btn-green" type="button" onclick="approveDriver('${escapeHtml(user.id)}')">승인</button>
+            <button class="btn btn-danger" type="button" onclick="rejectDriver('${escapeHtml(user.id)}')">거절</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function renderApprovedDrivers(users) {
+    document.getElementById('approved-count').textContent = `${users.length}명`;
+    if (!users.length) {
+      setTableEmpty('approved-list', 3, '소속 기사가 없습니다.');
+      return;
+    }
+    document.getElementById('approved-list').innerHTML = users.map(user => `
+      <tr>
+        <td><strong>${escapeHtml(user.username)}</strong></td>
+        <td>${escapeHtml(user.phone || '-')}</td>
+        <td>
+          <div class="actions">
+            <button class="btn btn-warn" type="button" onclick="removeDriver('${escapeHtml(user.id)}')">탈퇴</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  async function approveDriver(userId) {
+    if (!confirm('이 기사를 승인하시겠습니까?')) return;
+    showMessage('pending-message', '기사를 승인하는 중입니다.', 'info');
+    try {
+      const response = await fetch(`${API}/auth/approve/${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '기사 승인에 실패했습니다.'));
+      showMessage('pending-message', '기사가 승인됐습니다.', 'success');
+      await loadDriverManagementData();
+    } catch (e) {
+      showMessage('pending-message', e.message || '기사 승인에 실패했습니다.', 'error');
+    }
+  }
+
+  async function rejectDriver(userId) {
+    if (!confirm('이 가입 요청을 거절하시겠습니까?\n계정은 삭제되며 되돌릴 수 없습니다.')) return;
+    await deleteUser(userId, '가입 요청을 거절했습니다.');
+    await loadPendingDrivers();
+  }
+
+  async function removeDriver(userId) {
+    if (!confirm('이 기사를 탈퇴 처리하시겠습니까?\n계정은 삭제되며 되돌릴 수 없습니다.')) return;
+    await deleteUser(userId, '기사를 탈퇴 처리했습니다.');
+    await loadApprovedDrivers();
+  }
+
+  async function deleteUser(userId, successMessage) {
+    showMessage('page-message', '계정을 삭제하는 중입니다.', 'info');
+    try {
+      const response = await fetch(`${API}/users/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '계정 삭제에 실패했습니다.'));
+      showMessage('page-message', successMessage, 'success');
+    } catch (e) {
+      showMessage('page-message', e.message || '계정 삭제에 실패했습니다.', 'error');
+      throw e;
+    }
+  }
+
+  function setTableLoading(tbodyId, colspan, message = '로딩 중...') {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td class="state-cell" colspan="${colspan}">${escapeHtml(message)}</td></tr>`;
+  }
+
+  function setTableEmpty(tbodyId, colspan, message) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td class="state-cell" colspan="${colspan}">${escapeHtml(message)}</td></tr>`;
+  }
+
+  function showMessage(targetId, message, type = 'info') {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    el.textContent = message || '';
+    el.className = `message ${type} ${message ? 'show' : ''}`;
+  }
+
+  async function parseErrorMessage(response, fallback) {
+    try {
+      const data = await response.json();
+      if (typeof data.detail === 'string') return data.detail;
+      if (data.detail) return JSON.stringify(data.detail);
+      if (data.message) return data.message;
+    } catch (_) {}
+    return fallback;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
+  }
+
+  document.addEventListener('DOMContentLoaded', initDriversPage);
+</script>
+</body>
+</html>

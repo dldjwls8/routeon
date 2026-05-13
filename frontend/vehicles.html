@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 차량 관리</title>
+  <script>
+    const API = 'http://168.138.45.63:8000';
+
+    function getToken() {
+      return localStorage.getItem('token');
+    }
+
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
+    }
+
+    function redirectToLogin() {
+      location.href = '/login.html';
+    }
+
+    if (!getToken()) redirectToLogin();
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', sans-serif; background: #f4f7f6; min-height: 100vh; color: #333; }
+
+    .header {
+      background: #fff;
+      border-bottom: 2px solid #FFE812;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .header a {
+      text-decoration: none;
+      color: #555;
+      font-size: 14px;
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      transition: 0.2s;
+    }
+    .header a:hover { background: #f0f0f0; }
+    .header h1 { font-size: 20px; color: #333; }
+
+    .main { max-width: 1040px; margin: 28px auto; padding: 0 20px 40px; }
+    .section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 22px 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      margin-bottom: 18px;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .section h2 { font-size: 17px; color: #333; }
+    .section-sub { font-size: 12px; color: #888; margin-top: 4px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 12px;
+      padding: 4px 9px;
+      background: #f1f3f5;
+      color: #777;
+      font-size: 12px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .field label { display: block; font-size: 13px; color: #555; font-weight: bold; margin-bottom: 7px; }
+    .required { color: #c0392b; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      min-width: 0;
+    }
+    input:focus { outline: none; border-color: #FFE812; box-shadow: 0 0 0 2px rgba(255,232,18,0.25); }
+    .form-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 820px; }
+    th, td { padding: 11px 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: middle; }
+    th { background: #f8f9fa; color: #555; font-size: 13px; }
+    .state-cell { text-align: center; color: #888; padding: 22px 10px; }
+    .btn {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: 0.2s;
+      color: #fff;
+      background: #34495e;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { opacity: 0.9; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-blue { background: #2980b9; }
+    .btn-danger { background: #e74c3c; padding: 8px 11px; font-size: 13px; }
+    .message { display: none; margin-top: 12px; font-size: 13px; line-height: 1.45; }
+    .message.show { display: block; }
+    .message.info { color: #666; }
+    .message.success { color: #247a3d; }
+    .message.error { color: #c0392b; }
+    .top-message { margin-bottom: 14px; }
+
+    @media (max-width: 720px) {
+      .header { padding: 14px 16px; align-items: flex-start; flex-direction: column; }
+      .main { margin: 18px auto; padding: 0 14px 28px; }
+      .section { padding: 18px 16px; }
+      .section-head { align-items: flex-start; flex-direction: column; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-actions { display: block; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <a href="/dashboard.html">← 대시보드로 돌아가기</a>
+  <h1>🚗 차량 관리</h1>
+</div>
+
+<div class="main">
+  <div class="message top-message" id="page-message"></div>
+
+  <section class="section" aria-labelledby="vehicle-form-title">
+    <div class="section-head">
+      <div>
+        <h2 id="vehicle-form-title">차량 등록</h2>
+        <p class="section-sub">운행 생성에 사용할 차량의 기본 제원을 등록합니다.</p>
+      </div>
+    </div>
+    <form id="vehicle-form">
+      <div class="form-grid">
+        <div class="field">
+          <label for="plate-number">번호판 <span class="required">*</span></label>
+          <input id="plate-number" name="plate_number" type="text" autocomplete="off" placeholder="예) 12가 3456">
+        </div>
+        <div class="field">
+          <label for="vehicle-type">차종 <span class="required">*</span></label>
+          <input id="vehicle-type" name="vehicle_type" type="text" autocomplete="off" placeholder="예) 5톤카고">
+        </div>
+        <div class="field">
+          <label for="weight-kg">총중량 kg <span class="required">*</span></label>
+          <input id="weight-kg" name="weight_kg" type="number" min="0" step="0.1" placeholder="예) 10000">
+        </div>
+        <div class="field">
+          <label for="height-m">높이 m <span class="required">*</span></label>
+          <input id="height-m" name="height_m" type="number" min="0" step="0.01" placeholder="예) 3.5">
+        </div>
+        <div class="field">
+          <label for="length-cm">길이 cm</label>
+          <input id="length-cm" name="length_cm" type="number" min="0" step="0.1" placeholder="선택">
+        </div>
+        <div class="field">
+          <label for="width-cm">폭 cm</label>
+          <input id="width-cm" name="width_cm" type="number" min="0" step="0.1" placeholder="선택">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-blue" id="register-vehicle-btn" type="submit">차량 등록</button>
+      </div>
+    </form>
+    <div class="message" id="form-message"></div>
+  </section>
+
+  <section class="section" aria-labelledby="vehicle-list-title">
+    <div class="section-head">
+      <div>
+        <h2 id="vehicle-list-title">등록된 차량</h2>
+        <p class="section-sub">현재 등록된 차량 목록입니다.</p>
+      </div>
+      <span class="badge" id="vehicle-count">0대</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>번호판</th><th>차종</th><th>총중량</th><th>높이</th><th>길이</th><th>폭</th><th>관리</th></tr>
+        </thead>
+        <tbody id="vehicle-list"></tbody>
+      </table>
+    </div>
+    <div class="message" id="list-message"></div>
+  </section>
+</div>
+
+<script>
+  async function initVehiclesPage() {
+    try {
+      const user = await loadCurrentUser();
+      if (!requireAdmin(user)) return;
+      document.getElementById('vehicle-form').addEventListener('submit', registerVehicle);
+      await loadVehicles();
+    } catch (e) {
+      console.error('차량 관리 페이지 초기화 오류:', e);
+      showMessage('page-message', e.message || '차량 관리 정보를 불러오지 못했습니다.', 'error');
+    }
+  }
+
+  async function loadCurrentUser() {
+    const response = await fetch(`${API}/auth/me`, { headers: authHeaders() });
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new Error('로그인이 필요합니다.');
+    }
+    if (!response.ok) throw new Error(await parseErrorMessage(response, '계정 정보를 불러오지 못했습니다.'));
+    return response.json();
+  }
+
+  function requireAdmin(user) {
+    if (!user || user.role !== 'admin') {
+      showMessage('page-message', '관리자 계정만 차량 관리 페이지에 접근할 수 있습니다.', 'error');
+      setTimeout(() => {
+        location.href = user && user.role === 'driver' ? '/driver.html' : '/login.html';
+      }, 800);
+      return false;
+    }
+    return true;
+  }
+
+  async function loadVehicles() {
+    setTableLoading('vehicle-list', 7);
+    showMessage('list-message', '', 'info');
+    try {
+      const response = await fetch(`${API}/vehicles`, { headers: authHeaders() });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '차량 목록을 불러오지 못했습니다.'));
+      renderVehicles(await response.json());
+    } catch (e) {
+      setTableEmpty('vehicle-list', 7, '차량 목록을 불러오지 못했습니다.');
+      showMessage('list-message', e.message || '차량 목록을 불러오지 못했습니다.', 'error');
+      document.getElementById('vehicle-count').textContent = '0대';
+    }
+  }
+
+  function renderVehicles(vehicles) {
+    document.getElementById('vehicle-count').textContent = `${vehicles.length}대`;
+    if (!vehicles.length) {
+      setTableEmpty('vehicle-list', 7, '등록된 차량이 없습니다.');
+      return;
+    }
+    document.getElementById('vehicle-list').innerHTML = vehicles.map(vehicle => `
+      <tr>
+        <td><strong>${escapeHtml(vehicle.plate_number)}</strong></td>
+        <td>${escapeHtml(vehicle.vehicle_type)}</td>
+        <td>${formatNumber(vehicle.weight_kg, 'kg')}</td>
+        <td>${formatNumber(vehicle.height_m, 'm')}</td>
+        <td>${formatNumber(vehicle.length_cm, 'cm')}</td>
+        <td>${formatNumber(vehicle.width_cm, 'cm')}</td>
+        <td><button class="btn btn-danger" type="button" onclick="deleteVehicle('${escapeHtml(vehicle.id)}')">삭제</button></td>
+      </tr>
+    `).join('');
+  }
+
+  async function registerVehicle(event) {
+    event.preventDefault();
+    const payload = buildVehiclePayload();
+    const validationMessage = validateVehiclePayload(payload);
+    if (validationMessage) {
+      showMessage('form-message', validationMessage, 'error');
+      return;
+    }
+
+    setLoading('register-vehicle-btn', true);
+    showMessage('form-message', '차량을 등록하는 중입니다.', 'info');
+    try {
+      const response = await fetch(`${API}/vehicles`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '차량 등록에 실패했습니다.'));
+      resetVehicleForm();
+      showMessage('form-message', '차량이 등록됐습니다.', 'success');
+      await loadVehicles();
+    } catch (e) {
+      showMessage('form-message', e.message || '차량 등록에 실패했습니다.', 'error');
+    } finally {
+      setLoading('register-vehicle-btn', false);
+    }
+  }
+
+  function buildVehiclePayload() {
+    const weightValue = getInputValue('weight-kg');
+    const heightValue = getInputValue('height-m');
+    const payload = {
+      plate_number: getInputValue('plate-number'),
+      vehicle_type: getInputValue('vehicle-type'),
+      weight_kg: weightValue ? Number(weightValue) : NaN,
+      height_m: heightValue ? Number(heightValue) : NaN,
+    };
+
+    const lengthCm = getOptionalNumber('length-cm');
+    const widthCm = getOptionalNumber('width-cm');
+    if (lengthCm !== null) payload.length_cm = lengthCm;
+    if (widthCm !== null) payload.width_cm = widthCm;
+    return payload;
+  }
+
+  function validateVehiclePayload(payload) {
+    if (!payload.plate_number) return '번호판을 입력해주세요.';
+    if (!payload.vehicle_type) return '차종을 입력해주세요.';
+    const numericFields = [
+      ['weight_kg', payload.weight_kg, '총중량'],
+      ['height_m', payload.height_m, '높이'],
+      ['length_cm', payload.length_cm, '길이'],
+      ['width_cm', payload.width_cm, '폭'],
+    ];
+    for (const [, value, label] of numericFields) {
+      if (value === undefined) continue;
+      if (!Number.isFinite(value)) return `${label}에는 숫자를 입력해주세요.`;
+      if (value <= 0) return `${label}에는 0보다 큰 값을 입력해주세요.`;
+    }
+    return '';
+  }
+
+  async function deleteVehicle(vehicleId) {
+    if (!confirm('이 차량을 삭제하시겠습니까?')) return;
+    const button = document.activeElement && document.activeElement.tagName === 'BUTTON' ? document.activeElement : null;
+    setLoading(button, true);
+    showMessage('list-message', '차량을 삭제하는 중입니다.', 'info');
+    try {
+      const response = await fetch(`${API}/vehicles/${encodeURIComponent(vehicleId)}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (response.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '차량 삭제에 실패했습니다.'));
+      showMessage('list-message', '차량이 삭제됐습니다.', 'success');
+      await loadVehicles();
+    } catch (e) {
+      showMessage('list-message', e.message || '차량 삭제에 실패했습니다.', 'error');
+    } finally {
+      setLoading(button, false);
+    }
+  }
+
+  function resetVehicleForm() {
+    document.getElementById('vehicle-form').reset();
+  }
+
+  function getInputValue(id) {
+    return document.getElementById(id).value.trim();
+  }
+
+  function getOptionalNumber(id) {
+    const value = getInputValue(id);
+    return value ? Number(value) : null;
+  }
+
+  function setLoading(buttonOrId, isLoading) {
+    const button = typeof buttonOrId === 'string' ? document.getElementById(buttonOrId) : buttonOrId;
+    if (!button) return;
+    if (isLoading) {
+      button.dataset.originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = '처리 중...';
+      return;
+    }
+    button.disabled = false;
+    if (button.dataset.originalText) button.textContent = button.dataset.originalText;
+  }
+
+  function setTableLoading(tbodyId, colspan, message = '로딩 중...') {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td class="state-cell" colspan="${colspan}">${escapeHtml(message)}</td></tr>`;
+  }
+
+  function setTableEmpty(tbodyId, colspan, message) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td class="state-cell" colspan="${colspan}">${escapeHtml(message)}</td></tr>`;
+  }
+
+  function showMessage(targetId, message, type = 'info') {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    el.textContent = message || '';
+    el.className = `message ${type} ${message ? 'show' : ''}`;
+  }
+
+  async function parseErrorMessage(response, fallback) {
+    try {
+      const data = await response.json();
+      if (typeof data.detail === 'string') return data.detail;
+      if (data.detail) return JSON.stringify(data.detail);
+      if (data.message) return data.message;
+    } catch (_) {}
+    return fallback;
+  }
+
+  function formatNumber(value, suffix = '') {
+    if (value === null || value === undefined || value === '') return '-';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '-';
+    return `${number.toLocaleString()}${suffix}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
+  }
+
+  document.addEventListener('DOMContentLoaded', initVehiclesPage);
+</script>
+</body>
+</html>
