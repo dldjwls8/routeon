@@ -446,7 +446,8 @@
     let map;
     let markers = {};
     let currentDriverId = null;
-    let driverPolylines     = {};  // driver_id → [kakao.maps.Polyline, ...]
+    let driverPolylines      = {};  // driver_id → [passedPolyline, remainingPolyline]
+    let driverPolylinePoints = {};  // driver_id → [{lat, lon}, ...]
     let driverRouteMarkers  = {};  // driver_id → [CustomOverlay, ...]
 
     const DRIVER_COLORS = [
@@ -765,14 +766,14 @@
         showDriverRouteMarkers(id);
 
         // 경로 전체가 보이도록 지도 범위 조정
-        const pl = driverPolylines[id];
-        if (pl) {
-          const path = pl.getPath();
-          if (path.length > 0) {
-            const bounds = new kakao.maps.LatLngBounds();
-            path.forEach(p => bounds.extend(p));
-            map.setBounds(bounds, 80);
-          }
+        const plArray = driverPolylines[id];
+        if (plArray && plArray.length > 0) {
+          const bounds = new kakao.maps.LatLngBounds();
+          let hasPoints = false;
+          plArray.forEach(pl => {
+            pl.getPath().forEach(p => { bounds.extend(p); hasPoints = true; });
+          });
+          if (hasPoints) map.setBounds(bounds, 80);
         }
       } else {
         resetPolylineHighlight();
@@ -815,34 +816,29 @@
     }
 
     // 구간 출발 노드 타입에 따른 색상 결정
-    function _segmentColor(fromNode) {
-      if (!fromNode) return '#95a5a6';
-      if (fromNode.type === 'origin')    return '#27ae60';
-      if (fromNode.type === 'rest_stop') return '#8e44ad';
-      if (fromNode.type === 'waypoint')
-        return fromNode.node_type === 'loading' ? '#e67e22' : '#2980b9';
-      return '#95a5a6';
+    // 폴리라인 좌표 배열에서 (lat, lon)에 가장 가까운 인덱스 반환
+    function _findNearestIdx(polyline, lat, lon) {
+      let best = 0, min = Infinity;
+      for (let i = 0; i < polyline.length; i++) {
+        const d = (polyline[i].lat - lat) ** 2 + (polyline[i].lon - lon) ** 2;
+        if (d < min) { min = d; best = i; }
+      }
+      return best;
     }
 
-    // 폴리라인 좌표를 노드 기준으로 구간 분리
-    function _splitPolyline(polyline, nodes) {
-      if (polyline.length < 2 || nodes.length < 2) return [];
-      const dist2 = (a, b) => (a.lat - b.lat) ** 2 + (a.lon - b.lon) ** 2;
-      const indices = [];
-      let from = 0;
-      for (const node of nodes) {
-        let best = from, min = Infinity;
-        for (let j = from; j < polyline.length; j++) {
-          const d = dist2(polyline[j], node);
-          if (d < min) { min = d; best = j; }
-        }
-        indices.push(best);
-        from = best;
-      }
-      return nodes.slice(0, -1).map((n, i) => ({
-        fromNode: n,
-        points: polyline.slice(indices[i], indices[i + 1] + 1),
-      }));
+    // 현재 위치 기준으로 passed/remaining setPath 갱신
+    function splitPolylineAtPosition(driverId, lat, lon) {
+      const points = driverPolylinePoints[driverId];
+      const pls    = driverPolylines[driverId];
+      if (!points || !pls || pls.length < 2) return;
+
+      const idx     = _findNearestIdx(points, lat, lon);
+      const allPath = points.map(p => new kakao.maps.LatLng(p.lat, p.lon));
+      const passed  = allPath.slice(0, idx + 1);
+      const remain  = allPath.slice(idx);
+
+      if (passed.length > 1) pls[0].setPath(passed);
+      if (remain.length > 1) pls[1].setPath(remain);
     }
 
     // 특정 기사의 경로선 + 노드 마커 제거
@@ -850,6 +846,7 @@
       hideNodePopup();
       (driverPolylines[driverId] || []).forEach(pl => pl.setMap(null));
       delete driverPolylines[driverId];
+      delete driverPolylinePoints[driverId];
       (driverRouteMarkers[driverId] || []).forEach(m => m.setMap(null));
       delete driverRouteMarkers[driverId];
     }
@@ -858,7 +855,8 @@
     function clearAllRoutes() {
       hideNodePopup();
       Object.values(driverPolylines).forEach(pls => pls.forEach(pl => pl.setMap(null)));
-      driverPolylines = {};
+      driverPolylines      = {};
+      driverPolylinePoints = {};
       Object.values(driverRouteMarkers).forEach(arr => arr.forEach(m => m.setMap(null)));
       driverRouteMarkers = {};
     }
@@ -867,18 +865,17 @@
     function highlightDriver(driverId) {
       Object.entries(driverPolylines).forEach(([id, pls]) => {
         const focused = id === driverId;
-        pls.forEach(pl => pl.setOptions({
-          strokeWeight:  focused ? 6 : 3,
-          strokeOpacity: focused ? 0.95 : 0.2,
-        }));
+        if (pls[0]) pls[0].setOptions({ strokeWeight: focused ? 4 : 2,  strokeOpacity: focused ? 0.3  : 0.1  });
+        if (pls[1]) pls[1].setOptions({ strokeWeight: focused ? 6 : 3,  strokeOpacity: focused ? 1.0  : 0.2  });
       });
     }
 
     // 모든 폴리라인 동등하게 표시 (선택 해제 시)
     function resetPolylineHighlight() {
-      Object.values(driverPolylines).forEach(pls =>
-        pls.forEach(pl => pl.setOptions({ strokeWeight: 5, strokeOpacity: 0.75 }))
-      );
+      Object.values(driverPolylines).forEach(pls => {
+        if (pls[0]) pls[0].setOptions({ strokeWeight: 4, strokeOpacity: 0.25 });
+        if (pls[1]) pls[1].setOptions({ strokeWeight: 5, strokeOpacity: 0.85 });
+      });
     }
 
     // 기사별 경로선 + 노드 마커 그리기
@@ -889,16 +886,34 @@
       if (!res.ok) return;
       const data = await res.json();
 
-      if (data.polyline && data.polyline.length > 1 && data.nodes) {
-        const segments = _splitPolyline(data.polyline, data.nodes);
-        driverPolylines[driverId] = segments.map(seg => new kakao.maps.Polyline({
-          path:          seg.points.map(p => new kakao.maps.LatLng(p.lat, p.lon)),
-          strokeWeight:  5,
-          strokeColor:   _segmentColor(seg.fromNode),
-          strokeOpacity: 0.75,
-          strokeStyle:   'solid',
-          map,
-        }));
+      if (data.polyline && data.polyline.length > 1) {
+        driverPolylinePoints[driverId] = data.polyline;
+
+        // 현재 위치로 지나온 구간 계산
+        let splitIdx = 0;
+        try {
+          const locRes = await fetch(`${API}/location-logs/${driverId}`, { headers: authHeaders() });
+          if (locRes.ok) {
+            const loc = await locRes.json();
+            splitIdx = _findNearestIdx(data.polyline, loc.lat, loc.lon);
+          }
+        } catch (e) {}
+
+        const allPath   = data.polyline.map(p => new kakao.maps.LatLng(p.lat, p.lon));
+        const passed    = allPath.slice(0, splitIdx + 1);
+        const remaining = allPath.slice(splitIdx);
+
+        const passedPl = new kakao.maps.Polyline({
+          path: passed.length > 1 ? passed : allPath.slice(0, 1),
+          strokeWeight: 4, strokeColor: color, strokeOpacity: 0.25,
+          strokeStyle: 'solid', map,
+        });
+        const remainingPl = new kakao.maps.Polyline({
+          path: remaining.length > 1 ? remaining : allPath,
+          strokeWeight: 5, strokeColor: color, strokeOpacity: 0.85,
+          strokeStyle: 'solid', map,
+        });
+        driverPolylines[driverId] = [passedPl, remainingPl];
       } else {
         driverPolylines[driverId] = [];
       }
@@ -1896,6 +1911,9 @@
         // 기존 마커 위치 업데이트
         markers[user_id].setPosition(position);
       }
+
+      // 폴리라인 지나온/남은 구간 갱신
+      splitPolylineAtPosition(user_id, lat, lon);
 
       // 현재 선택된 기사면 지도도 이동
       if (currentDriverId === user_id) {

@@ -182,7 +182,15 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 기사 카드 클릭
 → GET /trips?driver_id={id}&status=in_progress
 → GET /trips/{id}/polyline → 카카오 모빌리티 실제 도로 좌표
-→ 카카오맵에 파란 경로선 + 노드 마커(🏁📦☕🏴) 표시
+→ 카카오맵에 기사별 고유 색상 경로선 + 노드 마커(🏁📦☕🏴) 표시
+
+경로선 분리 (기사 색상 유지, opacity로 구분):
+  passed    — 기사가 지나온 구간, opacity 0.25 (흐림)
+  remaining — 남은 구간, opacity 0.85 (선명)
+
+GPS 수신(POST /location-logs → WS broadcast)마다 splitPolylineAtPosition()으로
+setPath()를 사용해 기존 Polyline 객체 재활용 (재생성 없음)
+driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 ```
 
 ### Trip status 값
@@ -367,7 +375,7 @@ broadcast_replan_to_org(org_id, data) → driver에게만 전송
 - [x] WS 버그 수정 — driver 403, 20초 끊김 (heartbeat + uvicorn ping + nginx timeout)
 - [x] 상차지 인근 기사 확인 — GET /nearby-drivers (Redis 위치 기준, 반경 필터, 거리순 정렬)
 - [x] 관리자 프리셋 — GET/POST/DELETE /presets, 대시보드 불러오기·저장·삭제 UI
-- [x] 폴리라인 구간별 색상 — 노드 타입별 분리 (출발 초록·상차 주황·하차 파랑·휴게 보라)
+- [x] 폴리라인 개선 — 기사별 단일 색상 + 지나온 구간 실시간 투명화 (GPS 수신마다 setPath 재분할)
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [ ] 긴급 경유지 추가 type=unloading 기본값 E2E 검증
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
