@@ -140,7 +140,7 @@
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider {
       position: absolute;
-      cursor: not-allowed;
+      cursor: pointer;
       inset: 0;
       background: #d8dde2;
       transition: 0.2s;
@@ -158,6 +158,8 @@
       border-radius: 50%;
       box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
+    .switch input:checked + .slider { background: #3b82f6; }
+    .switch input:checked + .slider:before { transform: translateX(24px); }
     .top-message { margin-bottom: 14px; }
 
     @media (max-width: 720px) {
@@ -237,18 +239,18 @@
         <h2 id="ops-section-title">운영 설정</h2>
         <p class="section-sub">운영 관련 옵션을 관리합니다.</p>
       </div>
-      <span class="badge">준비 중</span>
     </div>
     <div class="toggle-row">
       <div>
         <div class="toggle-label">기사 자동승인</div>
-        <div class="toggle-desc">기능 준비 중으로 현재는 변경할 수 없습니다.</div>
+        <div class="toggle-desc">켜면 조직코드로 가입한 기사가 승인 절차 없이 즉시 활성화됩니다.</div>
       </div>
-      <label class="switch" title="준비 중">
-        <input id="auto-approve-toggle" type="checkbox" disabled>
+      <label class="switch">
+        <input id="auto-approve-toggle" type="checkbox">
         <span class="slider"></span>
       </label>
     </div>
+    <div class="message" id="ops-message"></div>
   </section>
 </div>
 
@@ -313,6 +315,23 @@
     document.getElementById('reissue-org-code-btn').disabled = false;
     document.getElementById('update-phone-btn').disabled = false;
     document.getElementById('update-password-btn').disabled = false;
+    document.getElementById('auto-approve-toggle').checked = !!org.auto_approve_drivers;
+  }
+
+  async function toggleAutoApprove(enabled) {
+    try {
+      const response = await fetch(`${API}/organizations/me/settings`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ auto_approve_drivers: enabled }),
+      });
+      if (response.status === 401) { redirectToLogin(); return; }
+      if (!response.ok) throw new Error(await parseErrorMessage(response, '설정 변경에 실패했습니다.'));
+      showMessage('ops-message', `기사 자동승인이 ${enabled ? '활성화' : '비활성화'}됐습니다.`, 'success');
+    } catch (e) {
+      showMessage('ops-message', e.message || '설정 변경에 실패했습니다.', 'error');
+      document.getElementById('auto-approve-toggle').checked = !enabled;
+    }
   }
 
   async function copyOrgCode() {
@@ -496,6 +515,7 @@
   document.getElementById('reissue-org-code-btn').addEventListener('click', reissueOrgCode);
   document.getElementById('phone-form').addEventListener('submit', updatePhone);
   document.getElementById('password-form').addEventListener('submit', updatePassword);
+  document.getElementById('auto-approve-toggle').addEventListener('change', e => toggleAutoApprove(e.target.checked));
   document.addEventListener('DOMContentLoaded', initSettingsPage);
 </script>
 </body>

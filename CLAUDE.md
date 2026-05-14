@@ -271,9 +271,10 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
 | `POST /organizations` | 없음 | 기업 등록 + 관리자 계정 생성 (사업자서류 첨부 필수) |
-| `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 조회 |
+| `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 + `auto_approve_drivers` 조회 |
 | `POST /organizations/regen-code` | 관리자 | 조직코드 재발급 |
 | `GET /organizations/lookup?org_code=` | 없음 | 조직코드로 기업명 조회 |
+| `PATCH /organizations/me/settings` | 관리자 | 운영 설정 변경 `{auto_approve_drivers: bool}` |
 
 ### 슈퍼 관리자 (superadmin)
 | 엔드포인트 | 권한 | 설명 |
@@ -351,7 +352,7 @@ settings.html 구조 (관리자 전용):
 - 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
 - 섹션 ①: 조직코드 관리 — `GET /organizations/me` 조회, 복사(clipboard/fallback), `POST /organizations/regen-code` 재발급
 - 섹션 ②: 계정 정보 — `GET /auth/me`로 초기값 채움, 전화번호·비밀번호 변경 `PATCH /auth/me`
-- 섹션 ③: 운영 설정 — 기사 자동승인 토글 (disabled, "준비 중" 뱃지, API 호출 없음)
+- 섹션 ③: 운영 설정 — 기사 자동승인 토글 (`PATCH /organizations/me/settings` 호출, DB 반영, 초기값 OFF)
 - dashboard.html 좌측 하단 ⚙️ 버튼 → `/settings.html` 이동
 
 drivers.html 구조 (관리자 전용):
@@ -445,9 +446,14 @@ dashboard.html 채팅 알림 WS:
 - [x] 기사·차량 관리 페이지 분리 — drivers.html, vehicles.html 신규 생성 및 대시보드 모달 제거
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [ ] 긴급 배차 개선 — 상차지(type=loading) 추가 지원 (현재는 하차지만 가능, 관리자 웹 UI + PATCH /trips/{id}/waypoints 모두 수정 필요)
+- [ ] 기사·차량 운행 생성 테스트 하네스 — 운행 생성·최적화·완료 흐름 자동 검증 (백엔드 통합 테스트)
+- [ ] 통계 강화 — 기사별 운행 시간·거리 추이 그래프, 차량별 가동률, 기간 비교, CSV 내보내기
+- [ ] 운행 자동 배차 — 관리자가 상하차지 세트 N개를 입력하면 현재 가용 기사들에게 최적 분배 후 일괄 운행 생성 (OR-Tools 활용)
+- [ ] 기사·차량 교체 — 운행 도중 기사 또는 차량에 문제 발생 시 다른 기사/차량으로 교체하거나 잔여 짐을 다른 운행으로 이관하는 기능
+- [ ] 기사 배차 취소 요청 — 기사 앱에서 배차 취소 요청 전송, 관리자 웹에서 승인/거절 처리
+- [ ] 예상 운행 완료 시간 — 경로 최적화 결과의 estimated_duration_min을 기반으로 출발 시각 + 경과 시간을 계산해 운행 종료 예상 시각 표시 (대시보드 기사 카드 및 기사 패널)
+- [ ] 기사 현재 위치 경로 진행도 UI — 대시보드 기사 패널 수직 경로 목록(상차지·하차지·휴게소) 옆에 기사의 현재 GPS 위치를 폴리라인 전체 누적 거리에 투영해 수직 타임라인 위의 정확한 비율 위치에 인디케이터 표시 (노드 간 비례 거리 계산, 완료 노드 체크·현재 구간 하이라이트)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
-- [ ] 상차지 인근 기사 확인 기능
-- [ ] 관리자 프리셋 기능 (상차지/하차지 조합 저장)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
 - [ ] 카카오톡 알림 (배차·경유지 추가·완료 등)

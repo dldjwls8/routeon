@@ -649,7 +649,7 @@
         card.onclick = () => showDriverDetail(d.id);
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong style="font-size:15px; color:#333;">${d.username} 기사</strong>
+            <strong style="font-size:15px; color:#333;">${d.name || d.username} 기사</strong>
             <div style="display:flex; align-items:center; gap:6px;">
               <span class="chat-unread" id="chat-unread-${d.id}">${driverUnreadCounts[d.id] || 0}</span>
               <button class="card-chat-btn" title="채팅 열기">💬</button>

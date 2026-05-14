@@ -265,7 +265,7 @@
     function renderList(filter = '') {
       const box = document.getElementById('conv-list');
       const lf  = filter.toLowerCase();
-      const items = allPartners.filter(p => !lf || p.username.toLowerCase().includes(lf));
+      const items = allPartners.filter(p => !lf || (p.name || p.username).toLowerCase().includes(lf));
 
       if (!items.length) {
         box.innerHTML = `<div class="conv-empty">${filter ? '검색 결과 없음' : '채팅 가능한 상대가 없습니다'}</div>`;
@@ -294,9 +294,9 @@
         }
         return `
           <div class="conv-item ${active}" onclick="selectPartner('${p.id}')">
-            <div class="conv-avatar">${escHtml(p.username[0].toUpperCase())}</div>
+            <div class="conv-avatar">${escHtml((p.name || p.username)[0].toUpperCase())}</div>
             <div class="conv-info">
-              <div class="conv-name">${escHtml(p.username)}</div>
+              <div class="conv-name">${escHtml(p.name || p.username)}</div>
               <div class="conv-preview">${preview}</div>
             </div>
             <div class="conv-meta">
@@ -334,6 +334,11 @@
       messages = [];
       await fetchMessages(conv.id);
       await markRead();
+      if (partner?.role === 'driver') {
+        await loadDriverTripStatus(partnerId);
+      } else {
+        setSubStatus('연결됨');
+      }
     }
 
     function openInDashboard(driverId) {
@@ -341,7 +346,7 @@
     }
 
     function renderChatMain(partner) {
-      const name      = partner?.username || '상대방';
+      const name      = partner?.name || partner?.username || '상대방';
       const isDriver  = partner?.role === 'driver';
       document.getElementById('chat-main').innerHTML = `
         <div class="chat-main-header">
@@ -366,6 +371,25 @@
 
     const setSubStatus = msg => { const el = document.getElementById('driver-sub'); if (el) el.textContent = msg; };
 
+    async function loadDriverTripStatus(driverId) {
+      try {
+        const r = await fetch(`${API}/trips?driver_id=${driverId}`, { headers: authHdrs() });
+        if (!r.ok) { setSubStatus('연결됨'); return; }
+        const trips = await r.json();
+        const trip = trips.find(t => ['scheduled', 'in_progress'].includes(t.status)) || null;
+        if (!trip) {
+          setSubStatus('🕐 배차 없음');
+          return;
+        }
+        const dest = trip.dest_name
+          ? trip.dest_name
+          : `상차 ${trip.loading_count || 0}건 · 하차 ${trip.unloading_count || 0}건`;
+        setSubStatus(trip.status === 'in_progress' ? `🚛 운행 중 · ${dest}` : `📋 배차됨 · ${dest}`);
+      } catch (_) {
+        setSubStatus('연결됨');
+      }
+    }
+
     // ────────────────────────────────────────────────
     // 메시지 로드 / 렌더
     // ────────────────────────────────────────────────
@@ -382,7 +406,6 @@
         messages = fetched;
         renderMessages(false);
       }
-      setSubStatus('연결됨');
     }
 
     function renderMessages(prepend = false) {

@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy import select, or_, func, cast, Float
+from sqlalchemy import select, or_, func, cast, Float, update, delete
 from pydantic import BaseModel
 
 from database import get_db, init_db
@@ -202,7 +202,8 @@ class RegisterRequest(BaseModel):
     username: str
     password: str
     phone:    str
-    org_code: str   # 기사/관리자 추가 가입 시 조직코드 입력
+    org_code: str              # 기사/관리자 추가 가입 시 조직코드 입력
+    name:     str
     role: str = "driver"
 
 class LoginRequest(BaseModel):
@@ -262,9 +263,10 @@ def _conversation_schema(
         "admin_id": str(conversation.admin_id),
         "driver_id": str(conversation.driver_id),
         "partner": {
-            "id": str(partner_id),
+            "id":       str(partner_id),
             "username": getattr(partner, "username", None),
-            "role": partner_role.value,
+            "name":     getattr(partner, "name", None),
+            "role":     partner_role.value,
         },
         "unread_count": unread_count,
         "last_message": _message_schema(last_message) if last_message else None,
@@ -591,11 +593,41 @@ async def get_trips(
 async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
                 current_user: User = Depends(require_admin)):
     import uuid as uuid_lib
+    # 기사 검증
+    try:
+        driver_uuid = uuid_lib.UUID(req.driver_id)
+    except ValueError:
+        raise HTTPException(400, "유효하지 않은 driver_id 형식입니다.")
+    driver = (await db.execute(select(User).where(User.id == driver_uuid))).scalar_one_or_none()
+    if not driver:
+        raise HTTPException(404, "기사를 찾을 수 없습니다.")
+    if driver.role != UserRole.driver:
+        raise HTTPException(400, "지정한 사용자는 기사가 아닙니다.")
+    if driver.organization_id != current_user.organization_id:
+        raise HTTPException(403, "다른 조직의 기사에게 배차할 수 없습니다.")
+    # 중복 배차 검증
+    existing = (await db.execute(
+        select(Trip).where(
+            Trip.driver_id == driver_uuid,
+            Trip.status.in_([TripStatus.scheduled, TripStatus.in_progress]),
+        )
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(409, "해당 기사에게 이미 진행 중인 배차가 있습니다.")
+    # 차량 검증
+    if req.vehicle_id is not None:
+        vehicle = (await db.execute(
+            select(Vehicle).where(Vehicle.id == req.vehicle_id)
+        )).scalar_one_or_none()
+        if not vehicle:
+            raise HTTPException(404, "차량을 찾을 수 없습니다.")
+        if not vehicle.is_active:
+            raise HTTPException(400, "비활성화된 차량입니다.")
     waypoints_json = [w.model_dump() for w in req.waypoints] if req.waypoints else []
     if not waypoints_json:
         raise HTTPException(400, "상차지 또는 하차지를 1개 이상 입력해주세요.")
     t = Trip(
-        driver_id=uuid_lib.UUID(req.driver_id), vehicle_id=req.vehicle_id,
+        driver_id=driver_uuid, vehicle_id=req.vehicle_id,
         dest_name=req.dest_name, dest_lat=req.dest_lat, dest_lon=req.dest_lon,
         waypoints=waypoints_json, departure_time=req.departure_time,
         vehicle_height_m=req.vehicle_height_m, vehicle_weight_kg=req.vehicle_weight_kg,
@@ -1387,10 +1419,34 @@ async def get_my_organization(
     if not org:
         raise HTTPException(404, "기업을 찾을 수 없습니다.")
     return {
-        "id":       org.id,
-        "name":     org.name,
-        "org_code": org.org_code,
+        "id":                   org.id,
+        "name":                 org.name,
+        "org_code":             org.org_code,
+        "auto_approve_drivers": org.auto_approve_drivers,
     }
+
+
+@app.patch("/organizations/me/settings")
+async def update_org_settings(
+    req: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """관리자: 기업 운영 설정 변경 (현재: 기사 자동승인 on/off)"""
+    if not current_user.organization_id:
+        raise HTTPException(404, "소속 기업이 없습니다.")
+    _r = await db.execute(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )
+    org = _r.scalar_one_or_none()
+    if not org:
+        raise HTTPException(404, "기업을 찾을 수 없습니다.")
+
+    if "auto_approve_drivers" in req:
+        org.auto_approve_drivers = bool(req["auto_approve_drivers"])
+
+    await db.commit()
+    return {"auto_approve_drivers": org.auto_approve_drivers}
 
 
 @app.post("/organizations/regen-code")
@@ -1494,12 +1550,18 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if _r.scalar_one_or_none():
         raise HTTPException(409, f"이미 존재하는 아이디입니다: {req.username}")
 
-    actual_role = UserRole.admin if req.role == "admin" else UserRole.pending
+    if req.role == "admin":
+        actual_role = UserRole.admin
+    elif org.auto_approve_drivers:
+        actual_role = UserRole.driver
+    else:
+        actual_role = UserRole.pending
 
     user = User(
         username        = req.username,
         password_hash   = hash_password(req.password),
         role            = actual_role,
+        name            = req.name,
         phone           = req.phone,
         organization_id = org.id,
     )
@@ -1510,6 +1572,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return {
         "id":         str(user.id),
         "username":   user.username,
+        "name":       user.name,
         "role":       user.role,
         "org_name":   org.name,
         "created_at": user.created_at,
@@ -1578,6 +1641,7 @@ async def me(current_user: User = Depends(get_current_user)):
     return {
         "id":       str(current_user.id),
         "username": current_user.username,
+        "name":     current_user.name,
         "role":     current_user.role,
         "phone":    current_user.phone,
         "org_code": current_user.license_number,
@@ -1847,11 +1911,12 @@ async def get_users(
     users = _r.scalars().all()
     return [
         {
-            "id":       str(u.id),
-            "username": u.username,
-            "role":     u.role,
-            "phone":    u.phone,
-            "org_code": None,  # organization 기반으로 변경됨
+            "id":         str(u.id),
+            "username":   u.username,
+            "name":       u.name,
+            "role":       u.role,
+            "phone":      u.phone,
+            "org_code":   None,
             "created_at": u.created_at.isoformat(),
         }
         for u in users
@@ -1864,7 +1929,7 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """관리자: 기사 계정 삭제"""
+    """관리자: 기사 계정 삭제 (연관 데이터 일괄 정리 후 삭제)"""
     import uuid as uuid_lib
     _r = await db.execute(select(User).where(User.id == uuid_lib.UUID(user_id)))
     user = _r.scalar_one_or_none()
@@ -1872,6 +1937,27 @@ async def delete_user(
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
     if str(user.id) == str(current_user.id):
         raise HTTPException(400, "자기 자신은 삭제할 수 없습니다.")
+
+    uid = user.id
+
+    # 1. 메시지 삭제 (sender_id = uid)
+    await db.execute(delete(Message).where(Message.sender_id == uid))
+    # 2. 대화방에 속한 나머지 메시지 삭제 후 대화방 삭제
+    conv_ids = (await db.execute(
+        select(Conversation.id).where(
+            or_(Conversation.driver_id == uid, Conversation.admin_id == uid)
+        )
+    )).scalars().all()
+    if conv_ids:
+        await db.execute(delete(Message).where(Message.conversation_id.in_(conv_ids)))
+        await db.execute(delete(Conversation).where(Conversation.id.in_(conv_ids)))
+    # 3. 배송 담당자 해제 (assigned_to nullable)
+    await db.execute(update(Delivery).where(Delivery.assigned_to == uid).values(assigned_to=None))
+    # 4. 운행 기록 삭제
+    await db.execute(delete(Trip).where(Trip.driver_id == uid))
+    # 5. GPS 로그 삭제
+    await db.execute(delete(Location).where(Location.user_id == uid))
+    # 6. 유저 삭제
     await db.delete(user)
     await db.commit()
 
@@ -2349,12 +2435,13 @@ async def nearby_drivers(
         if dist_km > radius_km:
             continue
         result.append({
-            "driver_id":  str(driver.id),
-            "username":   driver.username,
-            "lat":        dlat,
-            "lon":        dlon,
+            "driver_id":   str(driver.id),
+            "username":    driver.username,
+            "name":        driver.name,
+            "lat":         dlat,
+            "lon":         dlon,
             "distance_km": round(dist_km, 2),
-            "is_busy":    driver.id in busy_ids,
+            "is_busy":     driver.id in busy_ids,
         })
 
     result.sort(key=lambda x: x["distance_km"])
@@ -2473,13 +2560,14 @@ async def stats_by_driver(
         select(
             Trip.driver_id,
             User.username,
+            User.name,
             func.count().label("total"),
             func.count().filter(Trip.status == TripStatus.completed).label("completed"),
             func.coalesce(func.sum(dist_col), 0.0).label("total_dist"),
             func.coalesce(func.avg(dur_col),  0.0).label("avg_dur"),
         )
         .join(User, Trip.driver_id == User.id)
-        .group_by(Trip.driver_id, User.username)
+        .group_by(Trip.driver_id, User.username, User.name)
         .order_by(func.count().desc())
     )
     if driver_ids:
@@ -2492,6 +2580,7 @@ async def stats_by_driver(
         {
             "driver_id":         str(r.driver_id),
             "username":          r.username,
+            "name":              r.name,
             "total_trips":       int(r.total),
             "completed_trips":   int(r.completed or 0),
             "total_distance_km": round(float(r.total_dist or 0), 1),

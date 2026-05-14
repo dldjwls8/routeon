@@ -243,7 +243,7 @@
     }
     document.getElementById('pending-list').innerHTML = users.map(user => `
       <tr>
-        <td><strong>${escapeHtml(user.username)}</strong></td>
+        <td><strong>${escapeHtml(user.name || user.username)}</strong><br><small style="color:#94a3b8;font-size:11px;">${escapeHtml(user.username)}</small></td>
         <td>${escapeHtml(user.phone || '-')}</td>
         <td>${escapeHtml(user.org_code || '-')}</td>
         <td>
@@ -264,7 +264,7 @@
     }
     document.getElementById('approved-list').innerHTML = users.map(user => `
       <tr>
-        <td><strong>${escapeHtml(user.username)}</strong></td>
+        <td><strong>${escapeHtml(user.name || user.username)}</strong><br><small style="color:#94a3b8;font-size:11px;">${escapeHtml(user.username)}</small></td>
         <td>${escapeHtml(user.phone || '-')}</td>
         <td>
           <div class="actions">

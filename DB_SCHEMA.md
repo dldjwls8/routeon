@@ -34,6 +34,7 @@
 | `doc_path` | VARCHAR(512) | | 서버 저장 경로 (`backend/uploads/{id}/`) |
 | `reject_reason` | TEXT | | 반려 사유 |
 | `reviewed_at` | DATETIME | | 심사 완료 시각 |
+| `auto_approve_drivers` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사 자동승인 여부 — ON 시 가입 즉시 `driver` 역할 부여 (기본: 수동 승인) |
 | `created_at` | DATETIME | NOT NULL | |
 
 ---
@@ -45,6 +46,7 @@
 | `id` | UUID | PK | |
 | `username` | VARCHAR(50) | UNIQUE NOT NULL | 로그인 ID |
 | `password_hash` | VARCHAR(255) | NOT NULL | bcrypt 해시 |
+| `name` | VARCHAR(50) | | 실명 (기사 앱 가입 시 입력, 기존 계정은 NULL) |
 | `role` | userrole | NOT NULL DEFAULT 'driver' | `admin` / `driver` |
 | `email` | VARCHAR(255) | | 승인/반려 이메일 알림용 |
 | `phone` | VARCHAR(20) | | 연락처 |

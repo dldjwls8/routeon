@@ -67,9 +67,10 @@ class Organization(Base):
                            default=OrgStatus.pending_review)
     doc_filename  = Column(String(255))   # 업로드된 원본 파일명
     doc_path      = Column(String(512))   # 서버 저장 경로
-    reject_reason = Column(Text)          # 반려 사유
-    reviewed_at   = Column(DateTime)      # 심사 완료 시각
-    created_at    = Column(DateTime, default=datetime.utcnow, nullable=False)
+    reject_reason         = Column(Text)          # 반려 사유
+    reviewed_at           = Column(DateTime)      # 심사 완료 시각
+    auto_approve_drivers  = Column(Boolean, nullable=False, default=False)
+    created_at            = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     users = relationship("User", back_populates="organization")
 
@@ -84,6 +85,7 @@ class User(Base):
     username        = Column(String(50), unique=True, nullable=False, index=True)
     password_hash   = Column(String(255), nullable=False)
     role            = Column(SAEnum(UserRole), nullable=False, default=UserRole.driver)
+    name            = Column(String(50))
     email           = Column(String(255))
     phone           = Column(String(20))
     license_number  = Column(String(50))

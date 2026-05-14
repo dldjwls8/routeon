@@ -276,6 +276,114 @@
 
 ---
 
+## v0.9.3 (2026-05-13)
+
+### 폴리라인 개선 — 기사별 색상 + 지나온 구간 투명화
+
+**프론트엔드**
+- 폴리라인을 노드 타입별 구간 분리 → **기사별 단일 색상** 방식으로 전환
+- 기사 현재 위치 기준으로 경로를 **지나온 구간**(opacity 0.25, 가는 선)과 **남은 구간**(opacity 0.85, 굵은 선) 두 개로 분리
+- `driverPolylinePoints[id]`에 전체 폴리라인 좌표 저장 → GPS 수신마다 `setPath`로 재분할 (카카오맵 객체 재생성 없음)
+- `_findNearestIdx()` — 현재 위치에서 가장 가까운 폴리라인 포인트 인덱스 탐색
+- `splitPolylineAtPosition()` — passed/remaining `setPath` 갱신
+- `updateDriverMarker()` — GPS 수신 시 `splitPolylineAtPosition()` 호출하여 실시간 반영
+
+**버그 수정**
+- 기사 카드 클릭 시 운행 정보가 표시되지 않는 버그 수정
+  - `driverPolylines[id]`가 배열로 변경됐는데 `showDriverDetail`에서 단일 `Polyline.getPath()`를 호출해 `TypeError` 발생 → async 함수 중단으로 `trip-info-box` 미표시
+  - 배열 전체를 순회하여 `LatLngBounds` 계산하도록 수정
+
+---
+
+## v0.9.4 (2026-05-13)
+
+### 지도 UX 개선
+
+**프론트엔드**
+- 폴리라인 클릭 시 해당 기사 카드 자동 선택 + 우측 상세 패널 표시
+  - passed/remaining 두 Polyline 모두 `kakao.maps.event.addListener` click 등록
+  - `_polylineClicked` 플래그로 폴리라인 클릭 시 `onMapClick` 이벤트 중복 차단
+- 지도 클릭 팝업(검색 핀) 닫기 방법 추가
+  - 팝업 우상단 **X 버튼** 추가 (`hideSearchPin()` 호출)
+  - **ESC 키**로 팝업 닫기 (`keydown` 이벤트 전역 등록)
+
+---
+
+## v0.9.5 (2026-05-13)
+
+### 경로 최적화 휴식지 타입 제한
+
+**백엔드**
+- `/optimize`, `/optimize/replan` 휴식지 후보 쿼리를 `highway_rest`(고속도로 휴게소) 전용으로 변경
+  - 기존: `type != 'depot'` (졸음쉼터·공영차고지·물류단지 모두 포함)
+  - 변경: `type == 'highway_rest'` (75건만 사용)
+- candidates dict에 `type` 필드 추가 (선택 로직 우선순위 정상 동작)
+
+---
+
+## v0.9.6 (2026-05-13)
+
+### 경유지 노드 마커 UI 개선
+
+**프론트엔드**
+- 기사 카드 클릭 시 지도에 표시되는 노드 마커(출발·경유지·휴게소·도착) UI 변경
+  - 이름 텍스트 제거 → 이모지 아이콘만 표시 (hover 시 `title` 속성으로 이름 확인)
+  - 원형 → **드롭핀(물방울) 형태** 변경 (`border-radius: 50% 50% 50% 0` + `rotate(-45deg)`)
+  - 내부 아이콘은 반대 방향(`rotate(45deg)`)으로 보정해 정방향 유지
+  - `yAnchor` 1.5 → 1.2 조정으로 핀 끝이 좌표에 정확히 위치
+
+---
+
+## v0.9.7 (2026-05-13)
+
+### 버그 수정 + 마커 레이어 순서 명시
+
+**백엔드**
+- `asyncio` import 누락으로 `/ws/chat` WebSocket 연결 시 `NameError: name 'asyncio' is not defined` 발생하던 버그 수정
+
+**프론트엔드**
+- 마커 zIndex 명시로 겹침 순서 확정
+  - 노드 마커(경유지·출발·휴게소): `zIndex 5`
+  - 기사 위치 마커: `zIndex 10`
+  - 검색 핀 팝업: `zIndex 20` (기존 유지)
+
+---
+
+## v0.9.8 (2026-05-13)
+
+### 채팅 UI 분리 + 버그 수정
+
+**채팅 페이지 분리 (`frontend/chat.html` 신규)**
+- 대시보드 우측 패널의 채팅 박스 완전 제거
+- 별도 `chat.html` 페이지 생성 — 좌측 대화 목록 + 우측 메시지창 (카카오톡 PC 스타일)
+- 기사 카드에 💬 버튼 직접 추가 → 클릭 시 `chat.html?driver_id=xxx` 새 탭으로 바로 열기
+- `stopPropagation()` 처리로 기사 패널 열기와 채팅 열기 독립 동작
+- 대시보드에서 채팅 WS 연결 제거 (채팅 전용 페이지에서만 WS 유지)
+
+**채팅 버그 수정**
+- 한글 입력 시 메시지 중복 전송 수정 — `e.isComposing` 체크로 IME 조합 중 Enter 무시
+- 줄바꿈(Shift+Enter) 전송 시 공백으로 표시되는 문제 수정 — `white-space: pre-wrap` 적용
+
+---
+
+## v0.9.9 (2026-05-13)
+
+### 대시보드 실시간 반영 개선
+
+**백엔드**
+- `POST /optimize` 완료 시 관리자 WS에 `trip.started` 이벤트 브로드캐스트
+- `POST /optimize/replan` 완료 시 관리자 WS에 `trip.replanned` 이벤트 브로드캐스트
+
+**프론트엔드 (dashboard.html)**
+- 기사가 경로 최적화 완료 시 대시보드 즉시 반영 — 상태 배지 `출발대기→운행중`, 폴리라인 자동 표시
+- 기사가 재경로 완료 시 폴리라인 즉시 갱신 (`trip.replanned` 이벤트 처리)
+- 운행 완료/취소 시 지도 폴리라인 즉시 제거 (`clearDriverRoute()` 추가)
+- 기사 강퇴 후 기사 목록 즉시 갱신 (미구현 `openSettings()` 호출 버그 수정)
+- 배송 삭제 후 기사 카드 카운트 즉시 갱신 (`loadDrivers()` 추가)
+- GPS 수신 시 폴리라인 누락 방지 — `in_progress` 상태인데 폴리라인 없으면 자동 로드
+
+---
+
 ## v1.0.0 (2026-05-13)
 
 ### 기사·차량 관리 페이지 분리
@@ -312,111 +420,59 @@
 
 ---
 
-## v0.9.9 (2026-05-13)
+## v1.0.2 (2026-05-14)
 
-### 대시보드 실시간 반영 개선
-
-**백엔드**
-- `POST /optimize` 완료 시 관리자 WS에 `trip.started` 이벤트 브로드캐스트
-- `POST /optimize/replan` 완료 시 관리자 WS에 `trip.replanned` 이벤트 브로드캐스트
-
-**프론트엔드 (dashboard.html)**
-- 기사가 경로 최적화 완료 시 대시보드 즉시 반영 — 상태 배지 `출발대기→운행중`, 폴리라인 자동 표시
-- 기사가 재경로 완료 시 폴리라인 즉시 갱신 (`trip.replanned` 이벤트 처리)
-- 운행 완료/취소 시 지도 폴리라인 즉시 제거 (`clearDriverRoute()` 추가)
-- 기사 강퇴 후 기사 목록 즉시 갱신 (미구현 `openSettings()` 호출 버그 수정)
-- 배송 삭제 후 기사 카드 카운트 즉시 갱신 (`loadDrivers()` 추가)
-- GPS 수신 시 폴리라인 누락 방지 — `in_progress` 상태인데 폴리라인 없으면 자동 로드
-
----
-
-## v0.9.8 (2026-05-13)
-
-### 채팅 UI 분리 + 버그 수정
-
-**채팅 페이지 분리 (`frontend/chat.html` 신규)**
-- 대시보드 우측 패널의 채팅 박스 완전 제거
-- 별도 `chat.html` 페이지 생성 — 좌측 대화 목록 + 우측 메시지창 (카카오톡 PC 스타일)
-- 기사 카드에 💬 버튼 직접 추가 → 클릭 시 `chat.html?driver_id=xxx` 새 탭으로 바로 열기
-- `stopPropagation()` 처리로 기사 패널 열기와 채팅 열기 독립 동작
-- 대시보드에서 채팅 WS 연결 제거 (채팅 전용 페이지에서만 WS 유지)
-
-**채팅 버그 수정**
-- 한글 입력 시 메시지 중복 전송 수정 — `e.isComposing` 체크로 IME 조합 중 Enter 무시
-- 줄바꿈(Shift+Enter) 전송 시 공백으로 표시되는 문제 수정 — `white-space: pre-wrap` 적용
-
----
-
-## v0.9.3 (2026-05-13)
-
-### 폴리라인 개선 — 기사별 색상 + 지나온 구간 투명화
-
-**프론트엔드**
-- 폴리라인을 노드 타입별 구간 분리 → **기사별 단일 색상** 방식으로 전환
-- 기사 현재 위치 기준으로 경로를 **지나온 구간**(opacity 0.25, 가는 선)과 **남은 구간**(opacity 0.85, 굵은 선) 두 개로 분리
-- `driverPolylinePoints[id]`에 전체 폴리라인 좌표 저장 → GPS 수신마다 `setPath`로 재분할 (카카오맵 객체 재생성 없음)
-- `_findNearestIdx()` — 현재 위치에서 가장 가까운 폴리라인 포인트 인덱스 탐색
-- `splitPolylineAtPosition()` — passed/remaining `setPath` 갱신
-- `updateDriverMarker()` — GPS 수신 시 `splitPolylineAtPosition()` 호출하여 실시간 반영
-
-**버그 수정**
-- 기사 카드 클릭 시 운행 정보가 표시되지 않는 버그 수정
-  - `driverPolylines[id]`가 배열로 변경됐는데 `showDriverDetail`에서 단일 `Polyline.getPath()`를 호출해 `TypeError` 발생 → async 함수 중단으로 `trip-info-box` 미표시
-  - 배열 전체를 순회하여 `LatLngBounds` 계산하도록 수정
-
----
-
-## v0.9.7 (2026-05-13)
-
-### 버그 수정 + 마커 레이어 순서 명시
+### 기사 이름 필드 추가
 
 **백엔드**
-- `asyncio` import 누락으로 `/ws/chat` WebSocket 연결 시 `NameError: name 'asyncio' is not defined` 발생하던 버그 수정
+- `users` 테이블에 `name VARCHAR(50)` 컬럼 추가 (nullable, 기존 계정 NULL 유지)
+- `POST /auth/register` — `name` 필수 파라미터로 추가, User 생성 시 저장
+- `GET /auth/me`, `GET /users`, 채팅 파트너, 인근 기사, 기사별 통계 응답에 `name` 포함
 
 **프론트엔드**
-- 마커 zIndex 명시로 겹침 순서 확정
-  - 노드 마커(경유지·출발·휴게소): `zIndex 5`
-  - 기사 위치 마커: `zIndex 10`
-  - 검색 핀 팝업: `zIndex 20` (기존 유지)
+- `drivers.html`, `dashboard.html`, `chat.html` — `name || username` 폴백 패턴으로 표시
 
 ---
 
-## v0.9.6 (2026-05-13)
-
-### 경유지 노드 마커 UI 개선
-
-**프론트엔드**
-- 기사 카드 클릭 시 지도에 표시되는 노드 마커(출발·경유지·휴게소·도착) UI 변경
-  - 이름 텍스트 제거 → 이모지 아이콘만 표시 (hover 시 `title` 속성으로 이름 확인)
-  - 원형 → **드롭핀(물방울) 형태** 변경 (`border-radius: 50% 50% 50% 0` + `rotate(-45deg)`)
-  - 내부 아이콘은 반대 방향(`rotate(45deg)`)으로 보정해 정방향 유지
-  - `yAnchor` 1.5 → 1.2 조정으로 핀 끝이 좌표에 정확히 위치
-
----
-
-## v0.9.5 (2026-05-13)
-
-### 경로 최적화 휴식지 타입 제한
+### 기사 자동승인 기능 구현
 
 **백엔드**
-- `/optimize`, `/optimize/replan` 휴식지 후보 쿼리를 `highway_rest`(고속도로 휴게소) 전용으로 변경
-  - 기존: `type != 'depot'` (졸음쉼터·공영차고지·물류단지 모두 포함)
-  - 변경: `type == 'highway_rest'` (75건만 사용)
-- candidates dict에 `type` 필드 추가 (선택 로직 우선순위 정상 동작)
+- `organizations` 테이블에 `auto_approve_drivers BOOLEAN NOT NULL DEFAULT FALSE` 컬럼 추가
+- `POST /auth/register` — `org.auto_approve_drivers` ON 시 가입 즉시 `driver` 역할 부여 (기본: `pending`)
+- `PATCH /organizations/me/settings` 신규 — `{auto_approve_drivers: bool}` 토글 API
+- `GET /organizations/me` 응답에 `auto_approve_drivers` 포함
+
+**프론트엔드 (`frontend/settings.html`)**
+- 기사 자동승인 토글 정상 동작 — "준비 중" 뱃지 및 `disabled` 제거
+- 토글 변경 시 `PATCH /organizations/me/settings` 호출, 성공/실패 피드백 메시지 표시
+- CSS 수정: 토글 `cursor: pointer`, `input:checked` 상태 스타일 추가
 
 ---
 
-## v0.9.4 (2026-05-13)
+### 기사 탈퇴 FK 오류 수정
 
-### 지도 UX 개선
+**백엔드 (`DELETE /users/{user_id}`)**
+- 사용자 삭제 전 관련 레코드 순차 정리: 메시지 → 대화방 → 배송 담당자 NULL → 운행 → GPS 이력 → 사용자
+- PostgreSQL FK `NO ACTION` 제약으로 인한 삭제 오류 해소
 
-**프론트엔드**
-- 폴리라인 클릭 시 해당 기사 카드 자동 선택 + 우측 상세 패널 표시
-  - passed/remaining 두 Polyline 모두 `kakao.maps.event.addListener` click 등록
-  - `_polylineClicked` 플래그로 폴리라인 클릭 시 `onMapClick` 이벤트 중복 차단
-- 지도 클릭 팝업(검색 핀) 닫기 방법 추가
-  - 팝업 우상단 **X 버튼** 추가 (`hideSearchPin()` 호출)
-  - **ESC 키**로 팝업 닫기 (`keydown` 이벤트 전역 등록)
+---
+
+### 운행 생성 입력 검증 강화
+
+**백엔드 (`POST /trips`)**
+- `driver_id` UUID 형식 검증
+- 기사 존재 여부 및 `role=driver` 확인
+- 다른 조직 기사 배차 차단 (403)
+- 이미 `scheduled`/`in_progress` 운행이 있는 기사에 중복 배차 차단 (409)
+- `vehicle_id` 입력 시 존재 여부 및 `is_active` 확인
+
+---
+
+### 채팅 헤더 기사 운행 상태 표시
+
+**프론트엔드 (`frontend/chat.html`)**
+- 기사 선택 시 `GET /trips?driver_id=` 호출 → 현재 운행 상태를 채팅 헤더 서브타이틀에 표시
+- `🚛 운행 중 · {목적지}` / `📋 배차됨 · {목적지}` / `🕐 배차 없음` 3단계 표시
 
 ---
 
