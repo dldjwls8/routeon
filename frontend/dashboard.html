@@ -11,6 +11,28 @@
       return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
     }
 
+    // ETA 계산: started_at + estimated_duration_min → 예상 완료 시각
+    function calcETADate(trip) {
+      if (!trip || trip.status !== 'in_progress') return null;
+      const dur = trip.optimized_route?.estimated_duration_min;
+      if (!dur || !trip.started_at) return null;
+      return new Date(new Date(trip.started_at).getTime() + dur * 60 * 1000);
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    // 기사 카드용 한 줄 ETA 문자열
+    function formatCardETA(trip) {
+      const eta = calcETADate(trip);
+      if (!eta) return '';
+      const now = Date.now();
+      const diffMin = Math.round((eta - now) / 60000);
+      if (diffMin < 0) return `⏰ 예상 완료 ${formatTime(eta)} (초과 ${Math.abs(diffMin)}분)`;
+      return `⏰ 예상 완료 ${formatTime(eta)} (약 ${diffMin}분 남음)`;
+    }
+
     if (!getToken()) window.location.href = '/login.html';
   </script>
   <style>
@@ -340,7 +362,12 @@
         <strong style="color:#333;">🚛 현재 운행</strong>
         <span id="trip-status-badge" class="status-badge"></span>
       </div>
-      <small id="trip-dest-info" style="color:#666; display:block; margin-bottom:12px;"></small>
+      <small id="trip-dest-info" style="color:#666; display:block; margin-bottom:8px;"></small>
+      <div id="trip-eta-row" style="display:none; margin-bottom:12px; padding:8px 10px; background:#fff; border-radius:8px; border:1px solid #e8e8e8;">
+        <span style="font-size:12px; color:#888;">예상 완료</span>
+        <span id="trip-eta-time" style="font-size:14px; font-weight:700; color:#2c3e50; margin-left:8px;"></span>
+        <span id="trip-eta-remain" style="font-size:12px; color:#888; margin-left:6px;"></span>
+      </div>
       <div style="display:flex; gap:8px;">
         <button id="btn-trip-complete" class="btn" style="flex:1; background:#27ae60; font-size:13px; padding:8px;" onclick="completeTripCurrent()">✅ 운행 완료</button>
         <button id="btn-trip-cancel"   class="btn btn-delete" style="flex:1; font-size:13px; padding:8px;" onclick="cancelTripCurrent()">❌ 운행 취소</button>
@@ -665,6 +692,7 @@
                   : `🏗️ 상차 ${trip.loading_count||0}건 / 📦 하차 ${trip.unloading_count||0}건`)
               : '배차 없음'}
           </small>
+          ${isRunning ? `<small id="card-eta-${d.id}" style="color:#555; display:block; margin-top:3px; font-size:11px;">${formatCardETA(trip)}</small>` : ''}
         `;
         card.querySelector('.card-chat-btn').addEventListener('click', e => {
           e.stopPropagation();
@@ -761,6 +789,20 @@
           ? `목적지: ${trip.dest_name}`
           : `🏗️ 상차 ${trip.loading_count||0}건 / 📦 하차 ${trip.unloading_count||0}건`;
         tripInfoBox._tripId = trip.id;
+
+        // ETA 표시 (운행 중일 때만)
+        const etaRow = document.getElementById('trip-eta-row');
+        const etaDate = calcETADate(trip);
+        if (etaDate) {
+          const diffMin = Math.round((etaDate - Date.now()) / 60000);
+          document.getElementById('trip-eta-time').textContent = formatTime(etaDate);
+          document.getElementById('trip-eta-remain').textContent =
+            diffMin >= 0 ? `(약 ${diffMin}분 남음)` : `(${Math.abs(diffMin)}분 초과)`;
+          document.getElementById('trip-eta-remain').style.color = diffMin >= 0 ? '#888' : '#e74c3c';
+          etaRow.style.display = 'block';
+        } else {
+          etaRow.style.display = 'none';
+        }
 
         // 완료/취소된 운행은 버튼 숨기기
         const canAct = ['scheduled', 'in_progress'].includes(trip.status);
@@ -1452,6 +1494,27 @@
           connectLocationWebSocket();
           connectChatWebSocket();
           loadOrgName();
+
+          // ETA 1분 주기 갱신
+          setInterval(() => {
+            if (currentDriverId) {
+              const trip = tripsCache[currentDriverId];
+              const etaRow = document.getElementById('trip-eta-row');
+              const etaDate = calcETADate(trip);
+              if (etaRow && etaDate) {
+                const diffMin = Math.round((etaDate - Date.now()) / 60000);
+                document.getElementById('trip-eta-time').textContent = formatTime(etaDate);
+                document.getElementById('trip-eta-remain').textContent =
+                  diffMin >= 0 ? `(약 ${diffMin}분 남음)` : `(${Math.abs(diffMin)}분 초과)`;
+                document.getElementById('trip-eta-remain').style.color = diffMin >= 0 ? '#888' : '#e74c3c';
+              }
+            }
+            // 기사 카드 ETA 갱신
+            Object.entries(tripsCache).forEach(([drvId, trip]) => {
+              const el = document.getElementById(`card-eta-${drvId}`);
+              if (el && trip) el.textContent = formatCardETA(trip);
+            });
+          }, 60000);
         });
       };
       script.onerror = () => {

@@ -806,6 +806,8 @@ def _trip_schema(t: Trip) -> dict:
         "waypoints": wp, "optimized_route": t.optimized_route,
         "status": t.status, "departure_time": t.departure_time,
         "is_emergency": t.is_emergency, "created_at": t.created_at.isoformat(),
+        "started_at": t.started_at.isoformat() if t.started_at else None,
+        "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         "loading_count": loadings, "unloading_count": unloadings,
     }
 
