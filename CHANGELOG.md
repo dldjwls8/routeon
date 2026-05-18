@@ -476,6 +476,38 @@
 
 ---
 
+## v1.0.3 (2026-05-18)
+
+### 예상 운행 완료 시간(ETA) 표시
+
+**백엔드**
+- `_trip_schema`에 `started_at`, `completed_at` 필드 추가 (기존에 누락)
+
+**프론트엔드 (`frontend/dashboard.html`)**
+- `calcETADate(trip)` — `started_at` + `estimated_duration_min` → 완료 예상 `Date` 계산 (`in_progress` 아닌 경우 null)
+- `formatCardETA(trip)` — 기사 카드용 한 줄 문자열 `⏰ 예상 완료 HH:MM (약 N분 남음 / 초과 N분)`
+- 기사 카드: 운행 중일 때 ETA 한 줄 추가 표시
+- 기사 패널 trip-info-box: 목적지 아래 ETA 전용 행, 시간 초과 시 빨간 글씨
+- 1분 주기 `setInterval`로 패널·카드 남은 시간 자동 갱신
+
+---
+
+### 기사 현재 위치 경로 진행도 UI
+
+**프론트엔드 (`frontend/dashboard.html`)**
+- `haversineKm()` / `buildCumulativeDist()` — 폴리라인 좌표 배열 → 누적 거리(km) 계산
+- `getNodeRatios(nodes, points)` — 각 노드의 폴리라인 상 비율(0~1) 산출, 폴리라인 없으면 균등 배치
+- `getDriverRatio(driverId)` — `driverCurrentPositions`의 GPS 좌표 → 폴리라인 상 비율
+- `renderRouteNodes` 전면 재구현: 수직 타임라인 형태
+  - 구간 connector 높이를 실제 거리 비율에 비례 (44~140px 범위 제한)
+  - 🚚 인디케이터를 해당 connector 내 정확한 비율 위치에 표시
+  - 기사가 지나온 노드: 체크(✓) + dot 색상 채움 + 텍스트 dim (opacity 0.45)
+  - 지나온 구간 connector 색상도 해당 노드 색상으로 변경
+- `updateProgressIndicator(driverId)` — GPS 수신마다 패널 진행도만 재렌더링 (스크롤 위치 보존)
+- `driverCurrentPositions` 전역 객체: WS GPS 수신 + 패널 열기 시 `/location-logs/{id}` API 위치로 초기화
+
+---
+
 ## 예정 작업
 
 ### 진행 중 / 단기
