@@ -33,6 +33,53 @@
       return `⏰ 예상 완료 ${formatTime(eta)} (약 ${diffMin}분 남음)`;
     }
 
+    // ── 경로 진행도 계산 헬퍼 ─────────────────────────
+    function haversineKm(a, b) {
+      const R = 6371;
+      const dLat = (b.lat - a.lat) * Math.PI / 180;
+      const dLon = (b.lon - a.lon) * Math.PI / 180;
+      const x = Math.sin(dLat/2)**2 +
+        Math.cos(a.lat * Math.PI/180) * Math.cos(b.lat * Math.PI/180) * Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
+    // 폴리라인 좌표 배열 → 누적 거리(km) 배열
+    function buildCumulativeDist(points) {
+      const dists = [0];
+      for (let i = 1; i < points.length; i++) {
+        dists.push(dists[i - 1] + haversineKm(points[i - 1], points[i]));
+      }
+      return dists;
+    }
+
+    // 각 노드의 폴리라인 상 비율 (0~1) 배열
+    function getNodeRatios(nodes, points) {
+      if (!points || points.length < 2) {
+        return nodes.map((_, i) => i / Math.max(1, nodes.length - 1));
+      }
+      const cumDists = buildCumulativeDist(points);
+      const total = cumDists[cumDists.length - 1];
+      if (total === 0) return nodes.map((_, i) => i / Math.max(1, nodes.length - 1));
+      return nodes.map(n => {
+        if (n.lat == null || n.lon == null) return -1;
+        const idx = _findNearestIdx(points, n.lat, n.lon);
+        return cumDists[idx] / total;
+      });
+    }
+
+    // 기사의 현재 폴리라인 상 비율 (0~1), 없으면 -1
+    function getDriverRatio(driverId) {
+      const pos = driverCurrentPositions[driverId];
+      if (!pos) return -1;
+      const points = driverPolylinePoints[driverId];
+      if (!points || points.length < 2) return -1;
+      const cumDists = buildCumulativeDist(points);
+      const total = cumDists[cumDists.length - 1];
+      if (total === 0) return -1;
+      const idx = _findNearestIdx(points, pos.lat, pos.lon);
+      return cumDists[idx] / total;
+    }
+
     if (!getToken()) window.location.href = '/login.html';
   </script>
   <style>
@@ -443,6 +490,7 @@
     let driverUnreadCounts = {};
     let convDriverMap = {};  // conversation_id → driver_id
     let currentUserId = null;
+    let driverCurrentPositions = {};  // driver_id → {lat, lon}
 
     // ── 기능 전역 상태 ────────────────────────────────
     let _acCoords    = {};   // inputId → {lat, lon}  자동완성 선택 좌표
@@ -739,6 +787,7 @@
         const locRes = await fetch(`${API}/location-logs/${id}`, { headers: authHeaders() });
         if (locRes.ok) {
           const loc = await locRes.json();
+          driverCurrentPositions[id] = { lat: loc.lat, lon: loc.lon };
           map.panTo(new kakao.maps.LatLng(loc.lat, loc.lon));
         }
       } catch(e) {}
@@ -1001,12 +1050,11 @@
       box.style.display = 'block';
 
       const nodeIcons = {
-        origin:      { icon: '🏁', color: '#27ae60', label: '출발' },
+        origin:      { icon: '🏁', color: '#27ae60', label: '출발지' },
         waypoint:    { icon: '📦', color: '#e67e22', label: '경유' },
-        rest_stop:   { icon: '☕', color: '#8e44ad', label: '휴게' },
+        rest_stop:   { icon: '☕', color: '#8e44ad', label: '휴게소' },
         destination: { icon: '🏴', color: '#e74c3c', label: '목적지' },
       };
-      // 상차지/하차지 아이콘 오버라이드
       function _nodeIcon(n) {
         if (n.type === 'waypoint') {
           return n.node_type === 'loading'
@@ -1016,14 +1064,12 @@
         return nodeIcons[n.type] || { icon: '📍', color: '#555', label: '' };
       }
 
-      // optimized_route가 있으면 전체 노드, 없으면 waypoints만 표시 (dest 없을 수 있음)
       let nodes = [];
       if (trip.optimized_route?.route) {
         nodes = trip.optimized_route.route;
       } else {
         const wpNodes = (trip.waypoints || []).map(w => ({
-          type: 'waypoint',
-          node_type: w.type || 'unloading',
+          type: 'waypoint', node_type: w.type || 'unloading',
           name: w.name, lat: w.lat, lon: w.lon,
         }));
         nodes = trip.dest_name
@@ -1036,20 +1082,92 @@
         return;
       }
 
-      list.innerHTML = nodes.map((n, i) => {
-        const meta = _nodeIcon(n);
-        const rest = n.min_rest_minutes ? `<span style="font-size:11px; color:#8e44ad; margin-left:6px;">(${n.min_rest_minutes}분 휴식)</span>` : '';
-        return `
-          <div style="display:flex; align-items:center; gap:10px; padding:9px 12px;
-                      background:#fff; border:1px solid #eee; border-radius:8px; margin-bottom:6px;">
-            <span style="font-size:18px;">${meta.icon}</span>
-            <div style="flex:1;">
-              <span style="font-size:14px; font-weight:600; color:#333;">${n.name}</span>${rest}
-              <small style="display:block; color:#aaa; font-size:11px;">${meta.label}</small>
+      const isRunning = trip.status === 'in_progress';
+      const points    = isRunning ? (driverPolylinePoints[currentDriverId] || null) : null;
+      const nodeRatios  = getNodeRatios(nodes, points);
+      const driverRatio = isRunning ? getDriverRatio(currentDriverId) : -1;
+
+      // 인디케이터가 속한 구간 (segment index, 0 = 노드0~노드1 사이)
+      let indSeg = -1, indPct = 0;
+      if (driverRatio >= 0) {
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const r0 = nodeRatios[i] >= 0 ? nodeRatios[i] : 0;
+          const r1 = nodeRatios[i + 1] >= 0 ? nodeRatios[i + 1] : 1;
+          if (driverRatio >= r0 && driverRatio <= r1) {
+            indSeg = i;
+            indPct = r1 > r0 ? (driverRatio - r0) / (r1 - r0) : 0;
+            break;
+          }
+        }
+        // 마지막 노드 이후면 마지막 구간 끝에 표시
+        if (indSeg < 0) { indSeg = nodes.length - 2; indPct = 1; }
+      }
+
+      // connector 높이: 실제 거리 비율을 반영하되 min/max 제한
+      const SCALE = 400;
+      function connH(i) {
+        const r0 = nodeRatios[i] >= 0 ? nodeRatios[i] : 0;
+        const r1 = nodeRatios[i + 1] >= 0 ? nodeRatios[i + 1] : 1;
+        return Math.max(44, Math.min(140, (r1 - r0) * SCALE));
+      }
+
+      const scrollTop = list.scrollTop;
+      let html = '';
+
+      nodes.forEach((n, i) => {
+        const meta   = _nodeIcon(n);
+        const isDone = driverRatio >= 0 && nodeRatios[i] >= 0 && driverRatio > nodeRatios[i];
+        const rest   = n.min_rest_minutes
+          ? `<span style="font-size:11px; color:#8e44ad; margin-left:6px;">(${n.min_rest_minutes}분 휴식)</span>` : '';
+
+        const dotBg     = isDone ? meta.color : '#fff';
+        const dotBorder = isDone ? meta.color : '#d0d0d0';
+        const textOpacity = isDone ? '0.45' : '1';
+
+        html += `
+          <div style="display:flex; align-items:center; gap:10px; position:relative; z-index:2;">
+            <div style="width:32px; height:32px; border-radius:50%;
+                        background:${dotBg}; border:2px solid ${dotBorder};
+                        display:flex; align-items:center; justify-content:center;
+                        font-size:${isDone ? '14' : '16'}px; flex-shrink:0;
+                        box-shadow:${isDone ? '0 0 0 3px ' + meta.color + '28' : 'none'};">
+              ${isDone ? '✓' : meta.icon}
             </div>
-            ${i < nodes.length - 1 ? '' : ''}
+            <div style="opacity:${textOpacity};">
+              <div style="font-size:14px; font-weight:600; color:#333;">${n.name}${rest}</div>
+              <div style="font-size:11px; color:#aaa;">${meta.label}</div>
+            </div>
           </div>`;
-      }).join('');
+
+        // 노드 사이 connector (마지막 제외)
+        if (i < nodes.length - 1) {
+          const h          = connH(i);
+          const lineColor  = isDone ? meta.color + 'aa' : '#e0e0e0';
+          const hasInd     = isRunning && indSeg === i;
+          const indTop     = Math.round(indPct * h);
+
+          html += `
+            <div style="position:relative; height:${h}px; margin-left:15px; margin-right:auto;">
+              <div style="position:absolute; left:0; top:0; bottom:0; width:2px;
+                          background:${lineColor}; border-radius:1px;"></div>
+              ${hasInd ? `
+              <div style="position:absolute; top:${indTop}px; left:-13px;
+                          transform:translateY(-50%); font-size:22px; z-index:10;
+                          filter:drop-shadow(0 1px 4px rgba(0,0,0,0.35));">🚚</div>` : ''}
+            </div>`;
+        }
+      });
+
+      list.innerHTML = html;
+      list.scrollTop = scrollTop;
+    }
+
+    // GPS 갱신마다 진행도 인디케이터만 업데이트
+    function updateProgressIndicator(driverId) {
+      if (!currentDriverId || driverId !== currentDriverId) return;
+      const trip = tripsCache[currentDriverId];
+      if (!trip || trip.status !== 'in_progress') return;
+      renderRouteNodes(trip);
     }
 
     async function renderNewTripSection(trip) {
@@ -1695,6 +1813,9 @@
       const { user_id, lat, lon } = data;
       if (!lat || !lon) return;
 
+      // 현재 위치 저장 (진행도 계산용)
+      driverCurrentPositions[user_id] = { lat, lon };
+
       const position = new kakao.maps.LatLng(lat, lon);
 
       if (!markers[user_id]) {
@@ -1732,6 +1853,9 @@
 
       // 폴리라인 지나온/남은 구간 갱신
       splitPolylineAtPosition(user_id, lat, lon);
+
+      // 경로 진행도 인디케이터 갱신
+      updateProgressIndicator(user_id);
 
       // 현재 선택된 기사면 지도도 이동
       if (currentDriverId === user_id) {
