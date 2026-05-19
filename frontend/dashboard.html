@@ -348,6 +348,72 @@
       border-top: 13px solid #fff;
       filter: drop-shadow(0 3px 2px rgba(0,0,0,0.1));
     }
+
+    /* ── 자동 배차 모달 ─────────────────────────── */
+    .ad-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      z-index: 9000; display: flex; align-items: center; justify-content: center;
+    }
+    .ad-modal {
+      background: #fff; border-radius: 14px; width: 540px; max-width: 96vw;
+      max-height: 88vh; display: flex; flex-direction: column;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.22);
+    }
+    .ad-modal-header {
+      padding: 16px 20px 12px; border-bottom: 1px solid #eee;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .ad-modal-header h3 { margin: 0; font-size: 16px; color: #333; }
+    .ad-modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .ad-modal-footer {
+      padding: 12px 20px; border-top: 1px solid #eee;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .ad-task-card {
+      border: 1px solid #e0e0e0; border-radius: 10px; padding: 12px 14px;
+      margin-bottom: 10px; background: #fafafa; position: relative;
+    }
+    .ad-task-title {
+      font-size: 12px; font-weight: 700; color: #666; margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .ad-task-remove {
+      background: none; border: none; cursor: pointer; color: #bbb; font-size: 16px; line-height: 1; padding: 0;
+    }
+    .ad-task-remove:hover { color: #e74c3c; }
+    .ad-field-label { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+    .ad-field-label.loading  { color: #e67e22; }
+    .ad-field-label.unloading { color: #2980b9; }
+    .ad-loc-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .ad-loc-row .ac-wrapper { flex: 1; }
+    .ad-loc-row input {
+      width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 12px; box-sizing: border-box; outline: none;
+    }
+    .ad-loc-row input:focus { border-color: #FFE812; }
+    .ad-loc-row .ad-loc-clear {
+      background: none; border: none; cursor: pointer; color: #ccc; font-size: 14px; padding: 4px; flex-shrink: 0;
+    }
+    .ad-loc-row .ad-loc-clear:hover { color: #e74c3c; }
+    .ad-add-unloading {
+      background: none; border: 1px dashed #2980b9; color: #2980b9; border-radius: 6px;
+      font-size: 11px; padding: 4px 10px; cursor: pointer; width: 100%; margin-top: 2px;
+    }
+    .ad-add-unloading:hover { background: #eaf4fb; }
+    .ad-info-box {
+      background: #f0f7ff; border: 1px solid #bee3f8; border-radius: 8px;
+      padding: 10px 14px; font-size: 12px; color: #2980b9; margin-bottom: 8px;
+    }
+    .ad-driver-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 20px;
+      padding: 3px 10px; font-size: 11px; font-weight: 600; color: #2e7d32; margin: 2px;
+      cursor: pointer;
+    }
+    .ad-driver-chip.busy {
+      background: #fafafa; border-color: #ddd; color: #aaa; cursor: default;
+    }
+    .ad-driver-chip.selected { background: #1976d2; border-color: #1565c0; color: #fff; }
   </style>
 </head>
 <body>
@@ -471,6 +537,7 @@
         <button class="btn btn-approve" onclick="createTripFromMap()" style="flex:1; font-size:14px;">✅ 운행 생성</button>
         <button onclick="savePreset()" style="padding:8px 12px; background:#6c757d; color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; white-space:nowrap;" title="현재 경유지를 프리셋으로 저장">💾 저장</button>
       </div>
+      <button onclick="openAutoDispatchModal()" style="margin-top:8px; width:100%; padding:8px; background:#4a90d9; color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; font-weight:600;">🚛 자동 배차 (일괄)</button>
     </div>
 
 
@@ -1915,6 +1982,299 @@
       if (currentDriverId === user_id) {
         map.panTo(position);
       }
+    }
+  </script>
+
+  <!-- 자동 배차 모달 -->
+  <div id="ad-overlay" class="ad-overlay" style="display:none;" onclick="if(event.target===this)closeAutoDispatchModal()">
+    <div class="ad-modal">
+      <div class="ad-modal-header">
+        <h3>🚛 자동 배차</h3>
+        <button onclick="closeAutoDispatchModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;line-height:1;">✕</button>
+      </div>
+      <div class="ad-modal-body">
+        <!-- 태스크 목록 -->
+        <div style="font-size:12px; font-weight:700; color:#555; margin-bottom:8px;">배송 태스크</div>
+        <div id="ad-task-list"></div>
+        <button onclick="addAdTask()" style="width:100%; padding:8px; background:#fff; border:1px dashed #aaa; border-radius:8px; font-size:12px; color:#666; cursor:pointer; margin-bottom:14px;">+ 태스크 추가</button>
+
+        <!-- 차량 / 출발 시각 -->
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <div style="flex:1;">
+            <div class="ad-field-label" style="color:#555;">차량 (선택)</div>
+            <select id="ad-vehicle" style="width:100%; padding:7px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px; background:#fff;">
+              <option value="">— 선택 안 함 —</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <div class="ad-field-label" style="color:#555;">출발 시각 (선택)</div>
+            <input type="datetime-local" id="ad-departure" style="width:100%; padding:7px 8px; border:1px solid #ddd; border-radius:6px; font-size:12px; box-sizing:border-box;">
+          </div>
+        </div>
+
+        <!-- 가용 기사 -->
+        <div style="font-size:12px; font-weight:700; color:#555; margin-bottom:6px;">가용 기사 <span id="ad-driver-count" style="color:#2980b9;"></span></div>
+        <div id="ad-driver-chips" style="margin-bottom:4px;"></div>
+        <div id="ad-driver-hint" style="font-size:11px; color:#999; margin-bottom:10px;">클릭해 배차 대상 기사를 선택/해제하세요. 체크 안 하면 전체 가용 기사에게 배분합니다.</div>
+
+        <!-- 분배 미리보기 -->
+        <div id="ad-preview" class="ad-info-box" style="display:none;"></div>
+      </div>
+      <div class="ad-modal-footer">
+        <button onclick="runAutoDispatch()" style="width:100%; padding:10px; background:#27ae60; color:#fff; border:none; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;">🚛 배차 실행</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ════════════════════════════════════════════════
+    // 자동 배차 모달
+    // ════════════════════════════════════════════════
+    let adTasks = [];       // [{loading:{name,lat,lon}|null, unloadings:[{name,lat,lon},...]}]
+    let adDrivers = [];     // GET /drivers/available 결과
+    let adSelectedDriverIds = new Set();
+
+    async function openAutoDispatchModal() {
+      adTasks = [];
+      adSelectedDriverIds = new Set();
+      addAdTask();  // 기본 태스크 1개
+      document.getElementById('ad-overlay').style.display = 'flex';
+
+      // 차량 목록 로드
+      const vSel = document.getElementById('ad-vehicle');
+      vSel.innerHTML = '<option value="">— 선택 안 함 —</option>';
+      try {
+        const vRes = await fetch(`${API}/vehicles`, { headers: authHeaders() });
+        const vehicles = vRes.ok ? await vRes.json() : [];
+        vehicles.forEach(v => {
+          vSel.innerHTML += `<option value="${v.id}">${v.plate_number} (${v.vehicle_type})</option>`;
+        });
+      } catch(e) {}
+
+      // 가용 기사 로드
+      await loadAdDrivers();
+      renderAdDriverChips();
+      updateAdPreview();
+    }
+
+    function closeAutoDispatchModal() {
+      document.getElementById('ad-overlay').style.display = 'none';
+    }
+
+    async function loadAdDrivers() {
+      try {
+        const res = await fetch(`${API}/drivers/available`, { headers: authHeaders() });
+        adDrivers = res.ok ? await res.json() : [];
+      } catch(e) { adDrivers = []; }
+      const cnt = adDrivers.filter(d => d.available).length;
+      document.getElementById('ad-driver-count').textContent = `(가용 ${cnt}명 / 전체 ${adDrivers.length}명)`;
+    }
+
+    function renderAdDriverChips() {
+      const el = document.getElementById('ad-driver-chips');
+      if (!adDrivers.length) { el.innerHTML = '<span style="font-size:12px;color:#aaa;">기사가 없습니다.</span>'; return; }
+      el.innerHTML = adDrivers.map(d => {
+        const busy = !d.available;
+        const sel  = adSelectedDriverIds.has(d.id);
+        return `<span class="ad-driver-chip ${busy ? 'busy' : ''} ${sel ? 'selected' : ''}"
+          onclick="${busy ? '' : `toggleAdDriver('${d.id}')`}">
+          ${d.name}${busy ? ' (운행중)' : ''}
+        </span>`;
+      }).join('');
+    }
+
+    function toggleAdDriver(id) {
+      if (adSelectedDriverIds.has(id)) adSelectedDriverIds.delete(id);
+      else adSelectedDriverIds.add(id);
+      renderAdDriverChips();
+      updateAdPreview();
+    }
+
+    function updateAdPreview() {
+      const box = document.getElementById('ad-preview');
+      const taskCount = adTasks.length;
+      const available = adDrivers.filter(d => d.available);
+      const targetDrivers = adSelectedDriverIds.size > 0
+        ? available.filter(d => adSelectedDriverIds.has(d.id))
+        : available;
+      const driverCount = targetDrivers.length;
+      if (!taskCount || !driverCount) { box.style.display = 'none'; return; }
+      const perDriver = Math.ceil(taskCount / driverCount);
+      box.style.display = 'block';
+      box.textContent = `태스크 ${taskCount}개 → 기사 ${driverCount}명에게 분배 (기사당 최대 ${perDriver}개)`;
+    }
+
+    function addAdTask() {
+      adTasks.push({ loading: null, unloadings: [null] });
+      renderAdTasks();
+    }
+
+    function removeAdTask(idx) {
+      adTasks.splice(idx, 1);
+      renderAdTasks();
+      updateAdPreview();
+    }
+
+    function addAdUnloading(taskIdx) {
+      adTasks[taskIdx].unloadings.push(null);
+      renderAdTasks();
+    }
+
+    function removeAdUnloading(taskIdx, ulIdx) {
+      adTasks[taskIdx].unloadings.splice(ulIdx, 1);
+      if (!adTasks[taskIdx].unloadings.length) adTasks[taskIdx].unloadings.push(null);
+      renderAdTasks();
+    }
+
+    function renderAdTasks() {
+      const list = document.getElementById('ad-task-list');
+      list.innerHTML = adTasks.map((task, ti) => `
+        <div class="ad-task-card">
+          <div class="ad-task-title">
+            <span>태스크 ${ti + 1}</span>
+            <button class="ad-task-remove" onclick="removeAdTask(${ti})">✕</button>
+          </div>
+          <div class="ad-field-label loading">🏗️ 상차지</div>
+          <div class="ad-loc-row">
+            <div class="ac-wrapper" style="flex:1;">
+              <input id="ad-t${ti}-loading" type="text" placeholder="장소 검색..." autocomplete="off"
+                value="${task.loading ? escapeHtml(task.loading.name) : ''}"
+                oninput="adSearch(event,'t${ti}-loading','loading',${ti},-1)"
+                onfocus="adSearch(event,'t${ti}-loading','loading',${ti},-1)">
+              <div class="ac-dropdown" id="ac-ad-t${ti}-loading"></div>
+            </div>
+            <button class="ad-loc-clear" onclick="adClearLoc(${ti},'loading',-1)" title="지우기">✕</button>
+          </div>
+          <div class="ad-field-label unloading" style="margin-top:6px;">📦 하차지</div>
+          ${task.unloadings.map((u, ui) => `
+            <div class="ad-loc-row">
+              <div class="ac-wrapper" style="flex:1;">
+                <input id="ad-t${ti}-ul${ui}" type="text" placeholder="장소 검색..." autocomplete="off"
+                  value="${u ? escapeHtml(u.name) : ''}"
+                  oninput="adSearch(event,'t${ti}-ul${ui}','unloading',${ti},${ui})"
+                  onfocus="adSearch(event,'t${ti}-ul${ui}','unloading',${ti},${ui})">
+                <div class="ac-dropdown" id="ac-ad-t${ti}-ul${ui}"></div>
+              </div>
+              <button class="ad-loc-clear" onclick="adClearLoc(${ti},'unloading',${ui})" title="지우기">✕</button>
+            </div>
+          `).join('')}
+          <button class="ad-add-unloading" onclick="addAdUnloading(${ti})">+ 하차지 추가</button>
+        </div>
+      `).join('');
+      updateAdPreview();
+    }
+
+    function adClearLoc(taskIdx, type, ulIdx) {
+      if (type === 'loading') {
+        adTasks[taskIdx].loading = null;
+        const inp = document.getElementById(`ad-t${taskIdx}-loading`);
+        if (inp) inp.value = '';
+      } else {
+        adTasks[taskIdx].unloadings[ulIdx] = null;
+        const inp = document.getElementById(`ad-t${taskIdx}-ul${ulIdx}`);
+        if (inp) inp.value = '';
+      }
+    }
+
+    function adSearch(e, inputKey, type, taskIdx, ulIdx) {
+      const inputId = `ad-${inputKey}`;
+      const dropId  = `ac-ad-${inputKey}`;
+      const input   = document.getElementById(inputId);
+      const drop    = document.getElementById(dropId);
+      if (!input || !drop) return;
+      clearTimeout(_acDebounce[inputId]);
+      const q = input.value.trim();
+      if (q.length < 1) { drop.style.display = 'none'; return; }
+      _acDebounce[inputId] = setTimeout(() => {
+        const ps = new kakao.maps.services.Places();
+        ps.keywordSearch(q, (data, status) => {
+          if (status !== kakao.maps.services.Status.OK || !data.length) {
+            drop.style.display = 'none'; return;
+          }
+          _acResults[inputId] = data.slice(0, 6).map(p => ({
+            name: p.place_name,
+            addr: p.road_address_name || p.address_name,
+            lat:  parseFloat(p.y),
+            lon:  parseFloat(p.x),
+          }));
+          drop.innerHTML = _acResults[inputId].map((r, i) => `
+            <div class="ac-item" onclick="adSelectLoc('${inputId}','${dropId}',${i},${taskIdx},'${type}',${ulIdx})">
+              <div class="ac-item-name">${escapeHtml(r.name)}</div>
+              <div class="ac-item-addr">${escapeHtml(r.addr)}</div>
+            </div>`).join('');
+          drop.style.display = 'block';
+        });
+      }, 280);
+    }
+
+    function adSelectLoc(inputId, dropId, resultIdx, taskIdx, type, ulIdx) {
+      const r = (_acResults[inputId] || [])[resultIdx];
+      if (!r) return;
+      const inp = document.getElementById(inputId);
+      const drop = document.getElementById(dropId);
+      if (inp) inp.value = r.name;
+      if (drop) drop.style.display = 'none';
+      if (type === 'loading') {
+        adTasks[taskIdx].loading = { name: r.name, lat: r.lat, lon: r.lon };
+      } else {
+        adTasks[taskIdx].unloadings[ulIdx] = { name: r.name, lat: r.lat, lon: r.lon };
+      }
+    }
+
+    // 드롭다운 외부 클릭 시 닫기 (모달 내 ac-dropdown 포함)
+    document.addEventListener('click', e => {
+      document.querySelectorAll('#ad-task-list .ac-dropdown').forEach(drop => {
+        if (!drop.contains(e.target) && !drop.previousElementSibling?.contains(e.target)) {
+          drop.style.display = 'none';
+        }
+      });
+    });
+
+    async function runAutoDispatch() {
+      // 유효성 검사
+      const errors = [];
+      adTasks.forEach((task, ti) => {
+        if (!task.loading) errors.push(`태스크 ${ti + 1}: 상차지를 입력하세요.`);
+        task.unloadings.forEach((u, ui) => {
+          if (!u) errors.push(`태스크 ${ti + 1} 하차지 ${ui + 1}: 위치를 입력하세요.`);
+        });
+      });
+      if (adTasks.length === 0) errors.push('태스크를 1개 이상 추가하세요.');
+      if (errors.length) return alert(errors.join('\n'));
+
+      const available = adDrivers.filter(d => d.available);
+      const targetDriverIds = adSelectedDriverIds.size > 0
+        ? [...adSelectedDriverIds]
+        : null;
+      const effectiveCount = targetDriverIds
+        ? targetDriverIds.length
+        : available.length;
+      if (effectiveCount === 0) return alert('가용 기사가 없습니다.');
+
+      const vehicleId = document.getElementById('ad-vehicle').value;
+      const departure = document.getElementById('ad-departure').value;
+
+      const body = {
+        tasks: adTasks.map(t => ({
+          loading:    t.loading,
+          unloadings: t.unloadings,
+        })),
+      };
+      if (vehicleId) body.vehicle_id = parseInt(vehicleId);
+      if (departure) body.departure_time = new Date(departure).toISOString();
+      if (targetDriverIds) body.driver_ids = targetDriverIds;
+
+      const res = await fetch(`${API}/trips/auto-dispatch`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`자동 배차 실패: ${err.detail}`);
+      }
+      const result = await res.json();
+      alert(`✅ 자동 배차 완료!\n운행 ${result.created}건이 생성됐습니다.`);
+      closeAutoDispatchModal();
+      await loadDrivers();
     }
   </script>
 </body>

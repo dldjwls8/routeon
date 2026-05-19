@@ -476,6 +476,28 @@
 
 ---
 
+## v1.0.7 (2026-05-19)
+
+### 운행 자동 배차 — 배송 태스크 일괄 배분
+
+**백엔드**
+- `GET /drivers/available` — 현재 운행(scheduled/in_progress)이 없는 가용 기사 목록 반환 (조직 내)
+- `AutoDispatchTask` 스키마: `loading` (WaypointSchema) + `unloadings` (WaypointSchema 배열)
+- `AutoDispatchRequest` 스키마: `tasks`, `driver_ids?`, `vehicle_id?`, `departure_time?`
+- `POST /trips/auto-dispatch` — 태스크를 가용 기사에게 라운드 로빈으로 균등 분배, 기사별 경유지 합쳐 운행 일괄 생성, 가용 기사 없을 시 409 반환
+
+**프론트엔드 (dashboard.html)**
+- 운행 생성 패널 하단에 "🚛 자동 배차 (일괄)" 버튼 추가
+- 자동 배차 모달:
+  - 배송 태스크 카드 (상차지 1개 + 하차지 N개, + 태스크 추가/제거)
+  - 각 위치 입력: 카카오 Places 장소 검색 자동완성
+  - 차량 선택 (선택), 출발 시각 (선택)
+  - 가용 기사 칩 목록: 클릭으로 배차 대상 선택/해제 (운행 중 기사는 비활성)
+  - 분배 미리보기 ("태스크 N개 → 기사 M명, 기사당 최대 K개")
+  - "배차 실행" 시 운행 생성 완료 후 알림 + 대시보드 자동 갱신
+
+---
+
 ## v1.0.6 (2026-05-19)
 
 ### 기사 배차 취소 요청 — 기사 앱 요청 + 관리자 승인/거절

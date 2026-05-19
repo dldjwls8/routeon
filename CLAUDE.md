@@ -299,6 +299,8 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 (?status=completed\|cancelled) |
 | `POST /optimize` | 로그인 | 경로 최적화. origin_* 미입력 시 Redis GPS 자동 사용. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로 |
+| `GET /drivers/available` | 관리자 | 현재 운행이 없는 가용 기사 목록 (조직 내) |
+| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 라운드 로빈 분배 후 일괄 운행 생성 |
 
 ### 배송/위치
 | 엔드포인트 | 권한 | 설명 |
@@ -444,11 +446,11 @@ dashboard.html 채팅 알림 WS:
 - [x] 대시보드 실시간 반영 — trip.started/trip.replanned WS 브로드캐스트, 운행 완료·취소 후 폴리라인 즉시 제거, 기사 강퇴·배송 삭제 즉시 반영
 - [x] 설정 페이지 (settings.html) — 조직코드 관리, 계정 정보 변경, 기사 자동승인 토글 UI (관리자 전용 인증 가드)
 - [x] 기사·차량 관리 페이지 분리 — drivers.html, vehicles.html 신규 생성 및 대시보드 모달 제거
-- [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
+- [x] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [x] 긴급 배차 개선 — 긴급 경유지 추가 버튼을 상차지/하차지로 분리, `addEmergencyWaypoint(type)` type 파라미터 전달, 백엔드는 WaypointSchema가 이미 type 지원
 - [ ] 기사·차량 운행 생성 테스트 하네스 — 운행 생성·최적화·완료 흐름 자동 검증 (백엔드 통합 테스트)
 - [x] 통계 강화 — `GET /stats/by-driver-day` 신규 엔드포인트, 기사별 추이 라인 차트(건수/거리 탭 전환), 기사별 실적 CSV 내보내기(BOM UTF-8)
-- [ ] 운행 자동 배차 — 관리자가 상하차지 세트 N개를 입력하면 현재 가용 기사들에게 최적 분배 후 일괄 운행 생성 (OR-Tools 활용)
+- [x] 운행 자동 배차 — `POST /trips/auto-dispatch` + `GET /drivers/available`, 배송 태스크(상차지+하차지) N개를 가용 기사에게 라운드 로빈 분배, 대시보드 "🚛 자동 배차" 버튼 → 모달(태스크 입력 + 장소 검색 자동완성 + 기사 칩 선택 + 분배 미리보기)
 - [ ] 기사·차량 교체 — 운행 도중 기사 또는 차량에 문제 발생 시 다른 기사/차량으로 교체하거나 잔여 짐을 다른 운행으로 이관하는 기능
 - [x] 기사 배차 취소 요청 — `POST /trips/{id}/cancel-request` (기사), `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자), WS `trip.cancel_requested`/`trip.cancel_responded` 브로드캐스트, 대시보드 notice 박스·카드 배지 즉시 반영
 - [x] 예상 운행 완료 시간 — `_trip_schema`에 `started_at` 추가, `calcETADate()` + `formatCardETA()`로 기사 카드·패널에 완료 예상 시각·남은 시간 표시, 1분 주기 setInterval 갱신

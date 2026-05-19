@@ -545,6 +545,16 @@ class WaypointSchema(BaseModel):
     lon:  float
     type: str = "unloading"   # "loading" = 상차지 | "unloading" = 하차지
 
+class AutoDispatchTask(BaseModel):
+    loading:    WaypointSchema
+    unloadings: list[WaypointSchema]
+
+class AutoDispatchRequest(BaseModel):
+    tasks:          list[AutoDispatchTask]
+    driver_ids:     Optional[list[str]] = None  # 없으면 전체 가용 기사
+    vehicle_id:     Optional[int]        = None
+    departure_time: Optional[str]        = None
+
 class TripCreate(BaseModel):
     driver_id:         str
     vehicle_id:        Optional[int]   = None
@@ -2744,3 +2754,127 @@ async def stats_by_driver_day(
         }
         for r in rows
     ]
+
+
+# ────────────────────────────────────────────────
+# 자동 배차
+# ────────────────────────────────────────────────
+@app.get("/drivers/available")
+async def get_available_drivers(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """현재 운행 중이 아닌 가용 기사 목록 (조직 내)"""
+    busy_stmt = select(Trip.driver_id).where(
+        Trip.status.in_([TripStatus.scheduled, TripStatus.in_progress])
+    )
+    busy_ids = {row[0] for row in (await db.execute(busy_stmt)).all()}
+
+    stmt = select(User).where(
+        User.organization_id == current_user.organization_id,
+        User.role == UserRole.driver,
+    ).order_by(User.name, User.username)
+    drivers = (await db.execute(stmt)).scalars().all()
+
+    return [
+        {
+            "id":       str(d.id),
+            "username": d.username,
+            "name":     d.name or d.username,
+            "available": d.id not in busy_ids,
+        }
+        for d in drivers
+    ]
+
+
+@app.post("/trips/auto-dispatch", status_code=201)
+async def auto_dispatch_trips(
+    req: AutoDispatchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    배송 태스크를 가용 기사에게 균등 분배하여 운행을 일괄 생성.
+    라운드 로빈으로 기사당 여러 태스크가 배정되면 경유지를 합쳐 하나의 trip으로 생성.
+    """
+    import uuid as uuid_lib
+
+    if not req.tasks:
+        raise HTTPException(400, "태스크를 1개 이상 입력하세요.")
+
+    # 가용 기사 조회
+    busy_stmt = select(Trip.driver_id).where(
+        Trip.status.in_([TripStatus.scheduled, TripStatus.in_progress])
+    )
+    busy_ids = {row[0] for row in (await db.execute(busy_stmt)).all()}
+
+    if req.driver_ids:
+        try:
+            target_uuids = [uuid_lib.UUID(d) for d in req.driver_ids]
+        except ValueError:
+            raise HTTPException(400, "유효하지 않은 driver_id 형식이 포함되어 있습니다.")
+        stmt = select(User).where(
+            User.id.in_(target_uuids),
+            User.organization_id == current_user.organization_id,
+            User.role == UserRole.driver,
+        )
+    else:
+        stmt = select(User).where(
+            User.organization_id == current_user.organization_id,
+            User.role == UserRole.driver,
+        )
+    drivers = (await db.execute(stmt)).scalars().all()
+    available = [d for d in drivers if d.id not in busy_ids]
+
+    if not available:
+        raise HTTPException(409, "현재 가용 기사가 없습니다. 운행 중이 아닌 기사를 확인하세요.")
+
+    # 차량 검증
+    if req.vehicle_id is not None:
+        vehicle = (await db.execute(
+            select(Vehicle).where(Vehicle.id == req.vehicle_id)
+        )).scalar_one_or_none()
+        if not vehicle:
+            raise HTTPException(404, "차량을 찾을 수 없습니다.")
+        if not vehicle.is_active:
+            raise HTTPException(400, "비활성화된 차량입니다.")
+
+    # 라운드 로빈 분배
+    driver_tasks: dict[int, list] = {i: [] for i in range(len(available))}
+    for i, task in enumerate(req.tasks):
+        driver_tasks[i % len(available)].append(task)
+
+    departure_iso: Optional[str] = None
+    if req.departure_time:
+        try:
+            departure_iso = datetime.fromisoformat(req.departure_time).isoformat()
+        except ValueError:
+            raise HTTPException(400, "departure_time 형식이 올바르지 않습니다.")
+
+    created_trips = []
+    for driver_idx, tasks in driver_tasks.items():
+        if not tasks:
+            continue
+        driver = available[driver_idx]
+
+        waypoints = []
+        for task in tasks:
+            waypoints.append({"name": task.loading.name, "lat": task.loading.lat, "lon": task.loading.lon, "type": "loading"})
+            for u in task.unloadings:
+                waypoints.append({"name": u.name, "lat": u.lat, "lon": u.lon, "type": "unloading"})
+
+        t = Trip(
+            driver_id=driver.id,
+            vehicle_id=req.vehicle_id,
+            waypoints=waypoints,
+            departure_time=departure_iso,
+        )
+        db.add(t)
+        await db.flush()
+        created_trips.append(_trip_schema(t))
+
+    await db.commit()
+    return {
+        "created": len(created_trips),
+        "trips":   created_trips,
+    }
