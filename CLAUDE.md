@@ -297,6 +297,8 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `GET /trips/{id}/polyline` | 로그인 | 실제 도로 경로선 좌표 |
 | `PATCH /trips/{id}/waypoints` | 관리자 | 경유지 추가 + 앱에 재경로 알림 |
 | `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 (?status=completed\|cancelled) |
+| `POST /trips/{id}/cancel-request` | 기사 | 배차 취소 요청 `{reason?}` — WS `trip.cancel_requested` 브로드캐스트 |
+| `POST /trips/{id}/cancel-request/respond` | 관리자 | 취소 요청 승인/거절 `?action=approve\|reject` — WS `trip.cancel_responded` 브로드캐스트 |
 | `POST /optimize` | 로그인 | 경로 최적화. origin_* 미입력 시 Redis GPS 자동 사용. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로 |
 | `GET /drivers/available` | 관리자 | 현재 운행이 없는 가용 기사 목록 (조직 내) |
@@ -328,6 +330,7 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `GET /stats/summary?period=7d\|30d\|all` | 관리자 | 총 운행 건수·거리·평균 시간·완료율·상태별 건수 |
 | `GET /stats/by-driver?period=` | 관리자 | 기사별 운행 집계 (총 건수, 완료, 거리, 시간) |
 | `GET /stats/by-day?period=` | 관리자 | 일별 운행 건수 시계열 배열 |
+| `GET /stats/by-driver-day?period=` | 관리자 | 기사·날짜별 운행 건수·거리 시계열 (추이 차트용) |
 
 ### 채팅
 | 엔드포인트 | 권한 | 설명 |
