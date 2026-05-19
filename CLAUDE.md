@@ -450,7 +450,7 @@ dashboard.html 채팅 알림 WS:
 - [x] 통계 강화 — `GET /stats/by-driver-day` 신규 엔드포인트, 기사별 추이 라인 차트(건수/거리 탭 전환), 기사별 실적 CSV 내보내기(BOM UTF-8)
 - [ ] 운행 자동 배차 — 관리자가 상하차지 세트 N개를 입력하면 현재 가용 기사들에게 최적 분배 후 일괄 운행 생성 (OR-Tools 활용)
 - [ ] 기사·차량 교체 — 운행 도중 기사 또는 차량에 문제 발생 시 다른 기사/차량으로 교체하거나 잔여 짐을 다른 운행으로 이관하는 기능
-- [ ] 기사 배차 취소 요청 — 기사 앱에서 배차 취소 요청 전송, 관리자 웹에서 승인/거절 처리
+- [x] 기사 배차 취소 요청 — `POST /trips/{id}/cancel-request` (기사), `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자), WS `trip.cancel_requested`/`trip.cancel_responded` 브로드캐스트, 대시보드 notice 박스·카드 배지 즉시 반영
 - [x] 예상 운행 완료 시간 — `_trip_schema`에 `started_at` 추가, `calcETADate()` + `formatCardETA()`로 기사 카드·패널에 완료 예상 시각·남은 시간 표시, 1분 주기 setInterval 갱신
 - [x] 기사 현재 위치 경로 진행도 UI — 수직 타임라인 형태로 경로 노드 표시, `haversineKm` + `buildCumulativeDist` + `getNodeRatios` + `getDriverRatio`로 폴리라인 누적 거리 비율 계산, 구간 connector 높이 실제 거리 비율 반영(44~140px), 🚚 인디케이터 connector 내 정확한 비율 위치 표시, 지나온 노드 체크(✓) + dim, GPS 수신마다 `updateProgressIndicator()` 갱신
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

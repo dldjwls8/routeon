@@ -119,6 +119,8 @@
 | `started_at` | DATETIME | | |
 | `completed_at` | DATETIME | | |
 | `created_at` | DATETIME | NOT NULL | |
+| `cancel_requested` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사가 배차 취소 요청 중 여부 |
+| `cancel_request_reason` | TEXT | | 기사가 입력한 취소 사유 |
 
 **optimized_route JSONB 구조:**
 ```json

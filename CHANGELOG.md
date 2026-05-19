@@ -476,6 +476,26 @@
 
 ---
 
+## v1.0.6 (2026-05-19)
+
+### 기사 배차 취소 요청 — 기사 앱 요청 + 관리자 승인/거절
+
+**DB**
+- `trips` 테이블에 `cancel_requested BOOLEAN NOT NULL DEFAULT FALSE`, `cancel_request_reason TEXT` 컬럼 추가
+
+**백엔드 (`backend/main.py`, `backend/models.py`)**
+- `POST /trips/{id}/cancel-request` (기사 전용): 취소 요청 저장 + 관리자에게 WS `trip.cancel_requested` 브로드캐스트
+- `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자 전용): 승인 시 `status=cancelled`, 기사에게 WS `trip.cancel_responded` 전송
+- `_trip_schema`에 `cancel_requested`, `cancel_request_reason` 필드 추가
+
+**프론트엔드 (`frontend/dashboard.html`)**
+- 기사 카드: 취소 요청 있으면 `⚠️ 배차 취소 요청` 배지 표시
+- trip-info-box: 황색 notice 박스(사유 표시) + [✅ 취소 승인] / [❌ 거절] 버튼
+- WS `trip.cancel_requested` 수신 시 카드·패널 즉시 갱신 (`handleCancelRequested`)
+- WS `trip.cancel_responded` 수신 시 승인이면 폴리라인 제거 후 갱신 (`handleCancelResponded`)
+
+---
+
 ## v1.0.5 (2026-05-19)
 
 ### 통계 강화 — 기사별 추이 그래프 + CSV 내보내기
