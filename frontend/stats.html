@@ -77,12 +77,33 @@
       border-radius: 8px;
     }
 
+    /* 기사별 추이 차트 */
+    .trend-box {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 24px;
+    }
+    .trend-box-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .trend-box-header h3 { font-size: 14px; color: #555; }
+    .trend-tabs { display: flex; gap: 6px; }
+    .trend-tab {
+      padding: 4px 12px; border: 1px solid #ddd; border-radius: 12px;
+      background: #fff; cursor: pointer; font-size: 12px; color: #666;
+    }
+    .trend-tab.active { background: #3498db; border-color: #3498db; color: #fff; font-weight: bold; }
+
     /* 기사별 테이블 */
     .table-box {
       background: #fff; border-radius: 12px; padding: 20px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
-    .table-box h3 { font-size: 14px; color: #555; margin-bottom: 16px; }
+    .table-box-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .table-box-header h3 { font-size: 14px; color: #555; }
+    .csv-btn {
+      padding: 6px 14px; border: 1px solid #2ecc71; border-radius: 8px;
+      background: #fff; color: #27ae60; font-size: 12px; font-weight: bold;
+      cursor: pointer; transition: 0.2s;
+    }
+    .csv-btn:hover { background: #2ecc71; color: #fff; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th { text-align: left; padding: 10px 12px; background: #f8f9fa; color: #666; font-weight: bold; border-bottom: 2px solid #eee; }
     td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; color: #333; }
@@ -143,9 +164,27 @@
     </div>
   </div>
 
+  <!-- 기사별 추이 차트 -->
+  <div class="trend-box">
+    <div class="trend-box-header">
+      <h3>기사별 운행 추이</h3>
+      <div class="trend-tabs">
+        <button class="trend-tab active" data-metric="count"    onclick="setTrendMetric('count')">운행 건수</button>
+        <button class="trend-tab"        data-metric="distance" onclick="setTrendMetric('distance')">운행 거리</button>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:240px;">
+      <canvas id="trend-chart"></canvas>
+      <div class="no-data" id="trend-nodata">기간 내 운행 데이터가 없습니다.</div>
+    </div>
+  </div>
+
   <!-- 기사별 테이블 -->
   <div class="table-box">
-    <h3>기사별 운행 실적</h3>
+    <div class="table-box-header">
+      <h3>기사별 운행 실적</h3>
+      <button class="csv-btn" onclick="exportCSV()">⬇ CSV 내보내기</button>
+    </div>
     <table>
       <thead>
         <tr>
@@ -162,9 +201,18 @@
 </div>
 
 <script>
-  let currentPeriod = '30d';
-  let barChart  = null;
-  let donutChart = null;
+  const DRIVER_COLORS = [
+    '#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+    '#1abc9c', '#e67e22', '#34495e', '#e91e63', '#00bcd4',
+  ];
+
+  let currentPeriod  = '30d';
+  let currentMetric  = 'count';
+  let barChart       = null;
+  let donutChart     = null;
+  let trendChart     = null;
+  let cachedByDriver = [];
+  let cachedByDriverDay = [];
 
   function setPeriod(p) {
     currentPeriod = p;
@@ -174,20 +222,32 @@
     loadAll(p);
   }
 
+  function setTrendMetric(metric) {
+    currentMetric = metric;
+    document.querySelectorAll('.trend-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.metric === metric);
+    });
+    renderTrendChart(cachedByDriverDay);
+  }
+
   async function loadAll(period) {
     try {
-      const [summary, byDriver, byDay] = await Promise.all([
+      const [summary, byDriver, byDay, byDriverDay] = await Promise.all([
         fetch(`${API}/stats/summary?period=${period}`, { headers: authHeaders() }).then(r => {
           if (r.status === 401) { location.href = '/login.html'; throw new Error('unauth'); }
           return r.json();
         }),
-        fetch(`${API}/stats/by-driver?period=${period}`, { headers: authHeaders() }).then(r => r.json()),
-        fetch(`${API}/stats/by-day?period=${period}`,    { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API}/stats/by-driver?period=${period}`,     { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API}/stats/by-day?period=${period}`,         { headers: authHeaders() }).then(r => r.json()),
+        fetch(`${API}/stats/by-driver-day?period=${period}`, { headers: authHeaders() }).then(r => r.json()),
       ]);
+      cachedByDriver    = byDriver;
+      cachedByDriverDay = byDriverDay;
       renderSummaryCards(summary);
       renderBarChart(byDay);
       renderDonutChart(summary.by_status);
       renderDriverTable(byDriver);
+      renderTrendChart(byDriverDay);
     } catch (e) {
       if (e.message !== 'unauth') console.error('통계 로드 오류:', e);
     }
@@ -203,15 +263,12 @@
   function renderBarChart(byDay) {
     if (barChart) { barChart.destroy(); barChart = null; }
     const nodata = document.getElementById('bar-nodata');
-    if (!byDay.length) {
-      nodata.style.display = 'flex';
-      return;
-    }
+    if (!byDay.length) { nodata.style.display = 'flex'; return; }
     nodata.style.display = 'none';
     barChart = new Chart(document.getElementById('bar-chart'), {
       type: 'bar',
       data: {
-        labels: byDay.map(d => d.date),
+        labels: byDay.map(d => d.date.slice(5)),
         datasets: [{
           label: '운행 건수',
           data:  byDay.map(d => d.count),
@@ -237,10 +294,7 @@
     if (donutChart) { donutChart.destroy(); donutChart = null; }
     const nodata = document.getElementById('donut-nodata');
     const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
-    if (!total) {
-      nodata.style.display = 'flex';
-      return;
-    }
+    if (!total) { nodata.style.display = 'flex'; return; }
     nodata.style.display = 'none';
     const labels = ['출발 대기', '운행 중', '완료', '취소'];
     const values = [byStatus.scheduled, byStatus.in_progress, byStatus.completed, byStatus.cancelled];
@@ -262,6 +316,52 @@
     });
   }
 
+  function renderTrendChart(byDriverDay) {
+    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    const nodata = document.getElementById('trend-nodata');
+    if (!byDriverDay.length) { nodata.style.display = 'flex'; return; }
+    nodata.style.display = 'none';
+
+    // 날짜 목록 (유니크·정렬)
+    const dates = [...new Set(byDriverDay.map(r => r.date))].sort();
+    // 기사별 그룹핑
+    const driverMap = {};
+    byDriverDay.forEach(r => {
+      if (!driverMap[r.driver_id]) driverMap[r.driver_id] = { name: r.display_name, data: {} };
+      driverMap[r.driver_id].data[r.date] = currentMetric === 'count' ? r.count : r.total_distance_km;
+    });
+
+    const drivers = Object.values(driverMap);
+    const datasets = drivers.map((drv, i) => ({
+      label: drv.name,
+      data:  dates.map(d => drv.data[d] ?? 0),
+      borderColor:     DRIVER_COLORS[i % DRIVER_COLORS.length],
+      backgroundColor: DRIVER_COLORS[i % DRIVER_COLORS.length] + '22',
+      borderWidth: 2,
+      pointRadius: 3,
+      tension: 0.3,
+      fill: false,
+    }));
+
+    const yLabel = currentMetric === 'count' ? '건수' : 'km';
+    trendChart = new Chart(document.getElementById('trend-chart'), {
+      type: 'line',
+      data: { labels: dates.map(d => d.slice(5)), datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 10, boxWidth: 14 } },
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: v => v + yLabel } },
+          x: { ticks: { maxRotation: 45, font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
   function renderDriverTable(byDriver) {
     const tbody = document.getElementById('driver-tbody');
     if (!byDriver.length) {
@@ -270,13 +370,33 @@
     }
     tbody.innerHTML = byDriver.map(d => `
       <tr>
-        <td><strong>${d.username}</strong></td>
+        <td><strong>${d.name || d.username}</strong></td>
         <td>${d.total_trips}건</td>
         <td>${d.completed_trips}건</td>
         <td>${d.total_distance_km.toLocaleString()} km</td>
         <td>${d.avg_duration_min.toLocaleString()} 분</td>
       </tr>
     `).join('');
+  }
+
+  function exportCSV() {
+    if (!cachedByDriver.length) return alert('내보낼 데이터가 없습니다.');
+    const header = ['기사명', '총 운행', '완료', '총 거리(km)', '평균 시간(분)'];
+    const rows = cachedByDriver.map(d => [
+      d.name || d.username,
+      d.total_trips,
+      d.completed_trips,
+      d.total_distance_km,
+      d.avg_duration_min,
+    ]);
+    const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `routeon_stats_${currentPeriod}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // 초기 로드

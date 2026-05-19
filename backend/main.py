@@ -2614,3 +2614,46 @@ async def stats_by_day(
 
     rows = (await db.execute(stmt)).all()
     return [{"date": r.day.strftime("%Y-%m-%d"), "count": int(r.cnt)} for r in rows]
+
+
+@app.get("/stats/by-driver-day")
+async def stats_by_driver_day(
+    period: str = "30d",
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    cutoff = _period_cutoff(period)
+    driver_ids = await _org_driver_ids(db, current_user)
+
+    dist_col = cast(Trip.optimized_route["total_distance_km"].astext, Float)
+    day_col  = func.date_trunc("day", Trip.created_at).label("day")
+
+    stmt = (
+        select(
+            day_col,
+            Trip.driver_id,
+            User.username,
+            User.name,
+            func.count().label("cnt"),
+            func.coalesce(func.sum(dist_col), 0.0).label("total_dist"),
+        )
+        .join(User, Trip.driver_id == User.id)
+        .group_by(day_col, Trip.driver_id, User.username, User.name)
+        .order_by(day_col)
+    )
+    if driver_ids:
+        stmt = stmt.where(Trip.driver_id.in_(driver_ids))
+    if cutoff:
+        stmt = stmt.where(Trip.created_at >= cutoff)
+
+    rows = (await db.execute(stmt)).all()
+    return [
+        {
+            "date":              r.day.strftime("%Y-%m-%d"),
+            "driver_id":         str(r.driver_id),
+            "display_name":      r.name or r.username,
+            "count":             int(r.cnt),
+            "total_distance_km": round(float(r.total_dist or 0), 1),
+        }
+        for r in rows
+    ]
