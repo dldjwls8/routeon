@@ -227,6 +227,8 @@ class Trip(Base):
     status          = Column(SAEnum(TripStatus), nullable=False,
                               default=TripStatus.scheduled)
     is_emergency    = Column(Boolean, default=False)
+    cancel_requested        = Column(Boolean, nullable=False, default=False)
+    cancel_request_reason   = Column(Text, nullable=True)
 
     started_at   = Column(DateTime)
     completed_at = Column(DateTime)

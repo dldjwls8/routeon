@@ -796,6 +796,91 @@ async def update_trip_status(
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
     }
 
+class CancelRequestSchema(BaseModel):
+    reason: Optional[str] = None
+
+
+@app.post("/trips/{trip_id}/cancel-request")
+async def request_trip_cancel(
+    trip_id: str,
+    req: CancelRequestSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """기사가 운행 취소를 요청합니다. 관리자에게 WS 알림이 전송됩니다."""
+    import uuid as uuid_lib
+
+    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    t  = _r.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    if str(t.driver_id) != str(current_user.id):
+        raise HTTPException(403, "본인 운행만 취소 요청할 수 있습니다.")
+    if t.status not in (TripStatus.scheduled, TripStatus.in_progress):
+        raise HTTPException(400, "취소 요청이 불가능한 운행 상태입니다.")
+    if t.cancel_requested:
+        raise HTTPException(400, "이미 취소 요청이 진행 중입니다.")
+
+    t.cancel_requested      = True
+    t.cancel_request_reason = req.reason
+    await db.commit()
+
+    if current_user.organization_id:
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "type":      "trip.cancel_requested",
+            "trip_id":   trip_id,
+            "driver_id": str(current_user.id),
+            "reason":    req.reason or "",
+        })
+
+    return {"trip_id": trip_id, "cancel_requested": True}
+
+
+@app.post("/trips/{trip_id}/cancel-request/respond")
+async def respond_trip_cancel(
+    trip_id: str,
+    action: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """관리자가 기사의 취소 요청을 승인(approve) 또는 거절(reject)합니다."""
+    import uuid as uuid_lib
+    from datetime import datetime
+
+    if action not in ("approve", "reject"):
+        raise HTTPException(400, "action은 'approve' 또는 'reject'만 가능합니다.")
+
+    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    t  = _r.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    if not t.cancel_requested:
+        raise HTTPException(400, "진행 중인 취소 요청이 없습니다.")
+
+    t.cancel_requested      = False
+    t.cancel_request_reason = None
+
+    if action == "approve":
+        t.status = TripStatus.cancelled
+
+    await db.commit()
+
+    if current_user.organization_id:
+        await manager.broadcast_replan_to_org(current_user.organization_id, {
+            "type":    "trip.cancel_responded",
+            "trip_id": trip_id,
+            "action":  action,
+        })
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "type":      "trip.cancel_responded",
+            "trip_id":   trip_id,
+            "driver_id": str(t.driver_id),
+            "action":    action,
+        })
+
+    return {"trip_id": trip_id, "action": action}
+
+
 def _trip_schema(t: Trip) -> dict:
     wp = t.waypoints or []
     loadings   = sum(1 for w in wp if w.get("type") == "loading")
@@ -809,6 +894,8 @@ def _trip_schema(t: Trip) -> dict:
         "started_at": t.started_at.isoformat() if t.started_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         "loading_count": loadings, "unloading_count": unloadings,
+        "cancel_requested": bool(t.cancel_requested),
+        "cancel_request_reason": t.cancel_request_reason,
     }
 
 

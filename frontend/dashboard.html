@@ -416,6 +416,14 @@
         <span id="trip-eta-time" style="font-size:14px; font-weight:700; color:#2c3e50; margin-left:8px;"></span>
         <span id="trip-eta-remain" style="font-size:12px; color:#888; margin-left:6px;"></span>
       </div>
+      <div id="cancel-request-box" style="display:none; margin-bottom:10px; padding:10px 12px; background:#fff8e1; border-radius:8px; border:1px solid #ffe082;">
+        <div style="font-size:12px; font-weight:700; color:#e65100; margin-bottom:6px;">⚠️ 기사 배차 취소 요청</div>
+        <div id="cancel-request-reason" style="font-size:12px; color:#555; margin-bottom:8px;"></div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn" style="flex:1; background:#e74c3c; font-size:12px; padding:6px;" onclick="respondCancelRequest('approve')">✅ 취소 승인</button>
+          <button class="btn" style="flex:1; background:#7f8c8d; font-size:12px; padding:6px;" onclick="respondCancelRequest('reject')">❌ 거절</button>
+        </div>
+      </div>
       <div style="display:flex; gap:8px;">
         <button id="btn-trip-complete" class="btn" style="flex:1; background:#27ae60; font-size:13px; padding:8px;" onclick="completeTripCurrent()">✅ 운행 완료</button>
         <button id="btn-trip-cancel"   class="btn btn-delete" style="flex:1; font-size:13px; padding:8px;" onclick="cancelTripCurrent()">❌ 운행 취소</button>
@@ -742,6 +750,7 @@
               : '배차 없음'}
           </small>
           ${isRunning ? `<small id="card-eta-${d.id}" style="color:#555; display:block; margin-top:3px; font-size:11px;">${formatCardETA(trip)}</small>` : ''}
+          ${trip?.cancel_requested ? `<small style="color:#e65100; display:block; margin-top:3px; font-size:11px; font-weight:bold;">⚠️ 배차 취소 요청</small>` : ''}
         `;
         card.querySelector('.card-chat-btn').addEventListener('click', e => {
           e.stopPropagation();
@@ -858,6 +867,16 @@
         const canAct = ['scheduled', 'in_progress'].includes(trip.status);
         document.getElementById('btn-trip-complete').style.display = canAct ? 'block' : 'none';
         document.getElementById('btn-trip-cancel').style.display   = canAct ? 'block' : 'none';
+
+        // 취소 요청 notice 박스
+        const cancelBox = document.getElementById('cancel-request-box');
+        if (trip.cancel_requested && canAct) {
+          const reason = trip.cancel_request_reason || '사유 없음';
+          document.getElementById('cancel-request-reason').textContent = `사유: ${reason}`;
+          cancelBox.style.display = 'block';
+        } else {
+          cancelBox.style.display = 'none';
+        }
       } else {
         tripInfoBox.style.display = 'none';
         noTripBox.style.display   = 'block';
@@ -1553,6 +1572,21 @@
       await showDriverDetail(currentDriverId);
     }
 
+    // ── 배차 취소 요청 승인/거절 ──────────────────────
+    async function respondCancelRequest(action) {
+      const tripId = document.getElementById('trip-info-box')._tripId;
+      if (!tripId) return;
+      const label = action === 'approve' ? '취소 승인' : '거절';
+      if (!confirm(`기사의 배차 취소 요청을 ${label} 처리하시겠습니까?`)) return;
+      const res = await fetch(`${API}/trips/${tripId}/cancel-request/respond?action=${action}`, {
+        method: 'POST', headers: authHeaders(),
+      });
+      if (!res.ok) { const e = await res.json(); return alert(`처리 실패: ${e.detail}`); }
+      if (action === 'approve') clearDriverRoute(currentDriverId);
+      await loadDrivers();
+      await showDriverDetail(currentDriverId);
+    }
+
     // ── 운행 완료/취소 ──────────────────────────────
     async function completeTripCurrent() {
       const tripId = document.getElementById('trip-info-box')._tripId;
@@ -1781,6 +1815,10 @@
             handleTripStarted(data);
           } else if (data.type === 'trip.replanned') {
             handleTripReplanned(data);
+          } else if (data.type === 'trip.cancel_requested') {
+            handleCancelRequested(data);
+          } else if (data.type === 'trip.cancel_responded') {
+            handleCancelResponded(data);
           } else {
             updateDriverMarker(data);
           }
@@ -1812,6 +1850,17 @@
       clearDriverRoute(driverId);
       await loadDrivers();
       if (currentDriverId === driverId) await showDriverDetail(driverId);
+    }
+
+    async function handleCancelRequested(data) {
+      await loadDrivers();
+      if (currentDriverId === data.driver_id) await showDriverDetail(data.driver_id);
+    }
+
+    async function handleCancelResponded(data) {
+      if (data.action === 'approve') clearDriverRoute(data.driver_id);
+      await loadDrivers();
+      if (currentDriverId === data.driver_id) await showDriverDetail(data.driver_id);
     }
 
     function updateDriverMarker(data) {
