@@ -476,6 +476,19 @@
 
 ---
 
+## v1.0.4 (2026-05-19)
+
+### 긴급 배차 상차지(loading) 타입 지원
+
+**프론트엔드 (`frontend/dashboard.html`)**
+- 지도 검색 핀 팝업의 `⚡ 긴급 경유지 추가` 버튼(1개) → `⚡ 긴급 상차지` / `⚡ 긴급 하차지` (2개)로 분리
+- `addEmergencyWaypoint(type)` — `type` 파라미터 추가, `PATCH /trips/{id}/waypoints` 요청 body에 `type` 포함 전송
+- CSS `.pin-btns-emergency` — 두 버튼 나란히 배치 (`flex`)
+- 성공 알림 메시지에 "상차지" / "하차지" 구분 표시
+- 백엔드 `WaypointSchema`는 이미 `type` 필드를 지원하므로 추가 수정 없음
+
+---
+
 ## v1.0.3 (2026-05-18)
 
 ### 예상 운행 완료 시간(ETA) 표시

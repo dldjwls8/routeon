@@ -445,7 +445,7 @@ dashboard.html 채팅 알림 WS:
 - [x] 설정 페이지 (settings.html) — 조직코드 관리, 계정 정보 변경, 기사 자동승인 토글 UI (관리자 전용 인증 가드)
 - [x] 기사·차량 관리 페이지 분리 — drivers.html, vehicles.html 신규 생성 및 대시보드 모달 제거
 - [ ] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
-- [ ] 긴급 배차 개선 — 상차지(type=loading) 추가 지원 (현재는 하차지만 가능, 관리자 웹 UI + PATCH /trips/{id}/waypoints 모두 수정 필요)
+- [x] 긴급 배차 개선 — 긴급 경유지 추가 버튼을 상차지/하차지로 분리, `addEmergencyWaypoint(type)` type 파라미터 전달, 백엔드는 WaypointSchema가 이미 type 지원
 - [ ] 기사·차량 운행 생성 테스트 하네스 — 운행 생성·최적화·완료 흐름 자동 검증 (백엔드 통합 테스트)
 - [ ] 통계 강화 — 기사별 운행 시간·거리 추이 그래프, 차량별 가동률, 기간 비교, CSV 내보내기
 - [ ] 운행 자동 배차 — 관리자가 상하차지 세트 N개를 입력하면 현재 가용 기사들에게 최적 분배 후 일괄 운행 생성 (OR-Tools 활용)
