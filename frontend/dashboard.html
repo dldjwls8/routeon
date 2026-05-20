@@ -885,7 +885,7 @@
       content.className = 'custom-app-marker';
       content.id = `marker-${id}`;
       content.style.borderColor = color;
-      content.onclick = () => showDriverDetail(id);
+      content.onclick = (e) => { e.stopPropagation(); showDriverDetail(id); };
       content.innerHTML = `<div class="content"><span class="icon">🚚</span><span class="name">${name}</span></div>`;
       // 말풍선 꼬리 색상도 맞춤
       const style = document.createElement('style');
