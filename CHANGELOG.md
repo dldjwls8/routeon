@@ -476,6 +476,17 @@
 
 ---
 
+## v1.0.10 (2026-05-20)
+
+### 버그 수정 — 채팅·지도 마커
+
+**백엔드**
+- 채팅 `partner.username/name null` 버그: `_get_accessible_conversation`에 `selectinload(Conversation.admin/driver)` 누락으로 읽음 처리·메시지 전송 응답에서 partner 정보가 null로 반환되던 문제 수정
+
+**프론트엔드 (dashboard.html)**
+- 기사 마커·노드 마커(상차지·하차지 등) 클릭 시 지도 클릭 이벤트 동시 발생 버그 수정: `mousedown` stopPropagation 누락이 원인 (카카오맵은 mousedown 기준으로 클릭 감지)
+- 새로고침 후 기사 위치 마커 미표시 버그 수정: WS GPS 수신 시에만 마커 생성되던 문제 → 초기 `loadDrivers()` 완료 후 전체 기사 위치 일괄 조회하여 마커 생성
+
 ## v1.0.9 (2026-05-20)
 
 ### 경로 최적화 개선 + 위치 폴백 + 운행 생성 UX 개편

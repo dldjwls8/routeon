@@ -397,6 +397,12 @@ dashboard.html 채팅 알림 WS:
 - `convDriverMap` (conversation_id → driver_id) 으로 대화방과 기사 카드를 매핑
 - 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
 
+Android 앱 채팅 구현 필수 사항:
+- `ws://168.138.45.63:8000/ws/chat?token={JWT}` 상시 연결 (채팅 화면 외에도 유지)
+- 수신 이벤트: `chat.ready`(연결 확인), `chat.message`(새 메시지), `chat.read`(읽음), `ping`(heartbeat → 무시 또는 pong)
+- 메시지 전송은 REST `POST /chat/conversations/{id}/messages`로 처리
+- WS 미연결 시 상대방 메시지를 실시간으로 수신할 수 없음 (REST 폴링으로 대체 가능)
+
 ---
 
 ## 주의사항
