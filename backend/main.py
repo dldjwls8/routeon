@@ -1240,6 +1240,8 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     t.origin_lon  = origin_lon
     t.status      = TripStatus.in_progress
     t.is_emergency = req.is_emergency
+    if not t.started_at:
+        t.started_at = datetime.utcnow()
 
     for i, node in enumerate(final_route):
         if node.type == "waypoint":
