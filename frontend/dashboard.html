@@ -885,6 +885,7 @@
       content.className = 'custom-app-marker';
       content.id = `marker-${id}`;
       content.style.borderColor = color;
+      content.addEventListener('mousedown', e => e.stopPropagation());
       content.onclick = (e) => { e.stopPropagation(); showDriverDetail(id); };
       content.innerHTML = `<div class="content"><span class="icon">🚚</span><span class="name">${name}</span></div>`;
       // 말풍선 꼬리 색상도 맞춤
@@ -1157,6 +1158,7 @@
           `;
           inner.textContent = ic.content;
           el.appendChild(inner);
+          el.addEventListener('mousedown', e => e.stopPropagation());
           el.addEventListener('click', e => {
             e.stopPropagation();
             showNodePopup(node, e.clientX, e.clientY);
@@ -1837,7 +1839,18 @@
         kakao.maps.load(() => {
           initMap();
           initMapSearch();
-          loadDrivers().then(() => {
+          loadDrivers().then(async () => {
+            // 초기 로드: 모든 기사의 마지막 위치 조회 → 마커 생성
+            await Promise.all(driversCache.map(async d => {
+              try {
+                const r = await fetch(`${API}/location-logs/${d.id}`, { headers: authHeaders() });
+                if (r.ok) {
+                  const loc = await r.json();
+                  updateDriverMarker({ user_id: d.id, lat: loc.lat, lon: loc.lon });
+                }
+              } catch(e) {}
+            }));
+
             const sel = new URLSearchParams(location.search).get('select_driver');
             if (sel) {
               showDriverDetail(sel);
