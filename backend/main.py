@@ -2579,13 +2579,37 @@ async def ws_chat(
 async def get_location_logs(
     user_id: str,
     current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Redis에서 기사의 현재 위치 조회 (관리자 웹용)"""
+    """기사의 현재(또는 마지막) 위치 조회. Redis 실시간 우선, 없으면 DB 최근 기록 폴백."""
+    import uuid as uuid_lib
+
     val = redis.get(f"location:{user_id}")
-    if not val:
-        raise HTTPException(404, "위치 정보가 없습니다. (미전송 또는 TTL 만료)")
-    lat, lon = val.split(",")
-    return {"user_id": user_id, "lat": float(lat), "lon": float(lon)}
+    if val:
+        lat, lon = val.split(",")
+        return {"user_id": user_id, "lat": float(lat), "lon": float(lon),
+                "is_realtime": True, "recorded_at": None}
+
+    # Redis miss → TimescaleDB 최근 위치 폴백
+    try:
+        uid = uuid_lib.UUID(user_id)
+    except ValueError:
+        raise HTTPException(400, "유효하지 않은 user_id 형식입니다.")
+    row = (await db.execute(
+        select(Location)
+        .where(Location.user_id == uid)
+        .order_by(Location.recorded_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "위치 정보가 없습니다.")
+    return {
+        "user_id": user_id,
+        "lat": row.lat,
+        "lon": row.lon,
+        "is_realtime": False,
+        "recorded_at": row.recorded_at.isoformat(),
+    }
 
 
 @app.get("/nearby-drivers")
@@ -2932,10 +2956,55 @@ async def auto_dispatch_trips(
         if not vehicle.is_active:
             raise HTTPException(400, "비활성화된 차량입니다.")
 
-    # 라운드 로빈 분배
-    driver_tasks: dict[int, list] = {i: [] for i in range(len(available))}
-    for i, task in enumerate(req.tasks):
-        driver_tasks[i % len(available)].append(task)
+    # 기사별 마지막 위치 조회 (Redis 우선 → DB 폴백)
+    driver_positions: dict = {}  # driver.id → (lat, lon) | None
+    for d in available:
+        val = redis.get(f"location:{d.id}")
+        if val:
+            lat_s, lon_s = val.split(",")
+            driver_positions[d.id] = (float(lat_s), float(lon_s))
+        else:
+            row = (await db.execute(
+                select(Location)
+                .where(Location.user_id == d.id)
+                .order_by(Location.recorded_at.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+            driver_positions[d.id] = (row.lat, row.lon) if row else None
+
+    # 위치 기반 greedy 배정:
+    #   태스크마다 상차지에서 가장 가까운 가용 기사 배정.
+    #   위치를 모르는 기사는 greedy에서 제외하고 남은 태스크를 라운드 로빈으로 처리.
+    driver_tasks: dict = {d.id: [] for d in available}
+    rr_pool = [d for d in available if driver_positions[d.id] is None]  # 위치 미확인
+    rr_idx  = 0
+
+    located = [d for d in available if driver_positions[d.id] is not None]
+    # 기사별 "현재 위치" — 태스크 배정 후 마지막 하차지로 갱신
+    cur_pos: dict = {d.id: driver_positions[d.id] for d in located}
+
+    for task in req.tasks:
+        if located:
+            # 상차지에서 가장 가까운 기사 선택
+            best = min(
+                located,
+                key=lambda d: _haversine_km(
+                    cur_pos[d.id][0], cur_pos[d.id][1],
+                    task.loading.lat, task.loading.lon,
+                ),
+            )
+            driver_tasks[best.id].append(task)
+            # 마지막 하차지 또는 상차지를 다음 배정 기준 위치로 갱신
+            last = task.unloadings[-1] if task.unloadings else task.loading
+            cur_pos[best.id] = (last.lat, last.lon)
+        elif rr_pool:
+            # 위치 미확인 기사에게 라운드 로빈
+            driver_tasks[rr_pool[rr_idx % len(rr_pool)].id].append(task)
+            rr_idx += 1
+        else:
+            # 모든 기사에게 위치도 없고 rr_pool도 비어있는 경우 (도달 불가)
+            driver_tasks[available[rr_idx % len(available)].id].append(task)
+            rr_idx += 1
 
     departure_iso: Optional[str] = None
     if req.departure_time:
@@ -2944,11 +3013,12 @@ async def auto_dispatch_trips(
         except ValueError:
             raise HTTPException(400, "departure_time 형식이 올바르지 않습니다.")
 
+    driver_map = {d.id: d for d in available}
     created_trips = []
-    for driver_idx, tasks in driver_tasks.items():
+    for driver_id, tasks in driver_tasks.items():
         if not tasks:
             continue
-        driver = available[driver_idx]
+        driver = driver_map[driver_id]
 
         waypoints = []
         for task in tasks:

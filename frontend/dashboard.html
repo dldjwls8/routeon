@@ -519,6 +519,7 @@
       <h2 id="detail-name" style="margin:0; border:none; font-size:20px; color:#333;">기사 이름</h2>
       <button onclick="hideRightPanel()" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
     </div>
+    <div id="driver-location-badge" style="display:none; margin-top:6px; font-size:11px; padding:3px 8px; border-radius:10px; display:inline-block;"></div>
     <hr style="margin: 15px 0;">
 
     <!-- 현재 운행 정보 -->
@@ -909,15 +910,31 @@
       const allDeliveries = await res.json();
       const driverDeliveries = allDeliveries.filter(d => d.assigned_to === id);
 
-      // 현재 위치 조회
+      // 현재(또는 마지막) 위치 조회
+      const badge = document.getElementById('driver-location-badge');
       try {
         const locRes = await fetch(`${API}/location-logs/${id}`, { headers: authHeaders() });
         if (locRes.ok) {
           const loc = await locRes.json();
           driverCurrentPositions[id] = { lat: loc.lat, lon: loc.lon };
           map.panTo(new kakao.maps.LatLng(loc.lat, loc.lon));
+          if (badge) {
+            if (loc.is_realtime) {
+              badge.textContent = '🟢 실시간 위치';
+              badge.style.cssText = 'display:inline-block; margin-top:6px; font-size:11px; padding:3px 8px; border-radius:10px; background:#e8f5e9; color:#2e7d32;';
+            } else {
+              const ago = loc.recorded_at
+                ? (() => { const m = Math.round((Date.now() - new Date(loc.recorded_at)) / 60000); return m < 60 ? `${m}분 전` : `${Math.round(m/60)}시간 전`; })()
+                : '';
+              badge.textContent = `🔘 마지막 위치${ago ? ' · ' + ago : ''}`;
+              badge.style.cssText = 'display:inline-block; margin-top:6px; font-size:11px; padding:3px 8px; border-radius:10px; background:#f5f5f5; color:#888;';
+            }
+          }
+        } else if (badge) {
+          badge.textContent = '위치 정보 없음';
+          badge.style.cssText = 'display:inline-block; margin-top:6px; font-size:11px; padding:3px 8px; border-radius:10px; background:#fafafa; color:#bbb;';
         }
-      } catch(e) {}
+      } catch(e) { if (badge) badge.style.display = 'none'; }
 
       // 폴리라인 강조 + 노드 마커 표시
       const trip = tripsCache[id];
