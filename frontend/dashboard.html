@@ -520,6 +520,11 @@
       <button onclick="hideRightPanel()" style="background:none; border:none; font-size:24px; cursor:pointer; color:#999; line-height:1;">&times;</button>
     </div>
     <div id="driver-location-badge" style="display:none; margin-top:6px; font-size:11px; padding:3px 8px; border-radius:10px; display:inline-block;"></div>
+    <div id="emergency-loading-badge" style="display:none; margin-top:6px; padding:6px 10px; background:#fff3e0; border:1px solid #ffb74d; border-radius:8px; font-size:12px; color:#e65100;">
+      <span>⚡ 긴급 상차지 대기 중: <strong id="emergency-loading-name"></strong></span>
+      <span style="margin-left:6px; color:#bbb; font-size:11px;">— 지도에서 하차지를 클릭해 추가하세요</span>
+      <button onclick="cancelEmergencyLoading()" style="float:right; background:none; border:none; cursor:pointer; color:#e74c3c; font-size:14px; line-height:1; padding:0;">✕</button>
+    </div>
     <hr style="margin: 15px 0;">
 
     <!-- 현재 운행 정보 -->
@@ -896,6 +901,7 @@
     }
 
     async function showDriverDetail(id) {
+      if (currentDriverId !== id) cancelEmergencyLoading();
       currentDriverId = id;
 
       document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('active'));
@@ -1192,6 +1198,7 @@
       document.getElementById('route-nodes-box').style.display = 'none';
       document.getElementById('new-trip-section').style.display = 'none';
       currentDriverId = null;
+      cancelEmergencyLoading();
       hideNodePopup();
       hideAllRouteMarkers();
       resetPolylineHighlight();
@@ -1374,8 +1381,9 @@
     // 운행 생성 패널 (Trip Builder)
     // ════════════════════════════════════════════════
     let tbTasks = [];  // [{loading:{name,lat,lon}|null, unloadings:[{name,lat,lon},...]}]
-    let _searchPinOverlay = null;
-    let _searchPinCoord   = null;
+    let _searchPinOverlay  = null;
+    let _searchPinCoord    = null;
+    let _emergencyLoading  = null;  // {name, lat, lon, task_group} — 임시 저장된 긴급 상차지
 
     async function initTripBuilder() {
       await refreshVehicleSelect();
@@ -1706,8 +1714,12 @@
             <button class="pin-btn" style="background:#d1ecf1; color:#2980b9;" onclick="useSearchPin('unloading')">📦 하차지</button>
           </div>
           ${activeTrip ? `<div class="pin-btns-emergency">
-            <button class="pin-btn-emergency" onclick="addEmergencyWaypoint('loading')">⚡ 긴급 상차지</button>
-            <button class="pin-btn-emergency" onclick="addEmergencyWaypoint('unloading')">⚡ 긴급 하차지</button>
+            ${_emergencyLoading
+              ? `<button class="pin-btn-emergency" onclick="addEmergencyWaypoint('unloading')" style="background:#e8f5e9; color:#2e7d32;">⚡ 긴급 하차지 추가</button>
+                 <button class="pin-btn-emergency" onclick="addEmergencyWaypoint('loading')" style="background:#fff3cd; color:#856404;">↺ 상차지 변경</button>`
+              : `<button class="pin-btn-emergency" onclick="addEmergencyWaypoint('loading')">⚡ 긴급 상차지</button>
+                 <button class="pin-btn-emergency" onclick="addEmergencyWaypoint('unloading')">⚡ 긴급 하차지</button>`
+            }
           </div>` : ''}
         </div>
         <div class="pin-tail"></div>
@@ -1748,6 +1760,17 @@
       document.getElementById('map-search-input').value = '';
     }
 
+    function _nextEmergencyTaskGroup(trip) {
+      const wps = trip.waypoints || [];
+      const maxGroup = wps.reduce((m, w) => Math.max(m, w.task_group ?? -1), -1);
+      return maxGroup + 1;
+    }
+
+    function cancelEmergencyLoading() {
+      _emergencyLoading = null;
+      document.getElementById('emergency-loading-badge').style.display = 'none';
+    }
+
     async function addEmergencyWaypoint(type = 'unloading') {
       if (!_searchPinCoord || !currentDriverId) return;
       const { name, lat, lon } = _searchPinCoord;
@@ -1757,21 +1780,57 @@
         return alert('활성 운행이 없습니다.');
       }
 
-      const res = await fetch(`${API}/trips/${trip.id}/waypoints`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ name, lat, lon, type }),
-      });
-
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
 
-      if (!res.ok) {
-        const err = await res.json();
-        return alert(`경유지 추가 실패: ${err.detail}`);
+      if (type === 'loading') {
+        // 상차지 임시 저장 — 아직 서버에 추가하지 않음
+        const tg = _nextEmergencyTaskGroup(trip);
+        _emergencyLoading = { name, lat, lon, task_group: tg };
+        const badge = document.getElementById('emergency-loading-badge');
+        document.getElementById('emergency-loading-name').textContent = name;
+        badge.style.display = 'block';
+        return;
       }
 
-      const typeLabel = type === 'loading' ? '상차지' : '하차지';
-      alert(`✅ '${name}' ${typeLabel}가 긴급 추가됐습니다.\n기사 앱에 재경로 요청을 전송했습니다.`);
+      // 하차지 추가
+      if (_emergencyLoading) {
+        // 임시 상차지가 있으면 상차지 먼저 추가 후 같은 task_group으로 하차지 추가
+        const { name: lName, lat: lLat, lon: lLon, task_group: tg } = _emergencyLoading;
+
+        const r1 = await fetch(`${API}/trips/${trip.id}/waypoints`, {
+          method: 'PATCH', headers: authHeaders(),
+          body: JSON.stringify({ name: lName, lat: lLat, lon: lLon, type: 'loading', task_group: tg }),
+        });
+        if (!r1.ok) {
+          const err = await r1.json();
+          return alert(`긴급 상차지 추가 실패: ${err.detail}`);
+        }
+
+        const r2 = await fetch(`${API}/trips/${trip.id}/waypoints`, {
+          method: 'PATCH', headers: authHeaders(),
+          body: JSON.stringify({ name, lat, lon, type: 'unloading', task_group: tg }),
+        });
+        if (!r2.ok) {
+          const err = await r2.json();
+          return alert(`긴급 하차지 추가 실패: ${err.detail}`);
+        }
+
+        // 배지는 유지 — 같은 상차지에 하차지 계속 추가 가능
+        document.getElementById('emergency-loading-name').textContent = lName;
+        alert(`✅ 긴급 태스크 추가됐습니다.\n상차: ${lName} → 하차: ${name}\n기사 앱에 재경로 요청을 전송했습니다.`);
+      } else {
+        // 임시 상차지 없이 하차지만 추가 (task_group 없음)
+        const res = await fetch(`${API}/trips/${trip.id}/waypoints`, {
+          method: 'PATCH', headers: authHeaders(),
+          body: JSON.stringify({ name, lat, lon, type: 'unloading' }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          return alert(`경유지 추가 실패: ${err.detail}`);
+        }
+        alert(`✅ '${name}' 긴급 하차지가 추가됐습니다.\n기사 앱에 재경로 요청을 전송했습니다.`);
+      }
+
       await loadDrivers();
       await showDriverDetail(currentDriverId);
     }
