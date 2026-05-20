@@ -314,7 +314,9 @@ async def _get_accessible_conversation(
 ) -> Conversation:
     conversation_uuid = _as_uuid(conversation_id, "conversation_id")
     _r = await db.execute(
-        select(Conversation).where(
+        select(Conversation)
+        .options(selectinload(Conversation.admin), selectinload(Conversation.driver))
+        .where(
             Conversation.id == conversation_uuid,
             Conversation.organization_id == current_user.organization_id,
             or_(
