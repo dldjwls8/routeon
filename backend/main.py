@@ -540,10 +540,11 @@ async def delete_rest_stop(stop_id: int, db: AsyncSession = Depends(get_db),
 # 운행 (trips)
 # ────────────────────────────────────────────────
 class WaypointSchema(BaseModel):
-    name: str
-    lat:  float
-    lon:  float
-    type: str = "unloading"   # "loading" = 상차지 | "unloading" = 하차지
+    name:       str
+    lat:        float
+    lon:        float
+    type:       str            = "unloading"  # "loading" | "unloading"
+    task_group: Optional[int] = None          # 같은 task_group의 loading-unloading이 쌍으로 묶임
 
 class AutoDispatchTask(BaseModel):
     loading:    WaypointSchema
@@ -1074,39 +1075,6 @@ def _resolve_dest(
     raise HTTPException(400, "도착지를 지정하거나 하차지를 1개 이상 추가해주세요.")
 
 
-def _apply_loading_precedence(
-    ordered: list,
-    reordered: list[list[int]],
-    reordered_dist: list[list[int]],
-) -> tuple[list, list[list[int]], list[list[int]]]:
-    """
-    상차지(loading)가 하차지(unloading)보다 반드시 앞서도록 재정렬.
-    origin(첫 번째)·destination(마지막)은 고정.
-    B1 수정: ordered 재정렬 시 reordered/reordered_dist 행렬도 같은 순서로 재배열.
-    """
-    if len(ordered) <= 2:
-        return ordered, reordered, reordered_dist
-
-    first = ordered[0]
-    last  = ordered[-1]
-    middle = ordered[1:-1]
-
-    loadings   = [n for n in middle if n.node_type == "loading"]
-    unloadings = [n for n in middle if n.node_type != "loading"]
-    new_middle = loadings + unloadings
-
-    new_ordered = [first] + new_middle + [last]
-
-    # 원래 ordered에서 각 노드의 위치 → 새 위치로 매핑
-    old_positions = {id(n): i for i, n in enumerate(ordered)}
-    perm = [old_positions[id(n)] for n in new_ordered]
-
-    n = len(new_ordered)
-    new_reordered      = [[reordered[perm[i]][perm[j]]      for j in range(n)] for i in range(n)]
-    new_reordered_dist = [[reordered_dist[perm[i]][perm[j]] for j in range(n)] for i in range(n)]
-
-    return new_ordered, new_reordered, new_reordered_dist
-
 
 @app.post("/optimize")
 async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
@@ -1170,13 +1138,33 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     except Exception as e:
         raise HTTPException(502, f"GraphHopper API 오류: {e}")
 
+    # task_group 기반 pickup_deliveries 추출
+    # (origin=index 0, dest=마지막 index는 제외)
+    _tg_loadings: dict[int, int] = {}
+    _tg_unloadings: dict[int, list[int]] = {}
+    for _ni, _nd in enumerate(nodes[1:-1], start=1):
+        tg = _nd.get("task_group")
+        if tg is None:
+            continue
+        if _nd.get("type") == "loading":
+            _tg_loadings[tg] = _ni
+        else:
+            _tg_unloadings.setdefault(tg, []).append(_ni)
+    pickup_deliveries = [
+        (ld_idx, ul_idx)
+        for tg, ld_idx in _tg_loadings.items()
+        for ul_idx in _tg_unloadings.get(tg, [])
+    ] or None
+
     node_names = [n["name"] for n in nodes]
-    violation = validate_tsp_constraints(time_matrix, node_names=node_names)
+    violation = validate_tsp_constraints(
+        time_matrix, pickup_deliveries=pickup_deliveries, node_names=node_names
+    )
     if violation:
         code, msg = violation
         raise HTTPException(code, msg)
 
-    tsp_order = solve_tsp(time_matrix)
+    tsp_order = solve_tsp(time_matrix, pickup_deliveries=pickup_deliveries)
     if tsp_order is None:
         raise HTTPException(422, "경로 계산 실패: 가능한 경로가 없습니다.")
     dest_idx = len(nodes) - 1
@@ -1202,11 +1190,6 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
             reordered_dist[i][j] = dist_matrix[tsp_order[i]][tsp_order[j]]
         reordered[i][k]      = time_matrix[tsp_order[i]][dest_idx]
         reordered_dist[i][k] = dist_matrix[tsp_order[i]][dest_idx]
-
-    # B1 수정: 상차지 우선 순서 제약 적용 + 행렬 동시 재배열
-    ordered, reordered, reordered_dist = _apply_loading_precedence(
-        ordered, reordered, reordered_dist
-    )
 
     # 휴게소 조회 (highway_rest만 사용)
     _rr = await db.execute(
@@ -1283,7 +1266,8 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
 
     nodes = [{"name": req.current_name, "lat": req.current_lat, "lon": req.current_lon}]
-    nodes += [{"name": w.name, "lat": w.lat, "lon": w.lon} for w in req.remaining_waypoints]
+    nodes += [{"name": w.name, "lat": w.lat, "lon": w.lon,
+               "type": w.type, "task_group": w.task_group} for w in req.remaining_waypoints]
     nodes.append({"name": req.dest_name, "lat": req.dest_lat, "lon": req.dest_lon})
 
     try:
@@ -1291,7 +1275,24 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
     except Exception as e:
         raise HTTPException(502, f"GraphHopper API 오류: {e}")
 
-    tsp_order = solve_tsp(time_matrix)
+    # task_group 기반 pickup_deliveries 추출
+    _tg_l2: dict[int, int] = {}
+    _tg_u2: dict[int, list[int]] = {}
+    for _ni, _nd in enumerate(nodes[1:-1], start=1):
+        tg = _nd.get("task_group")
+        if tg is None:
+            continue
+        if _nd.get("type") == "loading":
+            _tg_l2[tg] = _ni
+        else:
+            _tg_u2.setdefault(tg, []).append(_ni)
+    replan_pd = [
+        (ld, ul)
+        for tg, ld in _tg_l2.items()
+        for ul in _tg_u2.get(tg, [])
+    ] or None
+
+    tsp_order = solve_tsp(time_matrix, pickup_deliveries=replan_pd)
     if tsp_order is None:
         raise HTTPException(422, "재경로 계산 실패: 가능한 경로가 없습니다.")
     dest_idx  = len(nodes) - 1
@@ -3021,10 +3022,12 @@ async def auto_dispatch_trips(
         driver = driver_map[driver_id]
 
         waypoints = []
-        for task in tasks:
-            waypoints.append({"name": task.loading.name, "lat": task.loading.lat, "lon": task.loading.lon, "type": "loading"})
+        for tg, task in enumerate(tasks):
+            waypoints.append({"name": task.loading.name, "lat": task.loading.lat,
+                              "lon": task.loading.lon, "type": "loading", "task_group": tg})
             for u in task.unloadings:
-                waypoints.append({"name": u.name, "lat": u.lat, "lon": u.lon, "type": "unloading"})
+                waypoints.append({"name": u.name, "lat": u.lat,
+                                  "lon": u.lon, "type": "unloading", "task_group": tg})
 
         t = Trip(
             driver_id=driver.id,

@@ -1454,12 +1454,12 @@
 
     function _tbTasksToWaypoints() {
       const wps = [];
-      for (const task of tbTasks) {
-        if (task.loading) wps.push({ ...task.loading, type: 'loading' });
+      tbTasks.forEach((task, ti) => {
+        if (task.loading) wps.push({ ...task.loading, type: 'loading',   task_group: ti });
         for (const u of task.unloadings) {
-          if (u) wps.push({ ...u, type: 'unloading' });
+          if (u) wps.push({ ...u,          type: 'unloading', task_group: ti });
         }
-      }
+      });
       return wps;
     }
 
