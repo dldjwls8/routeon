@@ -415,6 +415,28 @@
     }
     .ad-driver-chip.selected { background: #1976d2; border-color: #1565c0; color: #fff; }
 
+    /* ── 운행 생성 태스크 카드 ──────────────────────── */
+    .tb-task-card {
+      background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+      padding: 10px; margin-bottom: 8px;
+    }
+    .tb-task-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; font-size: 12px; font-weight: 700; color: #555;
+    }
+    .tb-task-field { position: relative; margin-bottom: 4px; }
+    .tb-task-input {
+      width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 12px; box-sizing: border-box;
+    }
+    .tb-ul-row {
+      display: flex; align-items: center; gap: 4px; margin-bottom: 4px;
+    }
+    .tb-ul-row input {
+      flex: 1; padding: 5px 8px; border: 1px solid #d1ecf1; border-radius: 6px;
+      font-size: 12px; box-sizing: border-box;
+    }
+
     /* ── 기사·차량 교체 모달 ────────────────────────── */
     .rs-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.45);
@@ -547,15 +569,13 @@
           <button onclick="deletePreset()" style="padding:6px 8px; background:#e74c3c; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer;">✕</button>
         </div>
       </div>
-      <!-- 상차지 -->
-      <div style="margin-bottom:6px; background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #fff3cd;">
-        <div style="font-size:10px; font-weight:700; color:#e67e22; margin-bottom:4px;"><span class="tb-dot" style="background:#e67e22;"></span> 상차지 <span style="color:#e67e22;">*</span> <span style="font-weight:normal; color:#bbb; font-size:10px;">(지도 클릭 후 추가)</span></div>
-        <div id="rp-loadings-list"><div style="font-size:12px; color:#ccc; padding:2px 0;">없음</div></div>
-      </div>
-      <!-- 하차지 -->
-      <div style="margin-bottom:12px; background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #d1ecf1;">
-        <div style="font-size:10px; font-weight:700; color:#2980b9; margin-bottom:4px;"><span class="tb-dot" style="background:#2980b9;"></span> 하차지 <span style="font-weight:normal; color:#bbb; font-size:10px;">(마지막 하차지가 도착지)</span></div>
-        <div id="rp-unloadings-list"><div style="font-size:12px; color:#ccc; padding:2px 0;">없음</div></div>
+      <!-- 배송 태스크 -->
+      <div style="margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:10px; font-weight:700; color:#555;">📋 배송 태스크 <span style="color:#e74c3c;">*</span> <span style="font-weight:normal; color:#bbb;">(지도 클릭 또는 검색 입력)</span></span>
+          <button onclick="tbAddTask()" style="padding:3px 9px; background:#e67e22; color:#fff; border:none; border-radius:10px; font-size:11px; cursor:pointer; font-weight:600;">+ 태스크 추가</button>
+        </div>
+        <div id="rp-tasks-list"></div>
       </div>
       <!-- 차량 / 시간 -->
       <select id="rp-vehicle" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:13px; margin-bottom:8px; box-sizing:border-box; background:#fff;">
@@ -1298,8 +1318,7 @@
       }
       section.style.display = 'block';
       await refreshVehicleSelect();
-      renderTbLoadings();
-      renderTbUnloadings();
+      renderTbTasks();
     }
 
 
@@ -1335,16 +1354,14 @@
     // ════════════════════════════════════════════════
     // 운행 생성 패널 (Trip Builder)
     // ════════════════════════════════════════════════
-    let tbLoadings   = [];  // [{name, lat, lon}] 상차지 목록
-    let tbUnloadings = [];  // [{name, lat, lon}] 하차지 목록
+    let tbTasks = [];  // [{loading:{name,lat,lon}|null, unloadings:[{name,lat,lon},...]}]
     let _searchPinOverlay = null;
     let _searchPinCoord   = null;
 
     async function initTripBuilder() {
       await refreshVehicleSelect();
       await refreshPresetSelect();
-      renderTbLoadings();
-      renderTbUnloadings();
+      renderTbTasks();
     }
 
     // ── 프리셋 ──────────────────────────────────────
@@ -1367,17 +1384,21 @@
       if (!id) return;
       const preset = _presets.find(p => p.id === id);
       if (!preset) return;
-      tbLoadings   = preset.waypoints.filter(w => w.type === 'loading').map(w => ({ name: w.name, lat: w.lat, lon: w.lon }));
-      tbUnloadings = preset.waypoints.filter(w => w.type === 'unloading').map(w => ({ name: w.name, lat: w.lat, lon: w.lon }));
-      renderTbLoadings();
-      renderTbUnloadings();
+      // waypoints 배열을 태스크 단위로 변환 (loading → 새 태스크, unloading → 마지막 태스크에 추가)
+      tbTasks = [];
+      for (const w of preset.waypoints) {
+        if (w.type === 'loading') {
+          tbTasks.push({ loading: { name: w.name, lat: w.lat, lon: w.lon }, unloadings: [] });
+        } else {
+          if (tbTasks.length === 0) tbTasks.push({ loading: null, unloadings: [] });
+          tbTasks[tbTasks.length - 1].unloadings.push({ name: w.name, lat: w.lat, lon: w.lon });
+        }
+      }
+      renderTbTasks();
     }
 
     async function savePreset() {
-      const waypoints = [
-        ...tbLoadings.map(w => ({ ...w, type: 'loading' })),
-        ...tbUnloadings.map(w => ({ ...w, type: 'unloading' })),
-      ];
+      const waypoints = _tbTasksToWaypoints();
       if (waypoints.length === 0) return alert('저장할 경유지가 없습니다.');
       const name = prompt('프리셋 이름을 입력하세요:');
       if (!name || !name.trim()) return;
@@ -1414,81 +1435,138 @@
       } catch(e) {}
     }
 
-    function tbAddLoading(name, lat, lon) {
-      tbLoadings.push({ name, lat, lon });
-      renderTbLoadings();
+    function _tbTasksToWaypoints() {
+      const wps = [];
+      for (const task of tbTasks) {
+        if (task.loading) wps.push({ ...task.loading, type: 'loading' });
+        for (const u of task.unloadings) {
+          if (u) wps.push({ ...u, type: 'unloading' });
+        }
+      }
+      return wps;
     }
 
-    function tbRemoveLoading(idx) {
-      tbLoadings.splice(idx, 1);
-      renderTbLoadings();
+    function tbAddTask(loading = null) {
+      tbTasks.push({ loading, unloadings: [] });
+      renderTbTasks();
+      // 새 태스크의 상차지 입력에 포커스
+      const idx = tbTasks.length - 1;
+      setTimeout(() => {
+        const inp = document.getElementById(`tb-t${idx}-loading-inp`);
+        if (inp) inp.focus();
+      }, 50);
     }
 
-    function tbAddUnloading(name, lat, lon) {
-      tbUnloadings.push({ name, lat, lon });
-      renderTbUnloadings();
+    function tbRemoveTask(idx) {
+      tbTasks.splice(idx, 1);
+      renderTbTasks();
     }
 
-    function tbRemoveUnloading(idx) {
-      tbUnloadings.splice(idx, 1);
-      renderTbUnloadings();
+    function tbAddUnloadingSlot(taskIdx) {
+      tbTasks[taskIdx].unloadings.push(null);
+      renderTbTasks();
+      const idx = tbTasks[taskIdx].unloadings.length - 1;
+      setTimeout(() => {
+        const inp = document.getElementById(`tb-t${taskIdx}-ul${idx}-inp`);
+        if (inp) inp.focus();
+      }, 50);
     }
 
-    function _renderWpList(el, items, icon, color, removeFn, dragArr, renderFn) {
+    function tbRemoveUnloadingSlot(taskIdx, ulIdx) {
+      tbTasks[taskIdx].unloadings.splice(ulIdx, 1);
+      renderTbTasks();
+    }
+
+    // Kakao Places 자동완성 (태스크 카드 내)
+    function tbSearch(e, inputId, type, taskIdx, ulIdx) {
+      const q = e.target.value.trim();
+      const dropId = inputId + '-drop';
+      const drop = document.getElementById(dropId);
+      if (!drop) return;
+      clearTimeout(_acDebounce[inputId]);
+      if (q.length < 2) { drop.style.display = 'none'; return; }
+      _acDebounce[inputId] = setTimeout(() => {
+        const ps = new kakao.maps.services.Places();
+        ps.keywordSearch(q, (data, status) => {
+          if (status !== kakao.maps.services.Status.OK || !data.length) {
+            drop.style.display = 'none'; return;
+          }
+          _acResults[inputId] = data.slice(0, 5).map(p => ({
+            name: p.place_name,
+            addr: p.road_address_name || p.address_name,
+            lat:  parseFloat(p.y),
+            lon:  parseFloat(p.x),
+          }));
+          drop.innerHTML = _acResults[inputId].map((r, i) => `
+            <div class="ac-item" onclick="tbSelectLoc('${inputId}',${i},${taskIdx},'${type}',${ulIdx ?? -1})">
+              <div class="ac-item-name">${escapeHtml(r.name)}</div>
+              <div class="ac-item-addr">${escapeHtml(r.addr)}</div>
+            </div>`).join('');
+          drop.style.display = 'block';
+        });
+      }, 280);
+    }
+
+    function tbSelectLoc(inputId, resultIdx, taskIdx, type, ulIdx) {
+      const r = (_acResults[inputId] || [])[resultIdx];
+      if (!r) return;
+      const inp = document.getElementById(inputId + '-inp');
+      if (inp) inp.value = r.name;
+      document.getElementById(inputId + '-drop').style.display = 'none';
+      if (type === 'loading') {
+        tbTasks[taskIdx].loading = { name: r.name, lat: r.lat, lon: r.lon };
+      } else {
+        tbTasks[taskIdx].unloadings[ulIdx] = { name: r.name, lat: r.lat, lon: r.lon };
+      }
+    }
+
+    function renderTbTasks() {
+      const el = document.getElementById('rp-tasks-list');
       if (!el) return;
-      if (items.length === 0) {
-        el.innerHTML = '<div style="font-size:12px; color:#ccc; padding:2px 0;">없음</div>';
+      if (tbTasks.length === 0) {
+        el.innerHTML = '<div style="font-size:12px; color:#ccc; padding:4px 0; text-align:center;">태스크가 없습니다. 지도를 클릭하거나 + 태스크 추가를 눌러주세요.</div>';
         return;
       }
-      el.innerHTML = items.map((w, i) => `
-        <div class="tb-wp-item" draggable="true" data-idx="${i}" data-section="${removeFn}">
-          <span class="wp-handle">⠿</span>
-          <span style="flex:1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:${color};">${icon} ${escapeHtml(w.name)}</span>
-          <button onclick="${removeFn}(${i})" style="background:none; border:none; cursor:pointer; color:#e74c3c; font-size:14px; padding:0 2px; flex-shrink:0;">✕</button>
-        </div>
-      `).join('');
-
-      el.querySelectorAll('.tb-wp-item').forEach(item => {
-        item.addEventListener('dragstart', e => {
-          _dragSrcIdx = parseInt(item.dataset.idx);
-          setTimeout(() => item.classList.add('dragging'), 0);
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        item.addEventListener('dragend', () => item.classList.remove('dragging'));
-        item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
-        item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
-        item.addEventListener('drop', e => {
-          e.preventDefault();
-          item.classList.remove('drag-over');
-          const destIdx = parseInt(item.dataset.idx);
-          if (_dragSrcIdx === null || _dragSrcIdx === destIdx) return;
-          const moved = dragArr.splice(_dragSrcIdx, 1)[0];
-          dragArr.splice(destIdx, 0, moved);
-          _dragSrcIdx = null;
-          renderFn();
-        });
-      });
-    }
-
-    function renderTbLoadings() {
-      _renderWpList(
-        document.getElementById('rp-loadings-list'),
-        tbLoadings, '🏗️', '#e67e22', 'tbRemoveLoading', tbLoadings, renderTbLoadings
-      );
-    }
-
-    function renderTbUnloadings() {
-      _renderWpList(
-        document.getElementById('rp-unloadings-list'),
-        tbUnloadings, '📦', '#2980b9', 'tbRemoveUnloading', tbUnloadings, renderTbUnloadings
-      );
+      el.innerHTML = tbTasks.map((task, ti) => {
+        const loadingVal = task.loading ? task.loading.name : '';
+        const ulRows = task.unloadings.map((u, ui) => `
+          <div class="tb-ul-row">
+            <span style="font-size:11px; color:#2980b9; flex-shrink:0;">📦</span>
+            <div class="tb-task-field" style="flex:1; margin:0;">
+              <input id="tb-t${ti}-ul${ui}-inp" class="tb-task-input" style="border-color:#d1ecf1;"
+                placeholder="하차지 검색..." value="${escapeHtml(u?.name || '')}"
+                oninput="tbSearch(event,'tb-t${ti}-ul${ui}','unloading',${ti},${ui})">
+              <div id="tb-t${ti}-ul${ui}-drop" class="ac-dropdown"></div>
+            </div>
+            <button onclick="tbRemoveUnloadingSlot(${ti},${ui})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:0 2px;flex-shrink:0;">✕</button>
+          </div>`).join('');
+        return `
+          <div class="tb-task-card">
+            <div class="tb-task-header">
+              <span>태스크 ${ti + 1}</span>
+              <button onclick="tbRemoveTask(${ti})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:13px;padding:0;">✕ 제거</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
+              <span style="font-size:11px; color:#e67e22; flex-shrink:0;">🏗️</span>
+              <div class="tb-task-field" style="flex:1; margin:0;">
+                <input id="tb-t${ti}-loading-inp" class="tb-task-input" style="border-color:#fff3cd;"
+                  placeholder="상차지 검색..." value="${escapeHtml(loadingVal)}"
+                  oninput="tbSearch(event,'tb-t${ti}-loading','loading',${ti})">
+                <div id="tb-t${ti}-loading-drop" class="ac-dropdown"></div>
+              </div>
+            </div>
+            ${ulRows}
+            <button onclick="tbAddUnloadingSlot(${ti})"
+              style="width:100%;padding:4px;background:#f0f8ff;border:1px dashed #2980b9;border-radius:6px;font-size:11px;color:#2980b9;cursor:pointer;margin-top:2px;">
+              + 하차지 추가
+            </button>
+          </div>`;
+      }).join('');
     }
 
     function resetTripBuilder() {
-      tbLoadings = [];
-      tbUnloadings = [];
-      renderTbLoadings();
-      renderTbUnloadings();
+      tbTasks = [];
+      renderTbTasks();
       const dep = document.getElementById('rp-departure');
       if (dep) dep.value = '';
     }
@@ -1499,12 +1577,11 @@
 
       if (!currentDriverId) return alert('좌측 패널에서 기사를 먼저 선택하세요.');
       if (!vehicleId)        return alert('차량을 선택하세요.');
-      if (tbLoadings.length === 0) return alert('상차지를 1개 이상 추가하세요.');
+      if (tbTasks.length === 0) return alert('태스크를 1개 이상 추가하세요.');
+      const incomplete = tbTasks.findIndex(t => !t.loading);
+      if (incomplete !== -1) return alert(`태스크 ${incomplete + 1}의 상차지를 입력해주세요.`);
 
-      const waypoints = [
-        ...tbLoadings.map(w => ({ ...w, type: 'loading' })),
-        ...tbUnloadings.map(w => ({ ...w, type: 'unloading' })),
-      ];
+      const waypoints = _tbTasksToWaypoints();
 
       const body = {
         driver_id:  currentDriverId,
@@ -1636,8 +1713,18 @@
     function useSearchPin(type) {
       if (!_searchPinCoord) return;
       const { name, lat, lon } = _searchPinCoord;
-      if (type === 'loading')   tbAddLoading(name, lat, lon);
-      else                      tbAddUnloading(name, lat, lon);
+      if (type === 'loading') {
+        // 새 태스크 시작 — 상차지로 설정
+        tbAddTask({ name, lat, lon });
+      } else {
+        // 마지막 태스크에 하차지 추가 (없으면 태스크 먼저 만들라고 안내)
+        if (tbTasks.length === 0) {
+          alert('먼저 상차지를 추가해주세요.');
+          return;
+        }
+        tbTasks[tbTasks.length - 1].unloadings.push({ name, lat, lon });
+        renderTbTasks();
+      }
       if (_searchPinOverlay) { _searchPinOverlay.setMap(null); _searchPinOverlay = null; }
       document.getElementById('map-search-input').value = '';
     }
@@ -2278,9 +2365,9 @@
       }
     }
 
-    // 드롭다운 외부 클릭 시 닫기 (모달 내 ac-dropdown 포함)
+    // 드롭다운 외부 클릭 시 닫기 (태스크 카드 + 자동배차 모달 내 ac-dropdown 포함)
     document.addEventListener('click', e => {
-      document.querySelectorAll('#ad-task-list .ac-dropdown').forEach(drop => {
+      document.querySelectorAll('.ac-dropdown').forEach(drop => {
         if (!drop.contains(e.target) && !drop.previousElementSibling?.contains(e.target)) {
           drop.style.display = 'none';
         }

@@ -438,7 +438,7 @@ dashboard.html 채팅 알림 WS:
 - [x] 대시보드 UX 개편 — 지도 클릭 팝업, 운행 생성 인라인 패널
 - [x] GraphHopper 전환 + WS 조직 격리 버그 수정
 - [x] 지도 POI 팝업 (장소명·전화·카테고리·링크) + 호버 커서
-- [x] 운행 생성 플로우 재설계 — 상차지/하차지 분리, 기사 출발지 GPS 폴백
+- [x] 운행 생성 플로우 재설계 — 상차지/하차지 분리, 기사 출발지 GPS 폴백, 태스크 단위 입력(상차지 1개+하차지 N개 묶음)
 - [x] 전체 기사 폴리라인 동시 표시 + 실시간 관제 (기사별 색상 팔레트, dim/highlight)
 - [x] 통계/애널리틱스 대시보드 (stats.html, /stats/* API 3개)
 - [x] WS 버그 수정 — driver 403, 20초 끊김 (heartbeat + uvicorn ping + nginx timeout)
