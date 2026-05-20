@@ -469,6 +469,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 기사·차량 관리 페이지 분리 — drivers.html, vehicles.html 신규 생성 및 대시보드 모달 제거
 - [x] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [x] 긴급 배차 개선 — 긴급 경유지 추가 버튼을 상차지/하차지로 분리, `addEmergencyWaypoint(type)` type 파라미터 전달, 백엔드는 WaypointSchema가 이미 type 지원
+- [x] 긴급 배차 태스크 단위 묶음 — 상차지 클릭 시 임시 저장(`_emergencyTask`), 하차지 N개 지도 클릭으로 순차 추가, 배지에 구성 목록 표시, ✅ 전송 버튼으로 한 번에 서버 전송(같은 task_group 부여). 상차지 없이 하차지만 추가 시 즉시 전송(task_group=null) 유지
 - [x] 기사·차량 운행 생성 테스트 하네스 — curl 기반 통합 테스트 (운행 생성·최적화·완료·교체·자동배차·취소요청 흐름 전수 검증)
 - [x] 통계 강화 — `GET /stats/by-driver-day` 신규 엔드포인트, 기사별 추이 라인 차트(건수/거리 탭 전환), 기사별 실적 CSV 내보내기(BOM UTF-8)
 - [x] 운행 자동 배차 — `POST /trips/auto-dispatch` + `GET /drivers/available`, 배송 태스크(상차지+하차지) N개를 기사 위치 기반 greedy 배정(위치 미확인 시 라운드 로빈), 대시보드 "🚛 자동 배차" 버튼 → 모달(태스크 입력 + 장소 검색 자동완성 + 기사 칩 선택 + 분배 미리보기)
