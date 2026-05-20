@@ -476,6 +476,25 @@
 
 ---
 
+## v1.0.9 (2026-05-20)
+
+### 경로 최적화 개선 + 위치 폴백 + 운행 생성 UX 개편
+
+**백엔드**
+- `GET /location-logs/{user_id}`: Redis miss 시 TimescaleDB 최근 기록 폴백. 응답에 `is_realtime`, `recorded_at` 추가
+- `POST /trips/auto-dispatch`: 라운드 로빈 → 상차지 기준 최근접 기사 greedy 배정. 배정 후 기준 위치를 마지막 하차지로 갱신. 위치 미확인 기사는 라운드 로빈 폴백
+- `WaypointSchema`: `task_group: Optional[int]` 필드 추가. 같은 그룹의 loading-unloading 쌍을 OR-Tools pickup_deliveries 제약으로 연결
+- `/optimize` · `/optimize/replan`: `_apply_loading_precedence` 제거. task_group 기반 pickup_deliveries 추출 → OR-Tools에 전달. 상차-하차 쌍 순서만 보장하고 전체 순서는 자유 최적화
+- `/optimize` `started_at` 버그 수정: in_progress 전환 시 `started_at` 미기록 문제 수정 → ETA 계산 정상화
+
+**프론트엔드 (dashboard.html)**
+- 기사 패널 상단: 🟢 실시간 위치 / 🔘 마지막 기록 N분 전 배지 표시
+- 운행 생성 패널: 상차지/하차지 분리 목록 → 태스크 카드(상차지 1개 + 하차지 N개 묶음) 구조로 전환
+  - 카카오 Places 자동완성 텍스트 검색 + 지도 클릭 병행 지원
+  - 지도 클릭 "상차지" → 새 태스크 생성, "하차지" → 마지막 태스크에 추가
+  - 프리셋 불러오기/저장도 태스크 단위 변환
+  - `_tbTasksToWaypoints()`에서 태스크 인덱스를 task_group으로 자동 부여
+
 ## v1.0.8 (2026-05-20)
 
 ### 기사·차량 교체 — 운행 중 인원/장비 교체 및 잔여 경유지 이관

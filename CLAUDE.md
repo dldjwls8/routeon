@@ -107,6 +107,14 @@ routeon/
 - **경도:** `lon` (`lng` 절대 금지 — 팀원 A 코드와 통일)
 - 예외: `rest_stops` 테이블만 `latitude` / `longitude` 사용
 
+### WaypointSchema 구조
+```json
+{"name": "강남역", "lat": 37.4979, "lon": 127.0276, "type": "loading", "task_group": 0}
+```
+- `type`: `"loading"` (상차지) | `"unloading"` (하차지)
+- `task_group`: 같은 그룹의 loading-unloading 쌍을 OR-Tools pickup_deliveries 제약으로 묶음.
+  `null`이면 자유 최적화 (긴급 배차 등). 운행 생성 패널과 자동 배차 모두 자동 부여.
+
 ### 비동기 패턴
 ```python
 result = await db.execute(select(Model).where(Model.id == id))
@@ -123,10 +131,11 @@ await db.refresh(obj)
 2. 기사:   POST /optimize → trip_id (출발지 선택 입력)
            └─ origin 우선순위: req.origin_lat/lon → Redis location:{user_id} → HTTP 400
            └─ dest 우선순위:   req.dest → t.dest → 마지막 unloading → 마지막 loading → HTTP 400
-           └─ _apply_loading_precedence(): 상차지 전부 → 하차지 전부 순서 강제
+           └─ task_group 기반 pickup_deliveries 추출 → OR-Tools 제약으로 전달
+              (같은 task_group의 loading → unloading 순서 보장, 나머지는 자유 최적화)
            └─ auto_detect_route_mode() — 50km 기준 local/long_distance
            └─ GraphHopper N×N (시간·거리 행렬) — TTL 캐시 1시간
-           └─ OR-Tools TSP 경유지 순서 최적화
+           └─ OR-Tools TSP 경유지 순서 최적화 (pickup_deliveries 제약 적용)
            └─ insert_rest_stops() — 6,000초 임계값 + find_best_rest_stop() picker
            └─ 휴식지 후보: highway_rest 전용 (75건) — 졸음쉼터·공영차고지·물류단지 제외
            └─ total_distance_km + estimated_duration_min 포함 응답
@@ -185,7 +194,9 @@ Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
                                              → WS broadcast → 관리자 웹 마커
 관리자 웹  → WS /ws/location → 실시간 수신 → 지도 마커 업데이트
 기사 앱   → WS /ws/location → replan_requested 수신 (관리자 연결 풀과 별도 관리)
-관리자 웹  → GET /location-logs/{user_id} → Redis 현재 위치
+관리자 웹  → GET /location-logs/{user_id} → Redis 실시간 위치 (is_realtime=true)
+                                            → Redis miss 시 TimescaleDB 최근 기록 폴백 (is_realtime=false, recorded_at 포함)
+관리자 웹  → 기사 패널 상단: 🟢 실시간 위치 / 🔘 마지막 기록 N분 전 배지 표시
 ```
 
 ### ConnectionManager 구조
@@ -303,7 +314,7 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `POST /optimize` | 로그인 | 경로 최적화. origin_* 미입력 시 Redis GPS 자동 사용. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로 |
 | `GET /drivers/available` | 관리자 | 현재 운행이 없는 가용 기사 목록 (조직 내) |
-| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 라운드 로빈 분배 후 일괄 운행 생성 |
+| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 위치 기반 greedy 배정 후 일괄 운행 생성. 기사 위치 미확인 시 라운드 로빈 폴백 |
 
 ### 배송/위치
 | 엔드포인트 | 권한 | 설명 |
@@ -318,7 +329,7 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `GET /address/coord?query=` | 없음 | 주소 → 좌표 변환 |
 | `POST /rest-spots` | 없음 | 근처 휴식 장소 검색 (카카오 로컬) |
 | `POST /location-logs` | 로그인 | GPS 수신 + 자동 완료 + WS broadcast (5초 주기) |
-| `GET /location-logs/{user_id}` | 관리자 | 기사 현재 위치 (Redis) |
+| `GET /location-logs/{user_id}` | 관리자 | 기사 현재 위치. Redis 실시간 우선, miss 시 TimescaleDB 최근 기록 폴백. `is_realtime`, `recorded_at` 응답 포함 |
 | `GET /nearby-drivers?lat=&lon=&radius_km=` | 관리자 | 상차지 기준 반경 내 같은 조직 기사 목록 (Redis 위치 기준, 기본 10km) |
 | `GET /presets` | 관리자 | 같은 조직의 경유지 프리셋 목록 (최신순) |
 | `POST /presets` | 관리자 | 프리셋 저장 `{name, waypoints}` |
@@ -452,13 +463,18 @@ dashboard.html 채팅 알림 WS:
 - [x] 기사·차량 관리 페이지 분리 — drivers.html, vehicles.html 신규 생성 및 대시보드 모달 제거
 - [x] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [x] 긴급 배차 개선 — 긴급 경유지 추가 버튼을 상차지/하차지로 분리, `addEmergencyWaypoint(type)` type 파라미터 전달, 백엔드는 WaypointSchema가 이미 type 지원
-- [ ] 기사·차량 운행 생성 테스트 하네스 — 운행 생성·최적화·완료 흐름 자동 검증 (백엔드 통합 테스트)
+- [x] 기사·차량 운행 생성 테스트 하네스 — curl 기반 통합 테스트 (운행 생성·최적화·완료·교체·자동배차·취소요청 흐름 전수 검증)
 - [x] 통계 강화 — `GET /stats/by-driver-day` 신규 엔드포인트, 기사별 추이 라인 차트(건수/거리 탭 전환), 기사별 실적 CSV 내보내기(BOM UTF-8)
-- [x] 운행 자동 배차 — `POST /trips/auto-dispatch` + `GET /drivers/available`, 배송 태스크(상차지+하차지) N개를 가용 기사에게 라운드 로빈 분배, 대시보드 "🚛 자동 배차" 버튼 → 모달(태스크 입력 + 장소 검색 자동완성 + 기사 칩 선택 + 분배 미리보기)
+- [x] 운행 자동 배차 — `POST /trips/auto-dispatch` + `GET /drivers/available`, 배송 태스크(상차지+하차지) N개를 기사 위치 기반 greedy 배정(위치 미확인 시 라운드 로빈), 대시보드 "🚛 자동 배차" 버튼 → 모달(태스크 입력 + 장소 검색 자동완성 + 기사 칩 선택 + 분배 미리보기)
 - [x] 기사·차량 교체 — `PATCH /trips/{id}/reassign`, 기사/차량 단순 교체 또는 현재 운행 취소 + 잔여 경유지 새 운행 이관(transfer_remaining), 대시보드 "🔄 기사·차량 교체" 버튼 → 모달(기사·차량 드롭다운 + 이관 옵션)
 - [x] 기사 배차 취소 요청 — `POST /trips/{id}/cancel-request` (기사), `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자), WS `trip.cancel_requested`/`trip.cancel_responded` 브로드캐스트, 대시보드 notice 박스·카드 배지 즉시 반영
 - [x] 예상 운행 완료 시간 — `_trip_schema`에 `started_at` 추가, `calcETADate()` + `formatCardETA()`로 기사 카드·패널에 완료 예상 시각·남은 시간 표시, 1분 주기 setInterval 갱신
 - [x] 기사 현재 위치 경로 진행도 UI — 수직 타임라인 형태로 경로 노드 표시, `haversineKm` + `buildCumulativeDist` + `getNodeRatios` + `getDriverRatio`로 폴리라인 누적 거리 비율 계산, 구간 connector 높이 실제 거리 비율 반영(44~140px), 🚚 인디케이터 connector 내 정확한 비율 위치 표시, 지나온 노드 체크(✓) + dim, GPS 수신마다 `updateProgressIndicator()` 갱신
+- [x] 기사 마지막 위치 DB 폴백 — `GET /location-logs/{user_id}` Redis miss 시 TimescaleDB 최근 기록 조회, `is_realtime`/`recorded_at` 응답, 대시보드 패널 🟢/🔘 위치 배지
+- [x] 자동 배차 위치 기반 greedy 배정 — 상차지 기준 최근접 기사 greedy 배정, 배정 후 기준 위치 갱신, 위치 미확인 기사 라운드 로빈 폴백
+- [x] 운행 생성 패널 태스크 단위 입력 — 상차지+하차지 분리 목록 → 태스크 카드(상차지 1개+하차지 N개 묶음) 구조, 카카오 Places 자동완성 + 지도 클릭 병행
+- [x] OR-Tools pickup_deliveries 제약 도입 — `_apply_loading_precedence` 제거, `task_group` 필드로 상차-하차 쌍 보장하면서 전체 순서는 OR-Tools 자유 최적화
+- [x] `/optimize` `started_at` 버그 수정 — in_progress 전환 시 started_at 미기록 문제 수정 (ETA 계산 정상화)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
