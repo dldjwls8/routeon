@@ -891,6 +891,97 @@ async def respond_trip_cancel(
     return {"trip_id": trip_id, "action": action}
 
 
+class ReassignRequest(BaseModel):
+    new_driver_id:      Optional[str] = None
+    new_vehicle_id:     Optional[int] = None
+    transfer_remaining: bool          = False  # True: 현재 운행 취소 + 새 운행 생성
+
+
+@app.patch("/trips/{trip_id}/reassign", status_code=200)
+async def reassign_trip(
+    trip_id: str,
+    req: ReassignRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """운행 중 기사 또는 차량을 교체합니다. transfer_remaining=True 시 잔여 경유지를 새 운행으로 이관합니다."""
+    import uuid as uuid_lib
+
+    if not req.new_driver_id and req.new_vehicle_id is None:
+        raise HTTPException(400, "교체할 기사 ID 또는 차량 ID를 입력해주세요.")
+
+    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    t = _r.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    if t.status not in (TripStatus.scheduled, TripStatus.in_progress):
+        raise HTTPException(400, "완료되거나 취소된 운행은 교체할 수 없습니다.")
+
+    new_trip_id = None
+
+    if req.new_driver_id:
+        try:
+            new_driver_uuid = uuid_lib.UUID(req.new_driver_id)
+        except ValueError:
+            raise HTTPException(400, "유효하지 않은 new_driver_id 형식입니다.")
+        new_driver = (await db.execute(select(User).where(User.id == new_driver_uuid))).scalar_one_or_none()
+        if not new_driver:
+            raise HTTPException(404, "교체할 기사를 찾을 수 없습니다.")
+        if new_driver.role != UserRole.driver:
+            raise HTTPException(400, "지정한 사용자는 기사가 아닙니다.")
+        if new_driver.organization_id != current_user.organization_id:
+            raise HTTPException(403, "다른 조직의 기사로 교체할 수 없습니다.")
+
+        if req.transfer_remaining:
+            # 현재 운행 취소 후 새 기사에게 잔여 경유지로 새 운행 생성
+            t.status = TripStatus.cancelled
+            chosen_vehicle = req.new_vehicle_id if req.new_vehicle_id is not None else t.vehicle_id
+            new_trip = Trip(
+                driver_id=new_driver_uuid,
+                vehicle_id=chosen_vehicle,
+                dest_name=t.dest_name, dest_lat=t.dest_lat, dest_lon=t.dest_lon,
+                waypoints=list(t.waypoints or []),
+                departure_time=t.departure_time,
+            )
+            db.add(new_trip)
+            await db.flush()
+            new_trip_id = str(new_trip.id)
+        else:
+            existing = (await db.execute(
+                select(Trip).where(
+                    Trip.driver_id == new_driver_uuid,
+                    Trip.status.in_([TripStatus.scheduled, TripStatus.in_progress]),
+                )
+            )).scalar_one_or_none()
+            if existing:
+                raise HTTPException(409, "해당 기사에게 이미 진행 중인 배차가 있습니다.")
+            t.driver_id = new_driver_uuid
+
+    if req.new_vehicle_id is not None and not req.transfer_remaining:
+        vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == req.new_vehicle_id))).scalar_one_or_none()
+        if not vehicle:
+            raise HTTPException(404, "차량을 찾을 수 없습니다.")
+        if not vehicle.is_active:
+            raise HTTPException(400, "비활성화된 차량입니다.")
+        t.vehicle_id = req.new_vehicle_id
+
+    await db.commit()
+
+    if current_user.organization_id:
+        await manager.broadcast_to_org(current_user.organization_id, {
+            "type":        "trip.reassigned",
+            "trip_id":     trip_id,
+            "driver_id":   str(t.driver_id),
+            "new_trip_id": new_trip_id,
+        })
+
+    return {
+        "trip_id":     trip_id,
+        "transferred": req.transfer_remaining,
+        "new_trip_id": new_trip_id,
+    }
+
+
 def _trip_schema(t: Trip) -> dict:
     wp = t.waypoints or []
     loadings   = sum(1 for w in wp if w.get("type") == "loading")

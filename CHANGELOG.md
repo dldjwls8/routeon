@@ -476,6 +476,25 @@
 
 ---
 
+## v1.0.8 (2026-05-20)
+
+### 기사·차량 교체 — 운행 중 인원/장비 교체 및 잔여 경유지 이관
+
+**백엔드**
+- `ReassignRequest` 스키마: `new_driver_id?`, `new_vehicle_id?`, `transfer_remaining`
+- `PATCH /trips/{id}/reassign` 신규 엔드포인트 (관리자 전용)
+  - 기사/차량 단순 교체: `driver_id` 또는 `vehicle_id` 변경, 중복 배차 체크
+  - 잔여 경유지 이관 (`transfer_remaining=true`): 현재 운행 cancelled 처리 + 동일 waypoints로 새 운행 생성
+  - WS `trip.reassigned` 브로드캐스트 (`trip_id`, `driver_id`, `new_trip_id`)
+
+**프론트엔드 (dashboard.html)**
+- 운행 정보 패널에 "🔄 기사·차량 교체" 버튼 추가 (운행 활성 중일 때만 표시)
+- 교체 모달 (`.rs-overlay` / `.rs-modal`):
+  - 기사 드롭다운 — 가용/운행 중 상태 표시, 현재 기사 제외
+  - 이관 체크박스 — 기사 선택 시에만 노출, 현재 운행 취소 + 잔여 경유지 이관 설명
+  - 차량 드롭다운 — 전체 활성 차량, 현재 차량 기본 선택
+- WS `trip.reassigned` 수신 시 `handleTripReassigned()` → 폴리라인 갱신 + 기사 카드 재로드
+
 ## v1.0.7 (2026-05-19)
 
 ### 운행 자동 배차 — 배송 태스크 일괄 배분

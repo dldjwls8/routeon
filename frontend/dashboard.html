@@ -414,6 +414,35 @@
       background: #fafafa; border-color: #ddd; color: #aaa; cursor: default;
     }
     .ad-driver-chip.selected { background: #1976d2; border-color: #1565c0; color: #fff; }
+
+    /* ── 기사·차량 교체 모달 ────────────────────────── */
+    .rs-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      z-index: 9100; display: flex; align-items: center; justify-content: center;
+    }
+    .rs-modal {
+      background: #fff; border-radius: 14px; width: 420px; max-width: 96vw;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.22); overflow: hidden;
+    }
+    .rs-modal-header {
+      padding: 16px 20px 12px; border-bottom: 1px solid #eee;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .rs-modal-body { padding: 18px 20px; }
+    .rs-section-label {
+      font-size: 11px; font-weight: 700; color: #888; margin-bottom: 6px; text-transform: uppercase;
+    }
+    .rs-select {
+      width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: 13px; background: #fff; color: #333; margin-bottom: 14px; box-sizing: border-box;
+    }
+    .rs-transfer-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 16px;
+    }
+    .rs-transfer-row input[type=checkbox] { margin-top: 2px; flex-shrink: 0; }
+    .rs-transfer-row label { font-size: 13px; color: #5d4037; line-height: 1.5; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -490,6 +519,7 @@
           <button class="btn" style="flex:1; background:#7f8c8d; font-size:12px; padding:6px;" onclick="respondCancelRequest('reject')">❌ 거절</button>
         </div>
       </div>
+      <button id="btn-trip-reassign" class="btn" style="width:100%; background:#7e57c2; font-size:13px; padding:8px; margin-bottom:8px;" onclick="openReassignModal()">🔄 기사·차량 교체</button>
       <div style="display:flex; gap:8px;">
         <button id="btn-trip-complete" class="btn" style="flex:1; background:#27ae60; font-size:13px; padding:8px;" onclick="completeTripCurrent()">✅ 운행 완료</button>
         <button id="btn-trip-cancel"   class="btn btn-delete" style="flex:1; font-size:13px; padding:8px;" onclick="cancelTripCurrent()">❌ 운행 취소</button>
@@ -932,8 +962,9 @@
 
         // 완료/취소된 운행은 버튼 숨기기
         const canAct = ['scheduled', 'in_progress'].includes(trip.status);
-        document.getElementById('btn-trip-complete').style.display = canAct ? 'block' : 'none';
-        document.getElementById('btn-trip-cancel').style.display   = canAct ? 'block' : 'none';
+        document.getElementById('btn-trip-complete').style.display  = canAct ? 'block' : 'none';
+        document.getElementById('btn-trip-cancel').style.display    = canAct ? 'block' : 'none';
+        document.getElementById('btn-trip-reassign').style.display  = canAct ? 'block' : 'none';
 
         // 취소 요청 notice 박스
         const cancelBox = document.getElementById('cancel-request-box');
@@ -1886,6 +1917,8 @@
             handleCancelRequested(data);
           } else if (data.type === 'trip.cancel_responded') {
             handleCancelResponded(data);
+          } else if (data.type === 'trip.reassigned') {
+            handleTripReassigned(data);
           } else {
             updateDriverMarker(data);
           }
@@ -1986,6 +2019,30 @@
   </script>
 
   <!-- 자동 배차 모달 -->
+  <!-- 기사·차량 교체 모달 -->
+  <div id="rs-overlay" class="rs-overlay" style="display:none;" onclick="if(event.target===this)closeReassignModal()">
+    <div class="rs-modal">
+      <div class="rs-modal-header">
+        <strong style="font-size:15px; color:#333;">🔄 기사·차량 교체</strong>
+        <button onclick="closeReassignModal()" style="background:none; border:none; font-size:20px; cursor:pointer; color:#aaa; line-height:1;">×</button>
+      </div>
+      <div class="rs-modal-body">
+        <div class="rs-section-label">교체할 기사</div>
+        <select id="rs-driver-select" class="rs-select"></select>
+
+        <div id="rs-transfer-row" class="rs-transfer-row" style="display:none;">
+          <input type="checkbox" id="rs-transfer-check">
+          <label for="rs-transfer-check">현재 운행을 취소하고 잔여 경유지를 새 기사에게 이관<br><span style="font-size:11px; color:#999;">(기존 운행 취소 후 동일 경유지로 새 운행 생성)</span></label>
+        </div>
+
+        <div class="rs-section-label">교체할 차량</div>
+        <select id="rs-vehicle-select" class="rs-select"></select>
+
+        <button class="btn" style="width:100%; background:#7e57c2; font-size:14px; padding:10px;" onclick="runReassign()">✅ 교체 확인</button>
+      </div>
+    </div>
+  </div>
+
   <div id="ad-overlay" class="ad-overlay" style="display:none;" onclick="if(event.target===this)closeAutoDispatchModal()">
     <div class="ad-modal">
       <div class="ad-modal-header">
@@ -2229,6 +2286,85 @@
         }
       });
     });
+
+    // ── 기사·차량 교체 ──────────────────────────────
+    async function openReassignModal() {
+      const tripId = document.getElementById('trip-info-box')._tripId;
+      if (!tripId) return;
+      const trip = tripsCache[currentDriverId];
+      if (!trip) return;
+
+      // 가용 기사 목록 로드 (현재 기사 포함 전체 → 선택 시 자신 제외 처리)
+      const [driversRes, vehiclesRes] = await Promise.all([
+        fetch(`${API}/drivers/available`, { headers: authHeaders() }),
+        fetch(`${API}/vehicles`,           { headers: authHeaders() }),
+      ]);
+      const allDrivers  = driversRes.ok  ? await driversRes.json()  : [];
+      const allVehicles = vehiclesRes.ok ? await vehiclesRes.json() : [];
+
+      const driverOpts = allDrivers
+        .filter(d => d.id !== currentDriverId)
+        .map(d => `<option value="${d.id}" ${!d.available ? 'disabled' : ''}>${escapeHtml(d.name)}${!d.available ? ' (운행 중)' : ''}</option>`)
+        .join('');
+      const vehicleOpts = allVehicles
+        .map(v => `<option value="${v.id}" ${v.id === trip.vehicle_id ? 'selected' : ''}>${escapeHtml(v.plate_number)} ${escapeHtml(v.model || '')}</option>`)
+        .join('');
+
+      document.getElementById('rs-driver-select').innerHTML  = `<option value="">— 기사 유지 —</option>${driverOpts}`;
+      document.getElementById('rs-vehicle-select').innerHTML = `<option value="">— 차량 유지 —</option>${vehicleOpts}`;
+      document.getElementById('rs-transfer-check').checked   = false;
+      document.getElementById('rs-transfer-row').style.display = 'none';
+      document.getElementById('rs-overlay').style.display = 'flex';
+
+      document.getElementById('rs-driver-select').onchange = () => {
+        const hasDriver = !!document.getElementById('rs-driver-select').value;
+        document.getElementById('rs-transfer-row').style.display = hasDriver ? 'flex' : 'none';
+      };
+    }
+
+    function closeReassignModal() {
+      document.getElementById('rs-overlay').style.display = 'none';
+    }
+
+    async function runReassign() {
+      const tripId   = document.getElementById('trip-info-box')._tripId;
+      const driverId = document.getElementById('rs-driver-select').value;
+      const vehicleId = document.getElementById('rs-vehicle-select').value;
+      const transfer = document.getElementById('rs-transfer-check').checked;
+
+      if (!driverId && !vehicleId) return alert('교체할 기사 또는 차량을 선택해주세요.');
+
+      const confirmMsg = transfer
+        ? `현재 운행을 취소하고 잔여 경유지를 새 기사에게 이관합니다.\n계속하시겠습니까?`
+        : `선택한 기사/차량으로 교체하시겠습니까?`;
+      if (!confirm(confirmMsg)) return;
+
+      const body = { transfer_remaining: transfer };
+      if (driverId)  body.new_driver_id   = driverId;
+      if (vehicleId) body.new_vehicle_id  = parseInt(vehicleId);
+
+      const res = await fetch(`${API}/trips/${tripId}/reassign`, {
+        method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        return alert(`교체 실패: ${err.detail}`);
+      }
+      const result = await res.json();
+      closeReassignModal();
+      if (transfer) clearDriverRoute(currentDriverId);
+      alert(transfer
+        ? `✅ 이관 완료!\n잔여 경유지가 새 운행(ID: ${result.new_trip_id?.slice(0,8)}...)으로 이관됐습니다.`
+        : '✅ 교체 완료!');
+      await loadDrivers();
+      await showDriverDetail(currentDriverId);
+    }
+
+    async function handleTripReassigned(data) {
+      if (data.new_trip_id) clearDriverRoute(currentDriverId);
+      await loadDrivers();
+      if (currentDriverId === data.driver_id) await showDriverDetail(data.driver_id);
+    }
 
     async function runAutoDispatch() {
       // 유효성 검사
