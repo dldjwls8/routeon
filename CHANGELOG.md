@@ -476,6 +476,34 @@
 
 ---
 
+## v1.0.12 (2026-05-26)
+
+### 통계 강화 — 상태별 세분화, 차량별 실적, 과거 경로 지도, 안전 이슈·머문 시간 스키마
+
+**DB 스키마**
+- `trips.safety_issue` (BOOLEAN DEFAULT FALSE) 컬럼 추가
+- waypoints JSONB 항목에 `arrived_at` / `departed_at` 타임스탬프 저장 가능 (앱 연동 준비)
+
+**백엔드 (main.py)**
+- `_period_cutoff()` 확장 — `today` / `week` / `month` 추가 (기존 7d · 30d · all 유지)
+- `GET /stats/summary` — `driver_id` · `vehicle_id` 필터 추가, 안전 이슈 건수(`safety_issues`), 배정 완료·미배정 건수(`assigned_deliveries` · `unassigned_deliveries`) 신규 응답 필드
+- `GET /stats/by-driver` — `driver_id` 필터 추가, 운행 시간 합(`total_duration_min`) · 운행 일수(`work_days`) 신규 필드
+- `GET /stats/by-day` — `driver_id` · `vehicle_id` 필터 추가
+- `GET /stats/by-driver-day` — `driver_id` 필터 추가
+- `GET /stats/by-vehicle` (신규) — 차량별 완료 건수 · 총 거리 · 총 운행 시간 집계
+- `GET /stats/route-history` (신규) — 기사·기간 기반 location_logs GPS 궤적 배열 반환
+- `PATCH /trips/{id}/safety` (신규) — 안전 이슈 플래그 기록 `{safety_issue: bool}`
+- `PATCH /trips/{id}/waypoint-dwell` (신규) — 경유지 도착·출발 시간 기록 `{index, arrived_at?, departed_at?}`
+
+**프론트엔드 (stats.html)**
+- 기간 필터: 버튼 → 드롭다운 (오늘 / 이번 주 / 이번 달 / 최근 30일 / 최근 7일 / 전체)
+- 기사·차량 필터 드롭다운 추가 — 선택 시 모든 통계 자동 재조회
+- 요약 카드 재구성: 완료·운행중·대기·취소 상태별 4개 카드 + 배정 완료·미배정·안전 이슈 3개 카드
+- 기사별 실적 테이블 — 운행 일수 · 운행 시간 합 컬럼 추가, 시간 표기 `X시간 Y분` 형식
+- 차량별 실적 테이블 신규 — 차량번호 · 차종 · 총 운행 · 완료 · 총 거리 · 총 운행 시간
+- 과거 경로 지도 신규 — 기사 선택 드롭다운, 카카오맵에 GPS 궤적 폴리라인 + 시작·끝 마커
+- CSV 내보내기 — 운행 일수 · 시간 합 컬럼 반영
+
 ## v1.0.11 (2026-05-20)
 
 ### 긴급 배차 태스크 단위 묶음

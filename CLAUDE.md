@@ -339,10 +339,14 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 ### 통계
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `GET /stats/summary?period=7d\|30d\|all` | 관리자 | 총 운행 건수·거리·평균 시간·완료율·상태별 건수 |
-| `GET /stats/by-driver?period=` | 관리자 | 기사별 운행 집계 (총 건수, 완료, 거리, 시간) |
-| `GET /stats/by-day?period=` | 관리자 | 일별 운행 건수 시계열 배열 |
-| `GET /stats/by-driver-day?period=` | 관리자 | 기사·날짜별 운행 건수·거리 시계열 (추이 차트용) |
+| `GET /stats/summary?period=today\|week\|month\|7d\|30d\|all&driver_id=&vehicle_id=` | 관리자 | 총 운행 건수·거리·평균 시간·완료율·상태별 건수·안전이슈·배정완료/미배정 |
+| `GET /stats/by-driver?period=&driver_id=` | 관리자 | 기사별 운행 집계 (총 건수, 완료, 거리, 시간 합·평균, 운행 일수) |
+| `GET /stats/by-day?period=&driver_id=&vehicle_id=` | 관리자 | 일별 운행 건수 시계열 배열 |
+| `GET /stats/by-driver-day?period=&driver_id=` | 관리자 | 기사·날짜별 운행 건수·거리 시계열 (추이 차트용) |
+| `GET /stats/by-vehicle?period=&vehicle_id=` | 관리자 | 차량별 운행 집계 (총 건수, 완료, 거리, 운행 시간 합) |
+| `GET /stats/route-history?driver_id=&period=` | 관리자 | 기사 GPS 궤적 배열 (location_logs 기반, 과거 경로 지도용) |
+| `PATCH /trips/{id}/safety` | 로그인 | 안전 이슈 플래그 기록 `{safety_issue: bool}` |
+| `PATCH /trips/{id}/waypoint-dwell` | 로그인 | 경유지 도착·출발 시간 기록 `{index, arrived_at?, departed_at?}` |
 
 ### 채팅
 | 엔드포인트 | 권한 | 설명 |
@@ -472,6 +476,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 긴급 배차 태스크 단위 묶음 — 상차지 클릭 시 임시 저장(`_emergencyTask`), 하차지 N개 지도 클릭으로 순차 추가, 배지에 구성 목록 표시, ✅ 전송 버튼으로 한 번에 서버 전송(같은 task_group 부여). 상차지 없이 하차지만 추가 시 즉시 전송(task_group=null) 유지
 - [x] 기사·차량 운행 생성 테스트 하네스 — curl 기반 통합 테스트 (운행 생성·최적화·완료·교체·자동배차·취소요청 흐름 전수 검증)
 - [x] 통계 강화 — `GET /stats/by-driver-day` 신규 엔드포인트, 기사별 추이 라인 차트(건수/거리 탭 전환), 기사별 실적 CSV 내보내기(BOM UTF-8)
+- [x] 통계 전면 개편 — 기간 드롭다운(오늘/이번 주/이번 달/전체), 기사·차량 필터, 상태별 4카드+배정·안전 3카드, 기사별 실적(운행 일수·시간 합), 차량별 실적 테이블, 과거 경로 지도(GPS 궤적 폴리라인), `trips.safety_issue` 컬럼 추가, waypoints `arrived_at`/`departed_at` 머문 시간 스키마
 - [x] 운행 자동 배차 — `POST /trips/auto-dispatch` + `GET /drivers/available`, 배송 태스크(상차지+하차지) N개를 기사 위치 기반 greedy 배정(위치 미확인 시 라운드 로빈), 대시보드 "🚛 자동 배차" 버튼 → 모달(태스크 입력 + 장소 검색 자동완성 + 기사 칩 선택 + 분배 미리보기)
 - [x] 기사·차량 교체 — `PATCH /trips/{id}/reassign`, 기사/차량 단순 교체 또는 현재 운행 취소 + 잔여 경유지 새 운행 이관(transfer_remaining), 대시보드 "🔄 기사·차량 교체" 버튼 → 모달(기사·차량 드롭다운 + 이관 옵션)
 - [x] 기사 배차 취소 요청 — `POST /trips/{id}/cancel-request` (기사), `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자), WS `trip.cancel_requested`/`trip.cancel_responded` 브로드캐스트, 대시보드 notice 박스·카드 배지 즉시 반영

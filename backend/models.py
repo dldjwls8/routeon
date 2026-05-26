@@ -229,6 +229,7 @@ class Trip(Base):
     is_emergency    = Column(Boolean, default=False)
     cancel_requested        = Column(Boolean, nullable=False, default=False)
     cancel_request_reason   = Column(Text, nullable=True)
+    safety_issue    = Column(Boolean, nullable=False, default=False)
 
     started_at   = Column(DateTime)
     completed_at = Column(DateTime)
