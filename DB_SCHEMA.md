@@ -107,7 +107,7 @@
 | `dest_name` | VARCHAR(200) | | 도착지 이름 (nullable — 기사가 /optimize 시 자동 결정 가능) |
 | `dest_lat` | FLOAT | | 도착지 위도 |
 | `dest_lon` | FLOAT | | 도착지 경도 |
-| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading"}, ...]` |
+| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]` |
 | `vehicle_height_m` | FLOAT | | 차량 높이 오버라이드 |
 | `vehicle_weight_kg` | FLOAT | | 총중량 오버라이드 |
 | `vehicle_length_cm` | FLOAT | | 차량 길이 오버라이드 |
@@ -116,6 +116,7 @@
 | `optimized_route` | JSONB | | 최적화 결과 (아래 구조 참고) |
 | `status` | tripstatus | NOT NULL DEFAULT 'scheduled' | 운행 상태 |
 | `is_emergency` | BOOLEAN | DEFAULT FALSE | 긴급 예외 적용 여부 |
+| `safety_issue` | BOOLEAN | NOT NULL DEFAULT FALSE | 안전 이슈 플래그 (앱에서 `PATCH /trips/{id}/safety`로 기록) |
 | `started_at` | DATETIME | | |
 | `completed_at` | DATETIME | | |
 | `created_at` | DATETIME | NOT NULL | |
