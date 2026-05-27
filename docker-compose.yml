@@ -36,6 +36,8 @@ services:
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - JWT_SECRET=${JWT_SECRET}
+      - SMTP_EMAIL=${SMTP_EMAIL}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
