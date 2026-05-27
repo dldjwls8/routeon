@@ -128,8 +128,9 @@ await db.refresh(obj)
 ```
 1. 관리자: POST /trips → 상차지(type:loading) + 하차지(type:unloading) 경유지 등록
            (dest_* 미입력 가능 — 기사가 /optimize 시 마지막 하차지 자동 도착지 지정)
-2. 기사:   POST /optimize → trip_id (출발지 선택 입력)
+2. 기사:   POST /optimize → trip_id (출발지 선택 입력, 이름 미입력 가능)
            └─ origin 우선순위: req.origin_lat/lon → Redis location:{user_id} → HTTP 400
+           └─ origin_name 미입력 시 카카오 역지오코딩으로 주소 자동 조회 (_coord_to_address)
            └─ dest 우선순위:   req.dest → t.dest → 마지막 unloading → 마지막 loading → HTTP 400
            └─ task_group 기반 pickup_deliveries 추출 → OR-Tools 제약으로 전달
               (같은 task_group의 loading → unloading 순서 보장, 나머지는 자유 최적화)
@@ -141,7 +142,8 @@ await db.refresh(obj)
            └─ total_distance_km + estimated_duration_min 포함 응답
            └─ trip.status → in_progress 변경
            └─ WS broadcast → 관리자에게 trip.started 이벤트 (대시보드 즉시 갱신)
-3. 기사:   POST /optimize/replan → 운행 중 재경로
+3. 기사:   POST /optimize/replan → 운행 중 재경로 (current_name 선택 입력)
+           └─ current_name 미입력 시 카카오 역지오코딩으로 주소 자동 조회
            └─ WS broadcast → 관리자에게 trip.replanned 이벤트 (폴리라인 즉시 재그리기)
 ```
 
@@ -311,8 +313,8 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `POST /trips/{id}/cancel-request` | 기사 | 배차 취소 요청 `{reason?}` — WS `trip.cancel_requested` 브로드캐스트 |
 | `POST /trips/{id}/cancel-request/respond` | 관리자 | 취소 요청 승인/거절 `?action=approve\|reject` — WS `trip.cancel_responded` 브로드캐스트 |
 | `PATCH /trips/{id}/reassign` | 관리자 | 기사·차량 교체 `{new_driver_id?, new_vehicle_id?, transfer_remaining}` — `transfer_remaining=true` 시 현재 운행 취소 + 잔여 경유지 새 운행 이관, WS `trip.reassigned` 브로드캐스트 |
-| `POST /optimize` | 로그인 | 경로 최적화. origin_* 미입력 시 Redis GPS 자동 사용. dest_* 미입력 시 마지막 하차지 자동 지정 |
-| `POST /optimize/replan` | 로그인 | 운행 중 재경로 |
+| `POST /optimize` | 로그인 | 경로 최적화. origin_lat/lon 미입력 시 Redis GPS 자동 사용. origin_name 미입력 시 역지오코딩 자동 조회. dest_* 미입력 시 마지막 하차지 자동 지정 |
+| `POST /optimize/replan` | 로그인 | 운행 중 재경로. current_name 미입력 시 역지오코딩 자동 조회 |
 | `GET /drivers/available` | 관리자 | 현재 운행이 없는 가용 기사 목록 (조직 내) |
 | `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 위치 기반 greedy 배정 후 일괄 운행 생성. 기사 위치 미확인 시 라운드 로빈 폴백 |
 
