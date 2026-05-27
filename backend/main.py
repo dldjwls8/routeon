@@ -172,6 +172,27 @@ KAKAO_JS_KEY   = os.getenv("KAKAO_JS_KEY", "")
 
 
 
+async def _coord_to_address(lat: float, lon: float) -> str:
+    """카카오 역지오코딩 — 좌표 → 도로명주소(없으면 지번주소) 반환. 실패 시 좌표 문자열 폴백."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                f"{KAKAO_BASE}/v2/local/geo/coord2address.json",
+                params={"x": lon, "y": lat},
+                headers={"Authorization": f"KakaoAK {KAKAO_REST_KEY}"},
+            )
+        docs = r.json().get("documents", [])
+        if docs:
+            addr = docs[0]
+            road = addr.get("road_address")
+            if road:
+                return road.get("address_name", "")
+            return addr.get("address", {}).get("address_name", "")
+    except Exception:
+        pass
+    return f"{lat:.5f}, {lon:.5f}"
+
+
 # ────────────────────────────────────────────────
 # 스키마
 # ────────────────────────────────────────────────
@@ -1033,7 +1054,7 @@ class OptimizeRequest(BaseModel):
 
 class ReplanRequest(BaseModel):
     trip_id:             str
-    current_name:        str
+    current_name:        Optional[str] = None
     current_lat:         float
     current_lon:         float
     current_drive_sec:   int
@@ -1103,7 +1124,8 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
         lat_str, lon_str = loc_val.split(",")
         origin_lat  = float(lat_str)
         origin_lon  = float(lon_str)
-        origin_name = origin_name or f"{origin_lat:.5f}, {origin_lon:.5f}"
+    if not origin_name:
+        origin_name = await _coord_to_address(origin_lat, origin_lon)
 
     # 노드 구성 (extra_stops 처리 포함)
     waypoints_raw: list[dict] = list(t.waypoints or [])
@@ -1268,7 +1290,8 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
 
-    nodes = [{"name": req.current_name, "lat": req.current_lat, "lon": req.current_lon}]
+    current_name = req.current_name or await _coord_to_address(req.current_lat, req.current_lon)
+    nodes = [{"name": current_name, "lat": req.current_lat, "lon": req.current_lon}]
     nodes += [{"name": w.name, "lat": w.lat, "lon": w.lon,
                "type": w.type, "task_group": w.task_group} for w in req.remaining_waypoints]
     nodes.append({"name": req.dest_name, "lat": req.dest_lat, "lon": req.dest_lon})
