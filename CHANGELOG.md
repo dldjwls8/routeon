@@ -476,6 +476,37 @@
 
 ---
 
+## v1.0.17 (2026-05-27)
+
+### 버그 수정 — 배차 취소 후 폴리라인이 지도에 남아있는 문제
+
+**프론트엔드 (dashboard.html)**
+- `drawAllRunningPolylines()`: `in_progress`가 아닌 기사의 기존 폴리라인을 먼저 일괄 제거 후 재드로우하도록 수정
+- `loadDrivers()`: `drawAllRunningPolylines()` 호출에 `await` 추가 — 타이밍 경쟁 조건 해소
+
+---
+
+## v1.0.16 (2026-05-27)
+
+### 버그 수정 — 운행 생성 시 departure_time 미입력 시 null 저장
+
+**백엔드 (main.py)**
+- `POST /trips`: `departure_time` 미입력 시 운행 생성 시각(UTC)으로 자동 설정
+
+---
+
+## v1.0.15 (2026-05-27)
+
+### 버그 수정 — 운행 생성 시 차량 제원 자동 미반영 및 마커 이름 오표시
+
+**백엔드 (main.py)**
+- `POST /trips`: `vehicle_id` 지정 시 차량 테이블의 `height_m`, `weight_kg`, `length_cm`, `width_cm`를 trip에 자동 복사 (앱에서 별도 전송 불필요)
+
+**프론트엔드 (dashboard.html)**
+- 지도 기사 마커: `driver.username` → `driver.name`(실명) 표시로 수정
+
+---
+
 ## v1.0.14 (2026-05-27)
 
 ### 버그 수정 — 출발지 이름 미입력 시 좌표 문자열로 표시되는 문제

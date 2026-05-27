@@ -228,6 +228,10 @@ setPath()를 사용해 기존 Polyline 객체 재활용 (재생성 없음)
 driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 
 폴리라인 클릭 시 _polylineClicked 플래그로 onMapClick 이벤트 중복 차단
+
+drawAllRunningPolylines(): loadDrivers() 호출마다 실행
+  - in_progress가 아닌 기사의 기존 폴리라인 먼저 일괄 제거 (취소/완료 시 자동 정리)
+  - 이후 in_progress 기사만 폴리라인 재드로우
 ```
 
 ### 지도 클릭 팝업 (검색 핀)
@@ -305,7 +309,7 @@ driverPolylinePoints[driverId]에 전체 좌표 저장 (재분할용)
 | `POST /rest-stops` | 관리자 | 휴게소 등록 |
 | `DELETE /rest-stops/{id}` | 관리자 | 휴게소 비활성화 |
 | `GET /trips?driver_id=&status=` | 로그인 | 운행 목록 (기사: 본인만, 관리자: 같은 기업) |
-| `POST /trips` | 관리자 | 운행 생성 |
+| `POST /trips` | 관리자 | 운행 생성 — `vehicle_id` 지정 시 차량 제원(height/weight/length/width) 자동 복사, `departure_time` 미입력 시 생성 시각(UTC)으로 자동 설정 |
 | `GET /trips/{id}` | 로그인 | 운행 상세 |
 | `GET /trips/{id}/polyline` | 로그인 | 실제 도로 경로선 좌표 |
 | `PATCH /trips/{id}/waypoints` | 관리자 | 경유지 추가 + 앱에 재경로 알림 |

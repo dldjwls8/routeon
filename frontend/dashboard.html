@@ -835,11 +835,18 @@
       await loadChatConversations();
       renderLeftPanel(driversCache);
       initTripBuilder();
-      drawAllRunningPolylines();
+      await drawAllRunningPolylines();
     }
 
     async function drawAllRunningPolylines() {
-      const running = driversCache.filter(d => tripsCache[d.id]?.status === 'in_progress');
+      const runningIds = new Set(
+        driversCache.filter(d => tripsCache[d.id]?.status === 'in_progress').map(d => d.id)
+      );
+      // 더 이상 운행 중이 아닌 기사의 폴리라인 제거
+      Object.keys(driverPolylines).forEach(id => {
+        if (!runningIds.has(id)) clearDriverRoute(id);
+      });
+      const running = driversCache.filter(d => runningIds.has(d.id));
       await Promise.all(running.map(d => {
         const trip = tripsCache[d.id];
         return drawDriverPolyline(d.id, trip.id, driverColorMap[d.id]);
@@ -2184,7 +2191,7 @@
           .then(r => r.ok ? r.json() : null)
           .then(drivers => {
             const driver = Array.isArray(drivers) ? drivers.find(d => d.id === user_id) : null;
-            const name = driver ? driver.username : user_id.slice(0, 6);
+            const name = driver ? driver.name : user_id.slice(0, 6);
             const markerContent = createCustomMarkerElement(name, user_id);
             const overlay = new kakao.maps.CustomOverlay({
               position, content: markerContent, map, yAnchor: 1.15, zIndex: 10

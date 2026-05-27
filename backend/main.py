@@ -650,6 +650,7 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
     if existing:
         raise HTTPException(409, "해당 기사에게 이미 진행 중인 배차가 있습니다.")
     # 차량 검증
+    vehicle = None
     if req.vehicle_id is not None:
         vehicle = (await db.execute(
             select(Vehicle).where(Vehicle.id == req.vehicle_id)
@@ -664,9 +665,11 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
     t = Trip(
         driver_id=driver_uuid, vehicle_id=req.vehicle_id,
         dest_name=req.dest_name, dest_lat=req.dest_lat, dest_lon=req.dest_lon,
-        waypoints=waypoints_json, departure_time=req.departure_time,
-        vehicle_height_m=req.vehicle_height_m, vehicle_weight_kg=req.vehicle_weight_kg,
-        vehicle_length_cm=req.vehicle_length_cm, vehicle_width_cm=req.vehicle_width_cm,
+        waypoints=waypoints_json, departure_time=req.departure_time or datetime.utcnow().isoformat(),
+        vehicle_height_m=req.vehicle_height_m  if req.vehicle_height_m  is not None else (vehicle.height_m  if vehicle else None),
+        vehicle_weight_kg=req.vehicle_weight_kg if req.vehicle_weight_kg is not None else (vehicle.weight_kg if vehicle else None),
+        vehicle_length_cm=req.vehicle_length_cm if req.vehicle_length_cm is not None else (vehicle.length_cm if vehicle else None),
+        vehicle_width_cm=req.vehicle_width_cm   if req.vehicle_width_cm  is not None else (vehicle.width_cm  if vehicle else None),
     )
     db.add(t); await db.commit(); await db.refresh(t)
     return _trip_schema(t)
