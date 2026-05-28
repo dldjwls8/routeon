@@ -476,6 +476,16 @@
 
 ---
 
+## v1.0.18 (2026-05-28)
+
+### 버그 수정 — 예상 완료 시간(ETA) 9시간 오차
+
+**백엔드 (main.py)**
+- `_trip_schema`: `created_at`, `started_at`, `completed_at` ISO 문자열에 `Z` 접미사 추가
+- 원인: `datetime.utcnow().isoformat()`은 타임존 정보 없는 문자열을 반환 → JavaScript가 로컬 시각(KST)으로 파싱해 ETA가 실제보다 9시간 뒤로 계산됨
+
+---
+
 ## v1.0.17 (2026-05-27)
 
 ### 버그 수정 — 배차 취소 후 폴리라인이 지도에 남아있는 문제

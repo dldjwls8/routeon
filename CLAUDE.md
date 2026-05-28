@@ -487,6 +487,8 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 기사·차량 교체 — `PATCH /trips/{id}/reassign`, 기사/차량 단순 교체 또는 현재 운행 취소 + 잔여 경유지 새 운행 이관(transfer_remaining), 대시보드 "🔄 기사·차량 교체" 버튼 → 모달(기사·차량 드롭다운 + 이관 옵션)
 - [x] 기사 배차 취소 요청 — `POST /trips/{id}/cancel-request` (기사), `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자), WS `trip.cancel_requested`/`trip.cancel_responded` 브로드캐스트, 대시보드 notice 박스·카드 배지 즉시 반영
 - [x] 예상 운행 완료 시간 — `_trip_schema`에 `started_at` 추가, `calcETADate()` + `formatCardETA()`로 기사 카드·패널에 완료 예상 시각·남은 시간 표시, 1분 주기 setInterval 갱신
+  - ETA 공식: `started_at + estimated_duration_min` (출발 시각 기준 고정 완료 예상 시각)
+  - `_trip_schema`의 datetime 필드(`created_at`, `started_at`, `completed_at`)에 `Z` 접미사 필수 — 없으면 JS가 KST로 파싱해 9시간 오차 발생
 - [x] 기사 현재 위치 경로 진행도 UI — 수직 타임라인 형태로 경로 노드 표시, `haversineKm` + `buildCumulativeDist` + `getNodeRatios` + `getDriverRatio`로 폴리라인 누적 거리 비율 계산, 구간 connector 높이 실제 거리 비율 반영(44~140px), 🚚 인디케이터 connector 내 정확한 비율 위치 표시, 지나온 노드 체크(✓) + dim, GPS 수신마다 `updateProgressIndicator()` 갱신
 - [x] 기사 마지막 위치 DB 폴백 — `GET /location-logs/{user_id}` Redis miss 시 TimescaleDB 최근 기록 조회, `is_realtime`/`recorded_at` 응답, 대시보드 패널 🟢/🔘 위치 배지
 - [x] 자동 배차 위치 기반 greedy 배정 — 상차지 기준 최근접 기사 greedy 배정, 배정 후 기준 위치 갱신, 위치 미확인 기사 라운드 로빈 폴백
