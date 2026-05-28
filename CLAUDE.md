@@ -240,6 +240,16 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 팝업 닫기: X 버튼 클릭 또는 ESC 키 → hideSearchPin()
 ```
 
+### 일괄배차(자동배차) 버튼 위치
+- 지도 위 플로팅 버튼 (`.map-dispatch-btn`): `position:absolute; top:16px; left:315px`
+- 지도 검색바(left:55~305px) 바로 오른쪽, 항상 노출 (기사 선택 여부 무관)
+
+### 일괄배차 모달 태스크 초기화 규칙
+- `openAutoDispatchModal()` 호출 시 `tbTasks`(운행 생성 패널에 지도 클릭으로 쌓인 태스크) 유무를 확인
+  - `tbTasks.length > 0` → `JSON.parse(JSON.stringify(tbTasks))`로 깊은 복사해 `adTasks`에 그대로 불러옴
+  - `tbTasks`가 비어있으면 빈 태스크 1개로 시작
+  - `tbTasks` 자체는 변경하지 않음 (모달 닫고 단일 운행 생성 계속 가능)
+
 ### Trip status 값
 | 값 | 의미 | 변경 시점 |
 |----|------|----------|

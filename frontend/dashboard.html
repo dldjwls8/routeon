@@ -276,6 +276,15 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.18); box-sizing: border-box; background: #fff;
     }
     .map-search-bar .ac-dropdown { border-radius: 8px; border-top: 1px solid #ddd; margin-top: 4px; }
+    .map-dispatch-btn {
+      position: absolute; top: 16px; left: 315px; z-index: 15;
+      padding: 9px 16px; background: #4a90d9; color: #fff;
+      border: none; border-radius: 22px; font-size: 13px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+      transition: background 0.15s;
+    }
+    .map-dispatch-btn:hover { background: #2979c8; }
 
     /* ── Trip Builder 공용 스타일 (우측 패널 내) ──── */
     .tb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
@@ -510,6 +519,7 @@
       <input type="text" id="map-search-input" placeholder="장소 검색..." autocomplete="off">
       <div class="ac-dropdown" id="ac-map-search"></div>
     </div>
+    <button class="map-dispatch-btn" onclick="openAutoDispatchModal()" title="자동 배차">🚛 일괄배차</button>
 
     <div id="map"></div>
   </div>
@@ -602,7 +612,6 @@
         <button class="btn btn-approve" onclick="createTripFromMap()" style="flex:1; font-size:14px;">✅ 운행 생성</button>
         <button onclick="savePreset()" style="padding:8px 12px; background:#6c757d; color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; white-space:nowrap;" title="현재 경유지를 프리셋으로 저장">💾 저장</button>
       </div>
-      <button onclick="openAutoDispatchModal()" style="margin-top:8px; width:100%; padding:8px; background:#4a90d9; color:#fff; border:none; border-radius:6px; font-size:13px; cursor:pointer; font-weight:600;">🚛 자동 배차 (일괄)</button>
     </div>
 
 
@@ -2305,9 +2314,12 @@
     let adSelectedDriverIds = new Set();
 
     async function openAutoDispatchModal() {
-      adTasks = [];
+      // 지도에서 미리 추가된 tbTasks가 있으면 그대로 복사, 없으면 빈 태스크 1개
+      adTasks = tbTasks.length > 0
+        ? JSON.parse(JSON.stringify(tbTasks))
+        : [{ loading: null, unloadings: [null] }];
       adSelectedDriverIds = new Set();
-      addAdTask();  // 기본 태스크 1개
+      renderAdTasks();
       document.getElementById('ad-overlay').style.display = 'flex';
 
       // 차량 목록 로드
