@@ -1694,7 +1694,7 @@
         vehicle_id: parseInt(vehicleId),
         waypoints,
       };
-      if (departure) body.departure_time = new Date(departure).toISOString();
+      body.departure_time = departure ? new Date(departure).toISOString() : new Date().toISOString();
 
       const res = await fetch(`${API}/trips`, {
         method: 'POST', headers: authHeaders(), body: JSON.stringify(body)
@@ -2675,7 +2675,7 @@
         })),
       };
       if (vehicleId) body.vehicle_id = parseInt(vehicleId);
-      if (departure) body.departure_time = new Date(departure).toISOString();
+      body.departure_time = departure ? new Date(departure).toISOString() : new Date().toISOString();
       if (targetDriverIds) body.driver_ids = targetDriverIds;
 
       const res = await fetch(`${API}/trips/auto-dispatch`, {

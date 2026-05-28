@@ -244,6 +244,11 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 - 지도 위 플로팅 버튼 (`.map-dispatch-btn`): `position:absolute; top:16px; left:315px`
 - 지도 검색바(left:55~305px) 바로 오른쪽, 항상 노출 (기사 선택 여부 무관)
 
+### 출발 시각(departure_time) 처리 규칙
+- `rp-departure`(운행 생성 패널), `ad-departure`(자동배차 모달) 모두 동일한 규칙 적용
+- 입력값이 있으면 `new Date(departure).toISOString()` 사용
+- 입력값이 없으면(비워둠) `new Date().toISOString()` — 전송 시점의 현재 시각을 자동 사용
+
 ### 일괄배차 모달 태스크 초기화 규칙
 - `openAutoDispatchModal()` 호출 시 `tbTasks`(운행 생성 패널에 지도 클릭으로 쌓인 태스크) 유무를 확인
   - `tbTasks.length > 0` → `JSON.parse(JSON.stringify(tbTasks))`로 깊은 복사해 `adTasks`에 그대로 불러옴
