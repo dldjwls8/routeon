@@ -1406,6 +1406,8 @@
     // 운행 생성 패널 (Trip Builder)
     // ════════════════════════════════════════════════
     let tbTasks = [];  // [{loading:{name,lat,lon}|null, unloadings:[{name,lat,lon},...]}]
+    const TB_TASK_COLORS = ['#e74c3c','#3498db','#2ecc71','#9b59b6','#f39c12','#1abc9c','#e91e63','#00bcd4','#ff5722','#607d8b'];
+    let tbTaskPinOverlays = [];  // 태스크별 지도 핀 오버레이: tbTaskPinOverlays[ti] = [overlay,...]
     let _searchPinOverlay  = null;
     let _searchPinCoord    = null;
     // 긴급 태스크 임시 저장: 상차지+하차지 목록을 모아두다가 전송 버튼으로 일괄 전송
@@ -1571,6 +1573,51 @@
       } else {
         tbTasks[taskIdx].unloadings[ulIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       }
+      renderTbTaskPins();
+    }
+
+    function clearTbTaskPins() {
+      tbTaskPinOverlays.forEach(list => list.forEach(o => o.setMap(null)));
+      tbTaskPinOverlays = [];
+    }
+
+    function renderTbTaskPins() {
+      clearTbTaskPins();
+      if (typeof map === 'undefined') return;
+      tbTasks.forEach((task, ti) => {
+        const color = TB_TASK_COLORS[ti % TB_TASK_COLORS.length];
+        const list = [];
+        const makePinEl = (label, type) => {
+          const el = document.createElement('div');
+          const isLoad = type === 'loading';
+          el.innerHTML = `<div style="background:${color};color:#fff;padding:3px 9px;border-radius:12px;
+            font-size:11px;font-weight:700;white-space:nowrap;position:relative;
+            border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.28);
+            display:flex;align-items:center;gap:3px;opacity:${isLoad ? 1 : 0.88};">
+            <span>${escapeHtml(label)}</span>
+            <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);
+              width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
+              border-top:7px solid ${color};"></div>
+          </div>`;
+          return el;
+        };
+        if (task.loading?.lat != null) {
+          const el = makePinEl(`T${ti + 1} 🏗️`, 'loading');
+          list.push(new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(task.loading.lat, task.loading.lon),
+            content: el, map, yAnchor: 1.35, zIndex: 5,
+          }));
+        }
+        task.unloadings.forEach((u, ui) => {
+          if (!u?.lat) return;
+          const el = makePinEl(`T${ti + 1} 📦`, 'unloading');
+          list.push(new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(u.lat, u.lon),
+            content: el, map, yAnchor: 1.35, zIndex: 5,
+          }));
+        });
+        tbTaskPinOverlays.push(list);
+      });
     }
 
     function renderTbTasks() {
@@ -1578,15 +1625,17 @@
       if (!el) return;
       if (tbTasks.length === 0) {
         el.innerHTML = '<div style="font-size:12px; color:#ccc; padding:4px 0; text-align:center;">태스크가 없습니다. 지도를 클릭하거나 + 태스크 추가를 눌러주세요.</div>';
+        renderTbTaskPins();
         return;
       }
       el.innerHTML = tbTasks.map((task, ti) => {
+        const color = TB_TASK_COLORS[ti % TB_TASK_COLORS.length];
         const loadingVal = task.loading ? task.loading.name : '';
         const ulRows = task.unloadings.map((u, ui) => `
           <div class="tb-ul-row">
-            <span style="font-size:11px; color:#2980b9; flex-shrink:0;">📦</span>
+            <span style="font-size:11px; color:${color}; flex-shrink:0;">📦</span>
             <div class="tb-task-field" style="flex:1; margin:0;">
-              <input id="tb-t${ti}-ul${ui}-inp" class="tb-task-input" style="border-color:#d1ecf1;"
+              <input id="tb-t${ti}-ul${ui}-inp" class="tb-task-input" style="border-color:${color}40;"
                 placeholder="하차지 검색..." value="${escapeHtml(u?.name || '')}"
                 oninput="tbSearch(event,'tb-t${ti}-ul${ui}','unloading',${ti},${ui})">
               <div id="tb-t${ti}-ul${ui}-drop" class="ac-dropdown"></div>
@@ -1594,15 +1643,18 @@
             <button onclick="tbRemoveUnloadingSlot(${ti},${ui})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:0 2px;flex-shrink:0;">✕</button>
           </div>`).join('');
         return `
-          <div class="tb-task-card">
-            <div class="tb-task-header">
-              <span>태스크 ${ti + 1}</span>
+          <div class="tb-task-card" style="border-left:3px solid ${color};">
+            <div class="tb-task-header" style="background:${color}18;">
+              <span style="display:flex;align-items:center;gap:6px;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+                태스크 ${ti + 1}
+              </span>
               <button onclick="tbRemoveTask(${ti})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:13px;padding:0;">✕ 제거</button>
             </div>
             <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
-              <span style="font-size:11px; color:#e67e22; flex-shrink:0;">🏗️</span>
+              <span style="font-size:11px; color:${color}; flex-shrink:0;">🏗️</span>
               <div class="tb-task-field" style="flex:1; margin:0;">
-                <input id="tb-t${ti}-loading-inp" class="tb-task-input" style="border-color:#fff3cd;"
+                <input id="tb-t${ti}-loading-inp" class="tb-task-input" style="border-color:${color}60;"
                   placeholder="상차지 검색..." value="${escapeHtml(loadingVal)}"
                   oninput="tbSearch(event,'tb-t${ti}-loading','loading',${ti})">
                 <div id="tb-t${ti}-loading-drop" class="ac-dropdown"></div>
@@ -1610,11 +1662,12 @@
             </div>
             ${ulRows}
             <button onclick="tbAddUnloadingSlot(${ti})"
-              style="width:100%;padding:4px;background:#f0f8ff;border:1px dashed #2980b9;border-radius:6px;font-size:11px;color:#2980b9;cursor:pointer;margin-top:2px;">
+              style="width:100%;padding:4px;background:${color}10;border:1px dashed ${color};border-radius:6px;font-size:11px;color:${color};cursor:pointer;margin-top:2px;">
               + 하차지 추가
             </button>
           </div>`;
       }).join('');
+      renderTbTaskPins();
     }
 
     function resetTripBuilder() {

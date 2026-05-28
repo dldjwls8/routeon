@@ -250,6 +250,14 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
   - `tbTasks`가 비어있으면 빈 태스크 1개로 시작
   - `tbTasks` 자체는 변경하지 않음 (모달 닫고 단일 운행 생성 계속 가능)
 
+### 운행 생성 패널 태스크 핀 (tbTaskPins)
+- `TB_TASK_COLORS`: 10가지 색상 팔레트, 태스크 인덱스 `% 10`으로 순환
+- `renderTbTaskPins()`: `tbTasks` 전체를 순회해 지도 위 `kakao.maps.CustomOverlay` 핀 생성
+  - 상차지: `T{n} 🏗️` (불투명 100%), 하차지: `T{n} 📦` (불투명 88%)
+  - `renderTbTasks()`, `tbSelectLoc()` 호출 때마다 핀 전체 재생성
+- `clearTbTaskPins()`: `tbTaskPinOverlays` 배열의 오버레이 전부 `setMap(null)` 후 배열 초기화
+- 패널 카드 UI: 태스크 색상 → `border-left`, 헤더 배경, 컬러 도트, 입력 필드 border, `+ 하차지 추가` 버튼 색상 연동
+
 ### Trip status 값
 | 값 | 의미 | 변경 시점 |
 |----|------|----------|
