@@ -1450,11 +1450,11 @@
     }
 
     // ── 엑셀 불러오기 ──────────────────────────────────────
-    async function importExcelTasks(input) {
+    async function importExcelTasks(input, target = 'tb') {
       const file = input.files[0];
       if (!file) return;
       input.value = '';  // 같은 파일 재선택 허용
-      const statusEl = document.getElementById('excel-import-status');
+      const statusEl = document.getElementById(target === 'ad' ? 'ad-excel-import-status' : 'excel-import-status');
       statusEl.textContent = '파일 읽는 중...';
 
       try {
@@ -1540,8 +1540,13 @@
           return;
         }
 
-        tbTasks = newTasks;
-        renderTbTasks();
+        if (target === 'ad') {
+          adTasks = newTasks;
+          renderAdTasks();
+        } else {
+          tbTasks = newTasks;
+          renderTbTasks();
+        }
 
         const failedCoords = validRows.length - done;
         const nullCount = newTasks.reduce((acc, t) => {
@@ -2510,6 +2515,13 @@
         <button onclick="closeAutoDispatchModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;line-height:1;">✕</button>
       </div>
       <div class="ad-modal-body">
+        <!-- 엑셀 불러오기 -->
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+          <input type="file" id="ad-excel-file-input" accept=".xlsx,.xls" style="display:none;" onchange="importExcelTasks(this,'ad')">
+          <button onclick="document.getElementById('ad-excel-file-input').click()" style="padding:5px 10px; background:#1a7f37; color:#fff; border:none; border-radius:6px; font-size:12px; cursor:pointer;">📂 엑셀로 불러오기</button>
+          <span id="ad-excel-import-status" style="font-size:11px; color:#888;"></span>
+        </div>
+
         <!-- 태스크 목록 -->
         <div style="font-size:12px; font-weight:700; color:#555; margin-bottom:8px;">배송 태스크</div>
         <div id="ad-task-list"></div>
@@ -2682,21 +2694,44 @@
           <button class="ad-add-unloading" onclick="addAdLoading(${ti})" style="margin-bottom:6px;">+ 상차지 추가</button>
           <div class="ad-field-label unloading" style="margin-top:2px;">📦 하차지</div>
           ${task.unloadings.map((u, ui) => `
-            <div class="ad-loc-row">
-              <div class="ac-wrapper" style="flex:1;">
-                <input id="ad-t${ti}-ul${ui}" type="text" placeholder="장소 검색..." autocomplete="off"
-                  value="${u ? escapeHtml(u.name) : ''}"
-                  oninput="adSearch(event,'t${ti}-ul${ui}','unloading',${ti},${ui})"
-                  onfocus="adSearch(event,'t${ti}-ul${ui}','unloading',${ti},${ui})">
-                <div class="ac-dropdown" id="ac-ad-t${ti}-ul${ui}"></div>
+            <div style="margin-bottom:6px;">
+              <div class="ad-loc-row" style="margin-bottom:3px;">
+                <div class="ac-wrapper" style="flex:1;">
+                  <input id="ad-t${ti}-ul${ui}" type="text" placeholder="장소 검색..." autocomplete="off"
+                    value="${u ? escapeHtml(u.name) : ''}"
+                    oninput="adSearch(event,'t${ti}-ul${ui}','unloading',${ti},${ui})"
+                    onfocus="adSearch(event,'t${ti}-ul${ui}','unloading',${ti},${ui})">
+                  <div class="ac-dropdown" id="ac-ad-t${ti}-ul${ui}"></div>
+                </div>
+                <button class="ad-loc-clear" onclick="adClearLoc(${ti},'unloading',${ui})" title="지우기">✕</button>
               </div>
-              <button class="ad-loc-clear" onclick="adClearLoc(${ti},'unloading',${ui})" title="지우기">✕</button>
+              <div style="display:flex; gap:4px;">
+                <input type="text" style="flex:2; padding:4px 6px; border:1px solid #e0e0e0; border-radius:4px; font-size:11px;"
+                  placeholder="수신자(고객사명)"
+                  value="${escapeHtml(u?.recipient_name || '')}"
+                  onchange="adUpdateUnloadingMeta(${ti},${ui},'recipient_name',this.value)">
+                <input type="text" style="flex:2; padding:4px 6px; border:1px solid #e0e0e0; border-radius:4px; font-size:11px;"
+                  placeholder="화물 종류"
+                  value="${escapeHtml(u?.cargo_type || '')}"
+                  onchange="adUpdateUnloadingMeta(${ti},${ui},'cargo_type',this.value)">
+                <input type="number" style="flex:1; padding:4px 6px; border:1px solid #e0e0e0; border-radius:4px; font-size:11px;"
+                  placeholder="톤수"
+                  value="${u?.cargo_weight_ton != null ? u.cargo_weight_ton : ''}"
+                  onchange="adUpdateUnloadingMeta(${ti},${ui},'cargo_weight_ton',this.value ? String(parseFloat(this.value)) : '')">
+              </div>
             </div>
           `).join('')}
           <button class="ad-add-unloading" onclick="addAdUnloading(${ti})">+ 하차지 추가</button>
         </div>
       `).join('');
       updateAdPreview();
+    }
+
+    function adUpdateUnloadingMeta(taskIdx, slotIdx, field, value) {
+      if (!adTasks[taskIdx].unloadings[slotIdx]) {
+        adTasks[taskIdx].unloadings[slotIdx] = { name: '', lat: null, lon: null };
+      }
+      adTasks[taskIdx].unloadings[slotIdx][field] = value.trim() || null;
     }
 
     function adClearLoc(taskIdx, type, slotIdx) {
@@ -2752,7 +2787,13 @@
       if (type === 'loading') {
         adTasks[taskIdx].loadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       } else {
-        adTasks[taskIdx].unloadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
+        const prev = adTasks[taskIdx].unloadings[slotIdx] || {};
+        adTasks[taskIdx].unloadings[slotIdx] = {
+          name: r.name, lat: r.lat, lon: r.lon,
+          recipient_name:   prev.recipient_name   || null,
+          cargo_type:       prev.cargo_type       || null,
+          cargo_weight_ton: prev.cargo_weight_ton || null,
+        };
       }
     }
 

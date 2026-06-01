@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.30 (2026-06-01)
+
+### 기능 개선 — 일괄배차 모달 화물 정보 + 엑셀 불러오기
+
+**프론트엔드 (dashboard.html)**
+- 일괄배차 모달 하차지 행에 수신자(고객사명)·화물종류·톤수 입력 필드 추가 (태스크 빌더와 동일)
+- `adUpdateUnloadingMeta`: 화물 정보 변경을 `adTasks` 배열에 반영하는 함수 신규 추가
+- `adSelectLoc`: 위치 재선택 시 기존 입력된 화물 정보 보존
+- 모달 상단에 📂 엑셀로 불러오기 버튼 추가 (`#ad-excel-file-input`)
+- `importExcelTasks(input, target)`: `target='ad'` 인자 지원 추가 → `adTasks`에 저장 후 `renderAdTasks()` 호출
+
+---
+
 ## v1.0.29 (2026-06-01)
 
 ### 기능 개선 — ETA 실시간 추적
