@@ -255,6 +255,16 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
   - `tbTasks`가 비어있으면 빈 태스크 1개로 시작
   - `tbTasks` 자체는 변경하지 않음 (모달 닫고 단일 운행 생성 계속 가능)
 
+### 엑셀 태스크 불러오기 (운행 생성 패널)
+- SheetJS CDN(`xlsx.full.min.js`)로 클라이언트에서 `.xlsx`/`.xls` 파싱
+- 컬럼 순서: `태스크(1-based번호) | 구분(상차지/하차지) | 장소명 | 주소`
+- 헤더 행 자동 감지: 첫 셀이 `"태스크"` 텍스트면 건너뜀
+- 주소 → 좌표: `GET /address/coord?query=` 순차 호출 (행 수만큼)
+- 결과 → `tbTasks` 교체 → `renderTbTasks()` + `renderTbTaskPins()`
+- 좌표 미확인 행은 `{lat:null, lon:null}` 으로 저장, 경고 메시지 표시 (직접 수정 필요)
+- `downloadExcelTemplate()`: 예시 포함 양식 파일(`routeon_태스크양식.xlsx`) 자동 다운로드
+- 프리셋 기능(`_presets`, refreshPresetSelect, loadPreset, savePreset, deletePreset) 완전 제거됨
+
 ### 운행 생성 패널 태스크 핀 (tbTaskPins)
 - `TB_TASK_COLORS`: 10가지 색상 팔레트, 태스크 인덱스 `% 10`으로 순환
 - `renderTbTaskPins()`: `tbTasks` 전체를 순회해 지도 위 `kakao.maps.CustomOverlay` 핀 생성
