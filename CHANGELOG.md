@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.26 (2026-06-01)
+
+### 버그 수정 — 운행 생성 패널 상차지 검증 오작동
+
+**프론트엔드 (dashboard.html)**
+- `tbSearch`: 카카오 API 콜백(비동기, 280ms 후) 내 `drop` 변수가 클로저로 캡처되어 `renderTbTasks()` 호출 시 분리된(detached) DOM 요소를 참조하던 문제 수정 → 콜백 내에서 `document.getElementById(dropId)` 재호출로 항상 현재 요소 사용
+- `tbSelectLoc`: `document.getElementById(inputId + '-drop')` 가 `null` 반환 시 TypeError 발생 → `tbTasks` 업데이트 코드 미실행 버그 수정 (null 체크 추가)
+- 드롭다운 아이템: `onclick` → `onmousedown` + `event.preventDefault()` 변경으로 `blur` 이벤트로 인한 선택 누락 방지
+- 에러 메시지 개선: input 필드에 텍스트가 있지만 좌표가 없는 경우 "검색 목록에서 선택해주세요." 안내 추가
+
+---
+
 ## v1.0.25 (2026-06-01)
 
 ### 기능 개선 — 태스크 상차지 복수 지원

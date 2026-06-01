@@ -289,6 +289,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
   - 상차지: `task.loadings` 배열 전체 순회 → 각각 `T{n} 🏗️` 핀 (불투명 100%)
   - 하차지: `T{n} 📦` (불투명 88%)
   - `renderTbTasks()`, `tbSelectLoc()` 호출 때마다 핀 전체 재생성
+- **드롭다운 선택**: `tbSearch` 콜백(비동기)은 항상 `document.getElementById(dropId)` 재호출로 현재 DOM 요소 사용 (클로저 stale reference 방지). `tbSelectLoc` 드롭다운 아이템은 `onmousedown + preventDefault`로 `blur` 이벤트 차단 후 선택 처리
 - `clearTbTaskPins()`: `tbTaskPinOverlays` 배열의 오버레이 전부 `setMap(null)` 후 배열 초기화
 - 패널 카드 UI: 태스크 색상 → `border-left`, 헤더 배경, 컬러 도트, 입력 필드 border, `+ 상차지 추가` / `+ 하차지 추가` 버튼 색상 연동
 

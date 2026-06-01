@@ -1619,8 +1619,11 @@
       _acDebounce[inputId] = setTimeout(() => {
         const ps = new kakao.maps.services.Places();
         ps.keywordSearch(q, (data, status) => {
+          // 비동기 콜백 시점에 DOM이 재생성됐을 수 있으므로 항상 현재 요소를 찾음
+          const d = document.getElementById(dropId);
+          if (!d) return;
           if (status !== kakao.maps.services.Status.OK || !data.length) {
-            drop.style.display = 'none'; return;
+            d.style.display = 'none'; return;
           }
           _acResults[inputId] = data.slice(0, 5).map(p => ({
             name: p.place_name,
@@ -1628,12 +1631,12 @@
             lat:  parseFloat(p.y),
             lon:  parseFloat(p.x),
           }));
-          drop.innerHTML = _acResults[inputId].map((r, i) => `
-            <div class="ac-item" onclick="tbSelectLoc('${inputId}',${i},${taskIdx},'${type}',${ulIdx ?? -1})">
+          d.innerHTML = _acResults[inputId].map((r, i) => `
+            <div class="ac-item" onmousedown="event.preventDefault(); tbSelectLoc('${inputId}',${i},${taskIdx},'${type}',${ulIdx ?? -1})">
               <div class="ac-item-name">${escapeHtml(r.name)}</div>
               <div class="ac-item-addr">${escapeHtml(r.addr)}</div>
             </div>`).join('');
-          drop.style.display = 'block';
+          d.style.display = 'block';
         });
       }, 280);
     }
@@ -1643,7 +1646,8 @@
       if (!r) return;
       const inp = document.getElementById(inputId + '-inp');
       if (inp) inp.value = r.name;
-      document.getElementById(inputId + '-drop').style.display = 'none';
+      const dropEl = document.getElementById(inputId + '-drop');
+      if (dropEl) dropEl.style.display = 'none';
       if (type === 'loading') {
         tbTasks[taskIdx].loadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       } else {
@@ -1768,7 +1772,13 @@
       if (!vehicleId)        return alert('차량을 선택하세요.');
       if (tbTasks.length === 0) return alert('태스크를 1개 이상 추가하세요.');
       const incomplete = tbTasks.findIndex(t => !t.loadings.length || t.loadings.every(l => !l));
-      if (incomplete !== -1) return alert(`태스크 ${incomplete + 1}의 상차지를 입력해주세요.`);
+      if (incomplete !== -1) {
+        const ldInp = document.getElementById(`tb-t${incomplete}-ld0-inp`);
+        const hasText = ldInp && ldInp.value.trim();
+        return alert(hasText
+          ? `태스크 ${incomplete + 1}의 상차지를 검색 목록에서 선택해주세요.`
+          : `태스크 ${incomplete + 1}의 상차지를 입력해주세요.`);
+      }
 
       const waypoints = _tbTasksToWaypoints();
 
