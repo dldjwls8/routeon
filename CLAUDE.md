@@ -249,6 +249,12 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 - 입력값이 있으면 `new Date(departure).toISOString()` 사용
 - 입력값이 없으면(비워둠) `new Date().toISOString()` — 전송 시점의 현재 시각을 자동 사용
 
+### 일괄 배차 greedy 배정 규칙 (POST /trips/auto-dispatch)
+- `max_per_driver = ceil(태스크 수 / 가용 기사 수)` — 기사당 최대 배정 상한
+- GPS 위치 있는 기사(`located`): 상차지 기준 최근접 기사 greedy 배정, 상한 초과 시 후보 제외
+- GPS 위치 없는 기사(`rr_pool`): 라운드 로빈, 위치 있는 기사가 모두 상한 도달 후 투입
+- **주의**: 상한 없이 greedy만 쓰면 위치 있는 기사 1명에게 모든 태스크가 몰리는 버그 발생
+
 ### 일괄배차 모달 태스크 초기화 규칙
 - `openAutoDispatchModal()` 호출 시 `tbTasks`(운행 생성 패널에 지도 클릭으로 쌓인 태스크) 유무를 확인
   - `tbTasks.length > 0` → `JSON.parse(JSON.stringify(tbTasks))`로 깊은 복사해 `adTasks`에 그대로 불러옴

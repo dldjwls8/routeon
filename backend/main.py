@@ -3176,37 +3176,38 @@ async def auto_dispatch_trips(
             driver_positions[d.id] = (row.lat, row.lon) if row else None
 
     # 위치 기반 greedy 배정:
-    #   태스크마다 상차지에서 가장 가까운 가용 기사 배정.
-    #   위치를 모르는 기사는 greedy에서 제외하고 남은 태스크를 라운드 로빈으로 처리.
+    #   기사당 최대 ceil(tasks/drivers) 개까지만 배정해 부하를 균등 분산.
+    #   위치 있는 기사: 상차지에서 가장 가까운 기사 우선 배정, 한도 초과 시 후보 제외.
+    #   위치 없는 기사: 라운드 로빈으로 배정.
+    import math as _math
     driver_tasks: dict = {d.id: [] for d in available}
-    rr_pool = [d for d in available if driver_positions[d.id] is None]  # 위치 미확인
-    rr_idx  = 0
+    max_per_driver = _math.ceil(len(req.tasks) / len(available))
 
     located = [d for d in available if driver_positions[d.id] is not None]
+    rr_pool = [d for d in available if driver_positions[d.id] is None]
+    rr_idx  = 0
     # 기사별 "현재 위치" — 태스크 배정 후 마지막 하차지로 갱신
     cur_pos: dict = {d.id: driver_positions[d.id] for d in located}
 
     for task in req.tasks:
-        if located:
-            # 상차지에서 가장 가까운 기사 선택
+        # 한도 미달 기사만 후보로 유지
+        eligible_located = [d for d in located if len(driver_tasks[d.id]) < max_per_driver]
+        if eligible_located:
             best = min(
-                located,
+                eligible_located,
                 key=lambda d: _haversine_km(
                     cur_pos[d.id][0], cur_pos[d.id][1],
                     task.loading.lat, task.loading.lon,
                 ),
             )
             driver_tasks[best.id].append(task)
-            # 마지막 하차지 또는 상차지를 다음 배정 기준 위치로 갱신
             last = task.unloadings[-1] if task.unloadings else task.loading
             cur_pos[best.id] = (last.lat, last.lon)
-        elif rr_pool:
-            # 위치 미확인 기사에게 라운드 로빈
-            driver_tasks[rr_pool[rr_idx % len(rr_pool)].id].append(task)
-            rr_idx += 1
         else:
-            # 모든 기사에게 위치도 없고 rr_pool도 비어있는 경우 (도달 불가)
-            driver_tasks[available[rr_idx % len(available)].id].append(task)
+            # 위치 미확인 기사 라운드 로빈 (한도 초과 기사 포함 폴백)
+            eligible_rr = [d for d in rr_pool if len(driver_tasks[d.id]) < max_per_driver]
+            pool = eligible_rr if eligible_rr else available
+            driver_tasks[pool[rr_idx % len(pool)].id].append(task)
             rr_idx += 1
 
     departure_iso: Optional[str] = None
