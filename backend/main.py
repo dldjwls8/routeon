@@ -564,11 +564,14 @@ async def delete_rest_stop(stop_id: int, db: AsyncSession = Depends(get_db),
 # 운행 (trips)
 # ────────────────────────────────────────────────
 class WaypointSchema(BaseModel):
-    name:       str
-    lat:        float
-    lon:        float
-    type:       str            = "unloading"  # "loading" | "unloading"
-    task_group: Optional[int] = None          # 같은 task_group의 loading-unloading이 쌍으로 묶임
+    name:             str
+    lat:              float
+    lon:              float
+    type:             str            = "unloading"  # "loading" | "unloading"
+    task_group:       Optional[int] = None
+    recipient_name:   Optional[str] = None   # 수신자(고객사명) — unloading 전용
+    cargo_type:       Optional[str] = None   # 화물 종류
+    cargo_weight_ton: Optional[float] = None # 화물 톤수
 
 class AutoDispatchTask(BaseModel):
     loadings:   list[WaypointSchema]
@@ -2189,10 +2192,13 @@ async def delete_user(
 # ────────────────────────────────────────────────
 
 class DeliveryCreate(BaseModel):
-    address:  str
-    lat:      float
-    lon:      float
-    deadline: Optional[str] = None   # "YYYY-MM-DD HH:MM"
+    address:          str
+    lat:              float
+    lon:              float
+    deadline:         Optional[str]   = None
+    recipient_name:   Optional[str]   = None
+    cargo_type:       Optional[str]   = None
+    cargo_weight_ton: Optional[float] = None
 
 class DeliveryAssign(BaseModel):
     driver_id: str   # UUID 문자열
@@ -2214,10 +2220,13 @@ async def create_delivery(
             raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
 
     delivery = Delivery(
-        address  = req.address,
-        lat      = req.lat,
-        lon      = req.lon,
-        deadline = deadline,
+        address          = req.address,
+        lat              = req.lat,
+        lon              = req.lon,
+        deadline         = deadline,
+        recipient_name   = req.recipient_name,
+        cargo_type       = req.cargo_type,
+        cargo_weight_ton = req.cargo_weight_ton,
     )
     db.add(delivery)
     await db.commit()
@@ -2241,7 +2250,11 @@ async def create_deliveries_batch(
                 deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
             except ValueError:
                 raise HTTPException(400, f"deadline 형식 오류: {req.deadline}")
-        d = Delivery(address=req.address, lat=req.lat, lon=req.lon, deadline=deadline)
+        d = Delivery(
+            address=req.address, lat=req.lat, lon=req.lon, deadline=deadline,
+            recipient_name=req.recipient_name, cargo_type=req.cargo_type,
+            cargo_weight_ton=req.cargo_weight_ton,
+        )
         db.add(d)
         deliveries.append(d)
     await db.commit()
@@ -2336,16 +2349,19 @@ async def get_delivery(
 def _delivery_schema(d: Delivery) -> dict:
     """Delivery 모델 → dict 변환 헬퍼"""
     return {
-        "id":           str(d.id),
-        "address":      d.address,
-        "lat":          d.lat,
-        "lon":          d.lon,
-        "status":       d.status,
-        "sequence":     d.sequence,
-        "assigned_to":  str(d.assigned_to) if d.assigned_to else None,
-        "deadline":     d.deadline.isoformat()     if d.deadline     else None,
-        "completed_at": d.completed_at.isoformat() if d.completed_at else None,
-        "created_at":   d.created_at.isoformat(),
+        "id":               str(d.id),
+        "address":          d.address,
+        "lat":              d.lat,
+        "lon":              d.lon,
+        "recipient_name":   d.recipient_name,
+        "cargo_type":       d.cargo_type,
+        "cargo_weight_ton": d.cargo_weight_ton,
+        "status":           d.status,
+        "sequence":         d.sequence,
+        "assigned_to":      str(d.assigned_to) if d.assigned_to else None,
+        "deadline":         d.deadline.isoformat()     if d.deadline     else None,
+        "completed_at":     d.completed_at.isoformat() if d.completed_at else None,
+        "created_at":       d.created_at.isoformat(),
     }
 
 

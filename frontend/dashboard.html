@@ -1312,18 +1312,29 @@
         const dotBorder = isDone ? meta.color : '#d0d0d0';
         const textOpacity = isDone ? '0.45' : '1';
 
+        // 하차지 화물 정보 태그
+        let cargoTags = '';
+        if (n.node_type === 'unloading' || n.type === 'unloading') {
+          const tags = [];
+          if (n.recipient_name)   tags.push(`<span style="background:#e8f4fd;color:#1a6fa0;border-radius:4px;padding:1px 5px;font-size:10px;">👤 ${escapeHtml(n.recipient_name)}</span>`);
+          if (n.cargo_type)       tags.push(`<span style="background:#fef9e7;color:#7d6608;border-radius:4px;padding:1px 5px;font-size:10px;">📦 ${escapeHtml(n.cargo_type)}</span>`);
+          if (n.cargo_weight_ton != null) tags.push(`<span style="background:#f0fff4;color:#1a6b3c;border-radius:4px;padding:1px 5px;font-size:10px;">⚖️ ${n.cargo_weight_ton}t</span>`);
+          if (tags.length) cargoTags = `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">${tags.join('')}</div>`;
+        }
+
         html += `
-          <div style="display:flex; align-items:center; gap:10px; position:relative; z-index:2;">
+          <div style="display:flex; align-items:flex-start; gap:10px; position:relative; z-index:2;">
             <div style="width:32px; height:32px; border-radius:50%;
                         background:${dotBg}; border:2px solid ${dotBorder};
                         display:flex; align-items:center; justify-content:center;
-                        font-size:${isDone ? '14' : '16'}px; flex-shrink:0;
+                        font-size:${isDone ? '14' : '16'}px; flex-shrink:0; margin-top:2px;
                         box-shadow:${isDone ? '0 0 0 3px ' + meta.color + '28' : 'none'};">
               ${isDone ? '✓' : meta.icon}
             </div>
             <div style="opacity:${textOpacity};">
               <div style="font-size:14px; font-weight:600; color:#333;">${n.name}${rest}</div>
               <div style="font-size:11px; color:#aaa;">${meta.label}</div>
+              ${cargoTags}
             </div>
           </div>`;
 
@@ -1448,12 +1459,16 @@
           const type = String(r[1]).trim();
           const name = String(r[2]).trim() || String(r[3]).trim();
           const addr = String(r[3]).trim();
+          const recipientName   = String(r[4] ?? '').trim() || null;
+          const cargoType       = String(r[5] ?? '').trim() || null;
+          const cargoWeightRaw  = String(r[6] ?? '').trim();
+          const cargoWeightTon  = cargoWeightRaw ? (parseFloat(cargoWeightRaw) || null) : null;
           if (!taskMap.has(taskNum)) taskMap.set(taskNum, { __loadingAddrs: [], __unloadingAddrs: [] });
           const entry = taskMap.get(taskNum);
           if (type === '상차지') {
             entry.__loadingAddrs.push({ name, addr });
           } else {
-            entry.__unloadingAddrs.push({ name, addr });
+            entry.__unloadingAddrs.push({ name, addr, recipientName, cargoType, cargoWeightTon });
           }
         }
 
@@ -1485,7 +1500,13 @@
             const coord = await geocode(u.addr);
             done++;
             statusEl.textContent = `지오코딩 중... (${done}/${totalAddrs})`;
-            task.unloadings.push(coord ? { name: u.name, ...coord } : { name: u.name, lat: null, lon: null });
+            const base = coord ? { name: u.name, ...coord } : { name: u.name, lat: null, lon: null };
+            task.unloadings.push({
+              ...base,
+              recipient_name:   u.recipientName,
+              cargo_type:       u.cargoType,
+              cargo_weight_ton: u.cargoWeightTon,
+            });
           }
           if (task.unloadings.length === 0) task.unloadings.push(null);
 
@@ -1524,13 +1545,13 @@
 
     function downloadExcelTemplate() {
       const ws = XLSX.utils.aoa_to_sheet([
-        ['태스크', '구분', '장소명', '주소'],
-        ['1', '상차지', '물류센터A', '서울시 강남구 테헤란로 1'],
-        ['1', '하차지', '고객사B', '서울시 서초구 반포대로 2'],
-        ['2', '상차지', '공장C', '경기도 안양시 평촌대로 3'],
-        ['2', '하차지', '고객사D', '인천시 남동구 논현로 4'],
+        ['태스크', '구분', '장소명', '주소', '수신자', '화물종류', '톤수'],
+        ['1', '상차지', '물류센터A', '서울시 강남구 테헤란로 1', '', '', ''],
+        ['1', '하차지', '고객사B', '서울시 서초구 반포대로 2', '홍길동', '냉동식품', '5'],
+        ['2', '상차지', '공장C', '경기도 안양시 평촌대로 3', '', '', ''],
+        ['2', '하차지', '고객사D', '인천시 남동구 논현로 4', '김철수', '전자제품', '2.5'],
       ]);
-      ws['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 36 }];
+      ws['!cols'] = [{ wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 36 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '태스크');
       XLSX.writeFile(wb, 'routeon_태스크양식.xlsx');
@@ -1651,9 +1672,23 @@
       if (type === 'loading') {
         tbTasks[taskIdx].loadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       } else {
-        tbTasks[taskIdx].unloadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
+        const prev = tbTasks[taskIdx].unloadings[slotIdx] || {};
+        tbTasks[taskIdx].unloadings[slotIdx] = {
+          name: r.name, lat: r.lat, lon: r.lon,
+          recipient_name:   prev.recipient_name   || null,
+          cargo_type:       prev.cargo_type       || null,
+          cargo_weight_ton: prev.cargo_weight_ton || null,
+        };
       }
       renderTbTaskPins();
+    }
+
+    function tbUpdateUnloadingMeta(taskIdx, slotIdx, field, value) {
+      if (!tbTasks[taskIdx]) return;
+      if (!tbTasks[taskIdx].unloadings[slotIdx]) {
+        tbTasks[taskIdx].unloadings[slotIdx] = { name: '', lat: null, lon: null };
+      }
+      tbTasks[taskIdx].unloadings[slotIdx][field] = value.trim() || null;
     }
 
     function clearTbTaskPins() {
@@ -1730,8 +1765,22 @@
                 placeholder="하차지 검색..." value="${escapeHtml(u?.name || '')}"
                 oninput="tbSearch(event,'tb-t${ti}-ul${ui}','unloading',${ti},${ui})">
               <div id="tb-t${ti}-ul${ui}-drop" class="ac-dropdown"></div>
+              <div style="display:flex;gap:4px;margin-top:4px;">
+                <input class="tb-task-input" style="flex:2;font-size:10px;padding:3px 6px;border-color:#ddd;"
+                  placeholder="수신자(고객사명)"
+                  value="${escapeHtml(u?.recipient_name || '')}"
+                  onchange="tbUpdateUnloadingMeta(${ti},${ui},'recipient_name',this.value)">
+                <input class="tb-task-input" style="flex:2;font-size:10px;padding:3px 6px;border-color:#ddd;"
+                  placeholder="화물 종류"
+                  value="${escapeHtml(u?.cargo_type || '')}"
+                  onchange="tbUpdateUnloadingMeta(${ti},${ui},'cargo_type',this.value)">
+                <input class="tb-task-input" style="flex:1;font-size:10px;padding:3px 6px;border-color:#ddd;"
+                  type="number" min="0" step="0.1" placeholder="톤수"
+                  value="${u?.cargo_weight_ton != null ? u.cargo_weight_ton : ''}"
+                  onchange="tbUpdateUnloadingMeta(${ti},${ui},'cargo_weight_ton',this.value ? String(parseFloat(this.value)) : '')">
+              </div>
             </div>
-            <button onclick="tbRemoveUnloadingSlot(${ti},${ui})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:0 2px;flex-shrink:0;">✕</button>
+            <button onclick="tbRemoveUnloadingSlot(${ti},${ui})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:0 2px;flex-shrink:0;align-self:flex-start;">✕</button>
           </div>`).join('');
         return `
           <div class="tb-task-card" style="border-left:3px solid ${color};">
