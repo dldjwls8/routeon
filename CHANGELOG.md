@@ -6,6 +6,24 @@
 
 ---
 
+## v1.0.25 (2026-06-01)
+
+### 기능 개선 — 태스크 상차지 복수 지원
+
+**백엔드 (main.py)**
+- `AutoDispatchTask` 스키마: `loading: WaypointSchema` → `loadings: list[WaypointSchema]`
+- greedy 거리 계산 기준점: `task.loadings[0]` (첫 번째 상차지)
+- waypoints 생성: 상차지 배열을 순회하여 복수 상차지 모두 경유지로 등록
+
+**프론트엔드 (dashboard.html)**
+- `tbTasks` / `adTasks` 구조 변경: `loading` 단일 → `loadings[]` 배열
+- 운행 생성 패널: 상차지 복수 입력 + "상차지 추가" 버튼 (`tbAddLoadingSlot`, `tbRemoveLoadingSlot`)
+- 자동배차 모달: 상차지 복수 입력 + "상차지 추가" 버튼 (`addAdLoading`, `removeAdLoading`)
+- `importExcelTasks`: 동일 태스크 번호에 상차지 행이 여러 개면 모두 배열로 처리
+- 지도 핀: 복수 상차지 모두 🏗️ 핀으로 표시
+
+---
+
 ## v1.0.24 (2026-06-01)
 
 ### 버그 수정 — 일괄 배차 태스크 쏠림 현상

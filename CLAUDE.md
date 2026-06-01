@@ -249,22 +249,34 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 - 입력값이 있으면 `new Date(departure).toISOString()` 사용
 - 입력값이 없으면(비워둠) `new Date().toISOString()` — 전송 시점의 현재 시각을 자동 사용
 
+### 태스크 데이터 구조 (tbTasks / adTasks)
+```javascript
+// v1.0.25 이후 — 상차지 복수 지원
+[{ loadings: [{name, lat, lon}, ...], unloadings: [{name, lat, lon}, ...] }]
+```
+- `loadings[]`: 상차지 배열 (1개 이상), null 슬롯 허용 (미입력 상태)
+- `unloadings[]`: 하차지 배열 (0개 이상), null 슬롯 허용
+- `tbAddLoadingSlot(taskIdx)` / `tbRemoveLoadingSlot(taskIdx, ldIdx)`: 상차지 슬롯 추가/삭제
+- `addAdLoading(taskIdx)` / `removeAdLoading(taskIdx, ldIdx)`: 자동배차 모달 상차지 슬롯 추가/삭제
+
 ### 일괄 배차 greedy 배정 규칙 (POST /trips/auto-dispatch)
+- `AutoDispatchTask.loadings: list[WaypointSchema]` — 상차지 복수 지원
 - `max_per_driver = ceil(태스크 수 / 가용 기사 수)` — 기사당 최대 배정 상한
-- GPS 위치 있는 기사(`located`): 상차지 기준 최근접 기사 greedy 배정, 상한 초과 시 후보 제외
+- GPS 위치 있는 기사(`located`): `task.loadings[0]`(첫 번째 상차지) 기준 최근접 기사 greedy 배정, 상한 초과 시 후보 제외
 - GPS 위치 없는 기사(`rr_pool`): 라운드 로빈, 위치 있는 기사가 모두 상한 도달 후 투입
 - **주의**: 상한 없이 greedy만 쓰면 위치 있는 기사 1명에게 모든 태스크가 몰리는 버그 발생
 
 ### 일괄배차 모달 태스크 초기화 규칙
 - `openAutoDispatchModal()` 호출 시 `tbTasks`(운행 생성 패널에 지도 클릭으로 쌓인 태스크) 유무를 확인
   - `tbTasks.length > 0` → `JSON.parse(JSON.stringify(tbTasks))`로 깊은 복사해 `adTasks`에 그대로 불러옴
-  - `tbTasks`가 비어있으면 빈 태스크 1개로 시작
+  - `tbTasks`가 비어있으면 빈 태스크 1개로 시작 (`{ loadings: [null], unloadings: [null] }`)
   - `tbTasks` 자체는 변경하지 않음 (모달 닫고 단일 운행 생성 계속 가능)
 
 ### 엑셀 태스크 불러오기 (운행 생성 패널)
 - SheetJS CDN(`xlsx.full.min.js`)로 클라이언트에서 `.xlsx`/`.xls` 파싱
 - 컬럼 순서: `태스크(1-based번호) | 구분(상차지/하차지) | 장소명 | 주소`
 - 헤더 행 자동 감지: 첫 셀이 `"태스크"` 텍스트면 건너뜀
+- 동일 태스크 번호에 상차지 행이 여러 개면 모두 `loadings[]` 배열에 누적
 - 주소 → 좌표: `GET /address/coord?query=` 순차 호출 (행 수만큼)
 - 결과 → `tbTasks` 교체 → `renderTbTasks()` + `renderTbTaskPins()`
 - 좌표 미확인 행은 `{lat:null, lon:null}` 으로 저장, 경고 메시지 표시 (직접 수정 필요)
@@ -274,10 +286,11 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 운행 생성 패널 태스크 핀 (tbTaskPins)
 - `TB_TASK_COLORS`: 10가지 색상 팔레트, 태스크 인덱스 `% 10`으로 순환
 - `renderTbTaskPins()`: `tbTasks` 전체를 순회해 지도 위 `kakao.maps.CustomOverlay` 핀 생성
-  - 상차지: `T{n} 🏗️` (불투명 100%), 하차지: `T{n} 📦` (불투명 88%)
+  - 상차지: `task.loadings` 배열 전체 순회 → 각각 `T{n} 🏗️` 핀 (불투명 100%)
+  - 하차지: `T{n} 📦` (불투명 88%)
   - `renderTbTasks()`, `tbSelectLoc()` 호출 때마다 핀 전체 재생성
 - `clearTbTaskPins()`: `tbTaskPinOverlays` 배열의 오버레이 전부 `setMap(null)` 후 배열 초기화
-- 패널 카드 UI: 태스크 색상 → `border-left`, 헤더 배경, 컬러 도트, 입력 필드 border, `+ 하차지 추가` 버튼 색상 연동
+- 패널 카드 UI: 태스크 색상 → `border-left`, 헤더 배경, 컬러 도트, 입력 필드 border, `+ 상차지 추가` / `+ 하차지 추가` 버튼 색상 연동
 
 ### Trip status 값
 | 값 | 의미 | 변경 시점 |
@@ -531,7 +544,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 기사 현재 위치 경로 진행도 UI — 수직 타임라인 형태로 경로 노드 표시, `haversineKm` + `buildCumulativeDist` + `getNodeRatios` + `getDriverRatio`로 폴리라인 누적 거리 비율 계산, 구간 connector 높이 실제 거리 비율 반영(44~140px), 🚚 인디케이터 connector 내 정확한 비율 위치 표시, 지나온 노드 체크(✓) + dim, GPS 수신마다 `updateProgressIndicator()` 갱신
 - [x] 기사 마지막 위치 DB 폴백 — `GET /location-logs/{user_id}` Redis miss 시 TimescaleDB 최근 기록 조회, `is_realtime`/`recorded_at` 응답, 대시보드 패널 🟢/🔘 위치 배지
 - [x] 자동 배차 위치 기반 greedy 배정 — 상차지 기준 최근접 기사 greedy 배정, 배정 후 기준 위치 갱신, 위치 미확인 기사 라운드 로빈 폴백
-- [x] 운행 생성 패널 태스크 단위 입력 — 상차지+하차지 분리 목록 → 태스크 카드(상차지 1개+하차지 N개 묶음) 구조, 카카오 Places 자동완성 + 지도 클릭 병행
+- [x] 운행 생성 패널 태스크 단위 입력 — 상차지+하차지 분리 목록 → 태스크 카드(상차지 N개+하차지 N개 묶음) 구조, 카카오 Places 자동완성 + 지도 클릭 병행, 상차지 복수 지원(`loadings[]`)
 - [x] OR-Tools pickup_deliveries 제약 도입 — `_apply_loading_precedence` 제거, `task_group` 필드로 상차-하차 쌍 보장하면서 전체 순서는 OR-Tools 자유 최적화
 - [x] `/optimize` `started_at` 버그 수정 — in_progress 전환 시 started_at 미기록 문제 수정 (ETA 계산 정상화)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

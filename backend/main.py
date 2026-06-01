@@ -571,7 +571,7 @@ class WaypointSchema(BaseModel):
     task_group: Optional[int] = None          # 같은 task_group의 loading-unloading이 쌍으로 묶임
 
 class AutoDispatchTask(BaseModel):
-    loading:    WaypointSchema
+    loadings:   list[WaypointSchema]
     unloadings: list[WaypointSchema]
 
 class AutoDispatchRequest(BaseModel):
@@ -3197,11 +3197,11 @@ async def auto_dispatch_trips(
                 eligible_located,
                 key=lambda d: _haversine_km(
                     cur_pos[d.id][0], cur_pos[d.id][1],
-                    task.loading.lat, task.loading.lon,
+                    task.loadings[0].lat, task.loadings[0].lon,
                 ),
             )
             driver_tasks[best.id].append(task)
-            last = task.unloadings[-1] if task.unloadings else task.loading
+            last = task.unloadings[-1] if task.unloadings else task.loadings[-1]
             cur_pos[best.id] = (last.lat, last.lon)
         else:
             # 위치 미확인 기사 라운드 로빈 (한도 초과 기사 포함 폴백)
@@ -3226,8 +3226,9 @@ async def auto_dispatch_trips(
 
         waypoints = []
         for tg, task in enumerate(tasks):
-            waypoints.append({"name": task.loading.name, "lat": task.loading.lat,
-                              "lon": task.loading.lon, "type": "loading", "task_group": tg})
+            for ld in task.loadings:
+                waypoints.append({"name": ld.name, "lat": ld.lat,
+                                  "lon": ld.lon, "type": "loading", "task_group": tg})
             for u in task.unloadings:
                 waypoints.append({"name": u.name, "lat": u.lat,
                                   "lon": u.lon, "type": "unloading", "task_group": tg})

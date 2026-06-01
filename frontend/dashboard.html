@@ -1404,7 +1404,7 @@
     // ════════════════════════════════════════════════
     // 운행 생성 패널 (Trip Builder)
     // ════════════════════════════════════════════════
-    let tbTasks = [];  // [{loading:{name,lat,lon}|null, unloadings:[{name,lat,lon},...]}]
+    let tbTasks = [];  // [{loadings:[{name,lat,lon},...], unloadings:[{name,lat,lon},...]}]
     const TB_TASK_COLORS = ['#e74c3c','#3498db','#2ecc71','#9b59b6','#f39c12','#1abc9c','#e91e63','#00bcd4','#ff5722','#607d8b'];
     let tbTaskPinOverlays = [];  // 태스크별 지도 핀 오버레이: tbTaskPinOverlays[ti] = [overlay,...]
     let _searchPinOverlay  = null;
@@ -1448,10 +1448,10 @@
           const type = String(r[1]).trim();
           const name = String(r[2]).trim() || String(r[3]).trim();
           const addr = String(r[3]).trim();
-          if (!taskMap.has(taskNum)) taskMap.set(taskNum, { __loadingAddr: null, __unloadingAddrs: [] });
+          if (!taskMap.has(taskNum)) taskMap.set(taskNum, { __loadingAddrs: [], __unloadingAddrs: [] });
           const entry = taskMap.get(taskNum);
           if (type === '상차지') {
-            entry.__loadingAddr = { name, addr };
+            entry.__loadingAddrs.push({ name, addr });
           } else {
             entry.__unloadingAddrs.push({ name, addr });
           }
@@ -1471,15 +1471,15 @@
 
         const newTasks = [];
         for (const [, t] of taskMap) {
-          const task = { loading: null, unloadings: [] };
+          const task = { loadings: [], unloadings: [] };
 
-          if (t.__loadingAddr) {
-            const coord = await geocode(t.__loadingAddr.addr);
+          for (const ld of (t.__loadingAddrs || [])) {
+            const coord = await geocode(ld.addr);
             done++;
             statusEl.textContent = `지오코딩 중... (${done}/${totalAddrs})`;
-            if (coord) task.loading = { name: t.__loadingAddr.name, ...coord };
-            else task.loading = { name: t.__loadingAddr.name, lat: null, lon: null };
+            task.loadings.push(coord ? { name: ld.name, ...coord } : { name: ld.name, lat: null, lon: null });
           }
+          if (task.loadings.length === 0) task.loadings.push(null);
 
           for (const u of (t.__unloadingAddrs || [])) {
             const coord = await geocode(u.addr);
@@ -1503,7 +1503,7 @@
 
         const failedCoords = validRows.length - done;
         const nullCount = newTasks.reduce((acc, t) => {
-          if (t.loading?.lat == null && t.loading) acc++;
+          acc += t.loadings.filter(l => l?.lat == null && l).length;
           acc += t.unloadings.filter(u => u?.lat == null && u).length;
           return acc;
         }, 0);
@@ -1552,23 +1552,40 @@
     function _tbTasksToWaypoints() {
       const wps = [];
       tbTasks.forEach((task, ti) => {
-        if (task.loading) wps.push({ ...task.loading, type: 'loading',   task_group: ti });
+        for (const ld of task.loadings) {
+          if (ld) wps.push({ ...ld, type: 'loading', task_group: ti });
+        }
         for (const u of task.unloadings) {
-          if (u) wps.push({ ...u,          type: 'unloading', task_group: ti });
+          if (u) wps.push({ ...u, type: 'unloading', task_group: ti });
         }
       });
       return wps;
     }
 
     function tbAddTask(loading = null) {
-      tbTasks.push({ loading, unloadings: [] });
+      tbTasks.push({ loadings: loading ? [loading] : [null], unloadings: [] });
       renderTbTasks();
-      // 새 태스크의 상차지 입력에 포커스
       const idx = tbTasks.length - 1;
       setTimeout(() => {
-        const inp = document.getElementById(`tb-t${idx}-loading-inp`);
+        const inp = document.getElementById(`tb-t${idx}-ld0-inp`);
         if (inp) inp.focus();
       }, 50);
+    }
+
+    function tbAddLoadingSlot(taskIdx) {
+      tbTasks[taskIdx].loadings.push(null);
+      renderTbTasks();
+      const li = tbTasks[taskIdx].loadings.length - 1;
+      setTimeout(() => {
+        const inp = document.getElementById(`tb-t${taskIdx}-ld${li}-inp`);
+        if (inp) inp.focus();
+      }, 50);
+    }
+
+    function tbRemoveLoadingSlot(taskIdx, ldIdx) {
+      tbTasks[taskIdx].loadings.splice(ldIdx, 1);
+      if (!tbTasks[taskIdx].loadings.length) tbTasks[taskIdx].loadings.push(null);
+      renderTbTasks();
     }
 
     function tbRemoveTask(idx) {
@@ -1621,16 +1638,16 @@
       }, 280);
     }
 
-    function tbSelectLoc(inputId, resultIdx, taskIdx, type, ulIdx) {
+    function tbSelectLoc(inputId, resultIdx, taskIdx, type, slotIdx) {
       const r = (_acResults[inputId] || [])[resultIdx];
       if (!r) return;
       const inp = document.getElementById(inputId + '-inp');
       if (inp) inp.value = r.name;
       document.getElementById(inputId + '-drop').style.display = 'none';
       if (type === 'loading') {
-        tbTasks[taskIdx].loading = { name: r.name, lat: r.lat, lon: r.lon };
+        tbTasks[taskIdx].loadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       } else {
-        tbTasks[taskIdx].unloadings[ulIdx] = { name: r.name, lat: r.lat, lon: r.lon };
+        tbTasks[taskIdx].unloadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       }
       renderTbTaskPins();
     }
@@ -1660,13 +1677,14 @@
           </div>`;
           return el;
         };
-        if (task.loading?.lat != null) {
+        task.loadings.forEach(ld => {
+          if (!ld?.lat) return;
           const el = makePinEl(`T${ti + 1} 🏗️`, 'loading');
           list.push(new kakao.maps.CustomOverlay({
-            position: new kakao.maps.LatLng(task.loading.lat, task.loading.lon),
+            position: new kakao.maps.LatLng(ld.lat, ld.lon),
             content: el, map, yAnchor: 1.35, zIndex: 5,
           }));
-        }
+        });
         task.unloadings.forEach((u, ui) => {
           if (!u?.lat) return;
           const el = makePinEl(`T${ti + 1} 📦`, 'unloading');
@@ -1689,7 +1707,17 @@
       }
       el.innerHTML = tbTasks.map((task, ti) => {
         const color = TB_TASK_COLORS[ti % TB_TASK_COLORS.length];
-        const loadingVal = task.loading ? task.loading.name : '';
+        const ldRows = task.loadings.map((ld, li) => `
+          <div class="tb-ul-row">
+            <span style="font-size:11px; color:${color}; flex-shrink:0;">🏗️</span>
+            <div class="tb-task-field" style="flex:1; margin:0;">
+              <input id="tb-t${ti}-ld${li}-inp" class="tb-task-input" style="border-color:${color}60;"
+                placeholder="상차지 검색..." value="${escapeHtml(ld?.name || '')}"
+                oninput="tbSearch(event,'tb-t${ti}-ld${li}','loading',${ti},${li})">
+              <div id="tb-t${ti}-ld${li}-drop" class="ac-dropdown"></div>
+            </div>
+            ${task.loadings.length > 1 ? `<button onclick="tbRemoveLoadingSlot(${ti},${li})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:14px;padding:0 2px;flex-shrink:0;">✕</button>` : '<span style="width:20px;flex-shrink:0;"></span>'}
+          </div>`).join('');
         const ulRows = task.unloadings.map((u, ui) => `
           <div class="tb-ul-row">
             <span style="font-size:11px; color:${color}; flex-shrink:0;">📦</span>
@@ -1710,15 +1738,11 @@
               </span>
               <button onclick="tbRemoveTask(${ti})" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:13px;padding:0;">✕ 제거</button>
             </div>
-            <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
-              <span style="font-size:11px; color:${color}; flex-shrink:0;">🏗️</span>
-              <div class="tb-task-field" style="flex:1; margin:0;">
-                <input id="tb-t${ti}-loading-inp" class="tb-task-input" style="border-color:${color}60;"
-                  placeholder="상차지 검색..." value="${escapeHtml(loadingVal)}"
-                  oninput="tbSearch(event,'tb-t${ti}-loading','loading',${ti})">
-                <div id="tb-t${ti}-loading-drop" class="ac-dropdown"></div>
-              </div>
-            </div>
+            ${ldRows}
+            <button onclick="tbAddLoadingSlot(${ti})"
+              style="width:100%;padding:4px;background:${color}10;border:1px dashed ${color};border-radius:6px;font-size:11px;color:${color};cursor:pointer;margin-bottom:6px;">
+              + 상차지 추가
+            </button>
             ${ulRows}
             <button onclick="tbAddUnloadingSlot(${ti})"
               style="width:100%;padding:4px;background:${color}10;border:1px dashed ${color};border-radius:6px;font-size:11px;color:${color};cursor:pointer;margin-top:2px;">
@@ -1743,7 +1767,7 @@
       if (!currentDriverId) return alert('좌측 패널에서 기사를 먼저 선택하세요.');
       if (!vehicleId)        return alert('차량을 선택하세요.');
       if (tbTasks.length === 0) return alert('태스크를 1개 이상 추가하세요.');
-      const incomplete = tbTasks.findIndex(t => !t.loading);
+      const incomplete = tbTasks.findIndex(t => !t.loadings.length || t.loadings.every(l => !l));
       if (incomplete !== -1) return alert(`태스크 ${incomplete + 1}의 상차지를 입력해주세요.`);
 
       const waypoints = _tbTasksToWaypoints();
@@ -2421,7 +2445,7 @@
     // ════════════════════════════════════════════════
     // 자동 배차 모달
     // ════════════════════════════════════════════════
-    let adTasks = [];       // [{loading:{name,lat,lon}|null, unloadings:[{name,lat,lon},...]}]
+    let adTasks = [];       // [{loadings:[{name,lat,lon},...], unloadings:[{name,lat,lon},...]}]
     let adDrivers = [];     // GET /drivers/available 결과
     let adSelectedDriverIds = new Set();
 
@@ -2429,7 +2453,7 @@
       // 지도에서 미리 추가된 tbTasks가 있으면 그대로 복사, 없으면 빈 태스크 1개
       adTasks = tbTasks.length > 0
         ? JSON.parse(JSON.stringify(tbTasks))
-        : [{ loading: null, unloadings: [null] }];
+        : [{ loadings: [null], unloadings: [null] }];
       adSelectedDriverIds = new Set();
       renderAdTasks();
       document.getElementById('ad-overlay').style.display = 'flex';
@@ -2499,7 +2523,18 @@
     }
 
     function addAdTask() {
-      adTasks.push({ loading: null, unloadings: [null] });
+      adTasks.push({ loadings: [null], unloadings: [null] });
+      renderAdTasks();
+    }
+
+    function addAdLoading(taskIdx) {
+      adTasks[taskIdx].loadings.push(null);
+      renderAdTasks();
+    }
+
+    function removeAdLoading(taskIdx, ldIdx) {
+      adTasks[taskIdx].loadings.splice(ldIdx, 1);
+      if (!adTasks[taskIdx].loadings.length) adTasks[taskIdx].loadings.push(null);
       renderAdTasks();
     }
 
@@ -2529,17 +2564,21 @@
             <button class="ad-task-remove" onclick="removeAdTask(${ti})">✕</button>
           </div>
           <div class="ad-field-label loading">🏗️ 상차지</div>
-          <div class="ad-loc-row">
-            <div class="ac-wrapper" style="flex:1;">
-              <input id="ad-t${ti}-loading" type="text" placeholder="장소 검색..." autocomplete="off"
-                value="${task.loading ? escapeHtml(task.loading.name) : ''}"
-                oninput="adSearch(event,'t${ti}-loading','loading',${ti},-1)"
-                onfocus="adSearch(event,'t${ti}-loading','loading',${ti},-1)">
-              <div class="ac-dropdown" id="ac-ad-t${ti}-loading"></div>
+          ${task.loadings.map((ld, li) => `
+            <div class="ad-loc-row">
+              <div class="ac-wrapper" style="flex:1;">
+                <input id="ad-t${ti}-ld${li}" type="text" placeholder="장소 검색..." autocomplete="off"
+                  value="${ld ? escapeHtml(ld.name) : ''}"
+                  oninput="adSearch(event,'t${ti}-ld${li}','loading',${ti},${li})"
+                  onfocus="adSearch(event,'t${ti}-ld${li}','loading',${ti},${li})">
+                <div class="ac-dropdown" id="ac-ad-t${ti}-ld${li}"></div>
+              </div>
+              <button class="ad-loc-clear" onclick="adClearLoc(${ti},'loading',${li})" title="지우기">✕</button>
+              ${task.loadings.length > 1 ? `<button class="ad-loc-clear" style="color:#e74c3c;" onclick="removeAdLoading(${ti},${li})" title="삭제">🗑</button>` : ''}
             </div>
-            <button class="ad-loc-clear" onclick="adClearLoc(${ti},'loading',-1)" title="지우기">✕</button>
-          </div>
-          <div class="ad-field-label unloading" style="margin-top:6px;">📦 하차지</div>
+          `).join('')}
+          <button class="ad-add-unloading" onclick="addAdLoading(${ti})" style="margin-bottom:6px;">+ 상차지 추가</button>
+          <div class="ad-field-label unloading" style="margin-top:2px;">📦 하차지</div>
           ${task.unloadings.map((u, ui) => `
             <div class="ad-loc-row">
               <div class="ac-wrapper" style="flex:1;">
@@ -2558,14 +2597,14 @@
       updateAdPreview();
     }
 
-    function adClearLoc(taskIdx, type, ulIdx) {
+    function adClearLoc(taskIdx, type, slotIdx) {
       if (type === 'loading') {
-        adTasks[taskIdx].loading = null;
-        const inp = document.getElementById(`ad-t${taskIdx}-loading`);
+        adTasks[taskIdx].loadings[slotIdx] = null;
+        const inp = document.getElementById(`ad-t${taskIdx}-ld${slotIdx}`);
         if (inp) inp.value = '';
       } else {
-        adTasks[taskIdx].unloadings[ulIdx] = null;
-        const inp = document.getElementById(`ad-t${taskIdx}-ul${ulIdx}`);
+        adTasks[taskIdx].unloadings[slotIdx] = null;
+        const inp = document.getElementById(`ad-t${taskIdx}-ul${slotIdx}`);
         if (inp) inp.value = '';
       }
     }
@@ -2601,7 +2640,7 @@
       }, 280);
     }
 
-    function adSelectLoc(inputId, dropId, resultIdx, taskIdx, type, ulIdx) {
+    function adSelectLoc(inputId, dropId, resultIdx, taskIdx, type, slotIdx) {
       const r = (_acResults[inputId] || [])[resultIdx];
       if (!r) return;
       const inp = document.getElementById(inputId);
@@ -2609,9 +2648,9 @@
       if (inp) inp.value = r.name;
       if (drop) drop.style.display = 'none';
       if (type === 'loading') {
-        adTasks[taskIdx].loading = { name: r.name, lat: r.lat, lon: r.lon };
+        adTasks[taskIdx].loadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       } else {
-        adTasks[taskIdx].unloadings[ulIdx] = { name: r.name, lat: r.lat, lon: r.lon };
+        adTasks[taskIdx].unloadings[slotIdx] = { name: r.name, lat: r.lat, lon: r.lon };
       }
     }
 
@@ -2707,7 +2746,7 @@
       // 유효성 검사
       const errors = [];
       adTasks.forEach((task, ti) => {
-        if (!task.loading) errors.push(`태스크 ${ti + 1}: 상차지를 입력하세요.`);
+        if (!task.loadings.length || task.loadings.every(l => !l)) errors.push(`태스크 ${ti + 1}: 상차지를 입력하세요.`);
         task.unloadings.forEach((u, ui) => {
           if (!u) errors.push(`태스크 ${ti + 1} 하차지 ${ui + 1}: 위치를 입력하세요.`);
         });
@@ -2729,7 +2768,7 @@
 
       const body = {
         tasks: adTasks.map(t => ({
-          loading:    t.loading,
+          loadings:   t.loadings.filter(l => l),
           unloadings: t.unloadings,
         })),
       };
