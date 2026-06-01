@@ -6,6 +6,24 @@
 
 ---
 
+## v1.0.29 (2026-06-01)
+
+### 기능 개선 — ETA 실시간 추적
+
+**백엔드 (main.py)**
+- `POST /location-logs`: GPS 핑 수신마다 진행 중 trip의 남은 경유지(waypoint+destination 중 미완료)까지 haversine 거리 합산 → 평균 60km/h 기준으로 `eta_remaining_min` 재계산
+- Redis에 `eta:{trip_id}` 저장 (TTL 600초)
+- WS 브로드캐스트에 `eta_remaining_min`, `trip_id` 필드 추가
+- `POST /location-logs` 응답에도 `eta_remaining_min` 포함
+
+**프론트엔드 (dashboard.html)**
+- `driverEtaCache` 전역 객체 추가 — GPS 핑마다 수신한 남은 분 캐싱
+- WS 메시지에서 `eta_remaining_min` 수신 시 기사 카드 + 상세 패널 ETA 즉시 갱신
+- `formatCardETA(trip, driverId)` — 실시간 캐시 우선, 없으면 `started_at + estimated_duration_min` 고정 방식 폴백
+- 1분 주기 카드 ETA 갱신 루프: 실시간 캐시 있는 기사는 건드리지 않음
+
+---
+
 ## v1.0.28 (2026-06-01)
 
 ### 기능 추가 — 배송지 화물·수신자 정보
@@ -389,6 +407,8 @@
 - [ ] Android 앱: `/optimize` 호출 시 `dest_name/dest_lat/dest_lon` 파라미터 지원 (팀원 A)
 - [x] 긴급 경유지 추가(`PATCH /trips/{id}/waypoints`) type=unloading 기본값 E2E 검증 — 정상 동작 확인
 - [x] 상차지 인근 기사 확인 — `GET /nearby-drivers` 구현 완료
+- [x] **ETA 실시간 추적** — GPS 핑 수신마다 남은 경유지 기준 예상 완료 시간 재계산 (출발 시각 고정 방식 → 현재 위치 기반 동적 갱신)
+- [ ] **지도 클릭 비활성화** — 지도와 상호작용하는 모든 클릭 이벤트 제거 (`chore/disable-map-interaction` 브랜치)
 
 ### 기능 개발 백로그
 - [x] **관리자 프리셋 기능** — 자주 쓰는 상차지/하차지 조합 저장·불러오기·삭제
@@ -856,6 +876,8 @@
 - [ ] Android 앱: `/optimize` 호출 시 `dest_name/dest_lat/dest_lon` 파라미터 지원 (팀원 A)
 - [x] 긴급 경유지 추가(`PATCH /trips/{id}/waypoints`) type=unloading 기본값 E2E 검증 — 정상 동작 확인
 - [x] 상차지 인근 기사 확인 — `GET /nearby-drivers` 구현 완료
+- [x] **ETA 실시간 추적** — GPS 핑 수신마다 남은 경유지 기준 예상 완료 시간 재계산 (출발 시각 고정 방식 → 현재 위치 기반 동적 갱신)
+- [ ] **지도 클릭 비활성화** — 지도와 상호작용하는 모든 클릭 이벤트 제거 (`chore/disable-map-interaction` 브랜치)
 
 ### 기능 개발 백로그
 - [x] **관리자 프리셋 기능** — 자주 쓰는 상차지/하차지 조합 저장·불러오기·삭제

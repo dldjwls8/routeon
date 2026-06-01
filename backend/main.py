@@ -2506,19 +2506,65 @@ async def create_location_log(
 
     await db.commit()
 
-    # 4. WebSocket 브로드캐스트 — 같은 조직 관리자에게만 전송
+    # 4. ETA 재계산 — 현재 위치에서 남은 경유지까지 haversine 거리 합산 (평균 60km/h 기준)
+    eta_remaining_min = None
+    active_trip_id = None
+    active_trip_r = await db.execute(
+        select(Trip).where(
+            Trip.driver_id == uuid_lib.UUID(req.user_id),
+            Trip.status == TripStatus.in_progress,
+        )
+    )
+    active_trip = active_trip_r.scalar_one_or_none()
+
+    if active_trip and active_trip.optimized_route:
+        active_trip_id = str(active_trip.id)
+        route = active_trip.optimized_route.get("route", [])
+
+        done_r = await db.execute(
+            select(Delivery.lat, Delivery.lon).where(
+                Delivery.trip_id == active_trip.id,
+                Delivery.status.in_([DeliveryStatus.done, DeliveryStatus.done_manual]),
+            )
+        )
+        done_coords = [(row.lat, row.lon) for row in done_r.all()]
+
+        remaining = [
+            n for n in route
+            if n.get("type") in ("waypoint", "destination")
+            and not any(
+                abs(n["lat"] - d[0]) < 0.001 and abs(n["lon"] - d[1]) < 0.001
+                for d in done_coords
+            )
+        ]
+
+        if remaining:
+            prev_lat, prev_lon = req.lat, req.lon
+            total_km = 0.0
+            for n in remaining:
+                total_km += _haversine_km(prev_lat, prev_lon, n["lat"], n["lon"])
+                prev_lat, prev_lon = n["lat"], n["lon"]
+            eta_remaining_min = round((total_km / 60.0) * 60, 1)
+        else:
+            eta_remaining_min = 0.0
+        redis.setex(f"eta:{active_trip.id}", 600, str(eta_remaining_min))
+
+    # 5. WebSocket 브로드캐스트 — 같은 조직 관리자에게만 전송
     if current_user.organization_id:
         await manager.broadcast_to_org(current_user.organization_id, {
-            "user_id": req.user_id,
-            "lat":     req.lat,
-            "lon":     req.lon,
-            "speed":   req.speed,
+            "user_id":           req.user_id,
+            "lat":               req.lat,
+            "lon":               req.lon,
+            "speed":             req.speed,
             "arrived_deliveries": arrived,
+            "eta_remaining_min": eta_remaining_min,
+            "trip_id":           active_trip_id,
         })
 
     return {
-        "received": True,
-        "arrived_deliveries": arrived,
+        "received":            True,
+        "arrived_deliveries":  arrived,
+        "eta_remaining_min":   eta_remaining_min,
     }
 
 

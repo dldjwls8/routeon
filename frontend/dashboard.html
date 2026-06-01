@@ -23,8 +23,19 @@
       return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
     }
 
+    // 실시간 ETA 캐시 (user_id → eta_remaining_min)
+    const driverEtaCache = {};
+
     // 기사 카드용 한 줄 ETA 문자열
-    function formatCardETA(trip) {
+    function formatCardETA(trip, driverId) {
+      // 실시간 캐시 우선 (GPS 핑마다 갱신)
+      const cached = driverId != null ? driverEtaCache[driverId] : undefined;
+      if (cached != null) {
+        const rem = Math.round(cached);
+        if (rem <= 0) return '⏰ 완료 임박';
+        return `⏰ 약 ${rem}분 남음`;
+      }
+      // 폴백: started_at + estimated_duration_min 고정 방식
       const eta = calcETADate(trip);
       if (!eta) return '';
       const now = Date.now();
@@ -896,7 +907,7 @@
                   : `🏗️ 상차 ${trip.loading_count||0}건 / 📦 하차 ${trip.unloading_count||0}건`)
               : '배차 없음'}
           </small>
-          ${isRunning ? `<small id="card-eta-${d.id}" style="color:#555; display:block; margin-top:3px; font-size:11px;">${formatCardETA(trip)}</small>` : ''}
+          ${isRunning ? `<small id="card-eta-${d.id}" style="color:#555; display:block; margin-top:3px; font-size:11px;">${formatCardETA(trip, d.id)}</small>` : ''}
           ${trip?.cancel_requested ? `<small style="color:#e65100; display:block; margin-top:3px; font-size:11px; font-weight:bold;">⚠️ 배차 취소 요청</small>` : ''}
         `;
         card.querySelector('.card-chat-btn').addEventListener('click', e => {
@@ -1014,18 +1025,28 @@
           : `🏗️ 상차 ${trip.loading_count||0}건 / 📦 하차 ${trip.unloading_count||0}건`;
         tripInfoBox._tripId = trip.id;
 
-        // ETA 표시 (운행 중일 때만)
-        const etaRow = document.getElementById('trip-eta-row');
-        const etaDate = calcETADate(trip);
-        if (etaDate) {
-          const diffMin = Math.round((etaDate - Date.now()) / 60000);
-          document.getElementById('trip-eta-time').textContent = formatTime(etaDate);
-          document.getElementById('trip-eta-remain').textContent =
-            diffMin >= 0 ? `(약 ${diffMin}분 남음)` : `(${Math.abs(diffMin)}분 초과)`;
-          document.getElementById('trip-eta-remain').style.color = diffMin >= 0 ? '#888' : '#e74c3c';
-          etaRow.style.display = 'block';
+        // ETA 표시 (운행 중일 때만) — 실시간 캐시 우선, 없으면 고정 방식 폴백
+        const etaRow    = document.getElementById('trip-eta-row');
+        const etaTime   = document.getElementById('trip-eta-time');
+        const etaRemain = document.getElementById('trip-eta-remain');
+        const cachedEta = driverEtaCache[id];
+        if (cachedEta != null) {
+          const rem = Math.round(cachedEta);
+          etaTime.textContent   = '';
+          etaRemain.textContent = rem <= 0 ? '완료 임박' : `약 ${rem}분 남음`;
+          etaRemain.style.color = rem >= 0 ? '#888' : '#e74c3c';
+          etaRow.style.display  = 'block';
         } else {
-          etaRow.style.display = 'none';
+          const etaDate = calcETADate(trip);
+          if (etaDate) {
+            const diffMin = Math.round((etaDate - Date.now()) / 60000);
+            etaTime.textContent   = formatTime(etaDate);
+            etaRemain.textContent = diffMin >= 0 ? `(약 ${diffMin}분 남음)` : `(${Math.abs(diffMin)}분 초과)`;
+            etaRemain.style.color = diffMin >= 0 ? '#888' : '#e74c3c';
+            etaRow.style.display  = 'block';
+          } else {
+            etaRow.style.display = 'none';
+          }
         }
 
         // 완료/취소된 운행은 버튼 숨기기
@@ -2181,10 +2202,10 @@
                 document.getElementById('trip-eta-remain').style.color = diffMin >= 0 ? '#888' : '#e74c3c';
               }
             }
-            // 기사 카드 ETA 갱신
+            // 기사 카드 ETA 갱신 (실시간 캐시 없는 기사만 고정 방식으로 업데이트)
             Object.entries(tripsCache).forEach(([drvId, trip]) => {
               const el = document.getElementById(`card-eta-${drvId}`);
-              if (el && trip) el.textContent = formatCardETA(trip);
+              if (el && trip && driverEtaCache[drvId] == null) el.textContent = formatCardETA(trip, drvId);
             });
           }, 60000);
         });
@@ -2381,8 +2402,30 @@
     }
 
     function updateDriverMarker(data) {
-      const { user_id, lat, lon } = data;
+      const { user_id, lat, lon, eta_remaining_min } = data;
       if (!lat || !lon) return;
+
+      // 실시간 ETA 캐시 업데이트
+      if (eta_remaining_min != null) {
+        driverEtaCache[user_id] = eta_remaining_min;
+        const cardEta = document.getElementById(`card-eta-${user_id}`);
+        if (cardEta) {
+          const rem = Math.round(eta_remaining_min);
+          cardEta.textContent = rem <= 0 ? '⏰ 완료 임박' : `⏰ 약 ${rem}분 남음`;
+        }
+        if (currentDriverId === user_id) {
+          const etaRow    = document.getElementById('trip-eta-row');
+          const etaTime   = document.getElementById('trip-eta-time');
+          const etaRemain = document.getElementById('trip-eta-remain');
+          if (etaRow && etaRemain) {
+            const rem = Math.round(eta_remaining_min);
+            etaRow.style.display = 'block';
+            etaTime.textContent  = '';
+            etaRemain.textContent = rem <= 0 ? '완료 임박' : `약 ${rem}분 남음`;
+            etaRemain.style.color = rem >= 0 ? '#888' : '#e74c3c';
+          }
+        }
+      }
 
       // 현재 위치 저장 (진행도 계산용)
       driverCurrentPositions[user_id] = { lat, lon };
