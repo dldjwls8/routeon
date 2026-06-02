@@ -499,6 +499,19 @@
         }));
       }
 
+      // 담당자(관리자) 목록
+      const admR = await fetch(`${API}/users?role=admin`, { headers: hdrs });
+      if (admR.ok) {
+        const admins = await admR.json();
+        DATA.staff = admins.map(u => ({
+          id: u.id,
+          username: u.username,
+          name: u.name || u.username,
+          phone: u.phone || '',
+          created_at: u.created_at,
+        }));
+      }
+
       // dispatchFleet 생성 (차량 + 기사 매핑)
       DATA.dispatchFleet = DATA.vehicles.map((v, i) => ({
         id: v.id,
@@ -1507,39 +1520,43 @@
   }
 
   function staffById(id) {
-    return DATA.staff.find(s => s.id === Number(id)) || null;
+    return DATA.staff.find(s => s.id === id) || null;
   }
 
   function staffDetailBodyHtml(s) {
+    const joinDate = s.created_at ? s.created_at.split('T')[0] : '—';
+    const isSelf = s.id === _currentUserId;
     return `
       <div class="form-grid" style="max-width:100%">
-        <label>이름</label><input id="staffName" value="${s.name}">
-        <label>역할</label>
-        <select id="staffRole">
-          <option ${s.role === '접수' ? 'selected' : ''}>접수</option>
-          <option ${s.role === '배차' ? 'selected' : ''}>배차</option>
-          <option ${s.role === '관리' ? 'selected' : ''}>관리</option>
-        </select>
-        <label>이메일</label><input id="staffEmail" type="email" value="${s.email}">
-        <label>연락처</label><input id="staffPhone" value="${s.phone}">
+        <label>이름</label><input readonly value="${s.name}" style="background:var(--input-bg,var(--dark-input,#23272e));opacity:.8">
+        <label>아이디</label><input readonly value="${s.username}" style="background:var(--input-bg,var(--dark-input,#23272e));opacity:.8">
+        <label>연락처</label><input readonly value="${s.phone || '—'}" style="background:var(--input-bg,var(--dark-input,#23272e));opacity:.8">
+        <label>가입일</label><input readonly value="${joinDate}" style="background:var(--input-bg,var(--dark-input,#23272e));opacity:.8">
       </div>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:12px">접수·배차 담당자 마스터 (목업)</p>`;
+      <p style="font-size:11px;color:var(--text-muted);margin-top:12px">연락처·비밀번호는 ⚙ 설정 페이지에서 본인이 직접 변경합니다.</p>
+      ${isSelf ? '' : `<div style="margin-top:16px"><button type="button" class="btn btn-sm" id="deleteStaffBtn" style="background:var(--danger,#ef4444);color:#fff;border:none">삭제</button></div>`}`;
   }
 
   function bindStaffDetail(root, s) {
     $('#inlineDetailBack', root).onclick = () => { selectedStaffId = null; renderPage(); };
-    $('#inlineDetailSave', root).onclick = () => {
-      s.name = $('#staffName', root).value.trim() || s.name;
-      s.role = $('#staffRole', root).value;
-      s.email = $('#staffEmail', root).value.trim() || s.email;
-      s.phone = $('#staffPhone', root).value.trim() || s.phone;
-      toast('담당자 정보가 저장되었습니다 (목업)');
-      renderPage();
+    $('#inlineDetailSave', root).onclick = () => { selectedStaffId = null; renderPage(); };
+    const delBtn = $('#deleteStaffBtn', root);
+    if (delBtn) delBtn.onclick = async () => {
+      if (!confirm(`"${s.name}" 계정을 삭제하시겠습니까?`)) return;
+      const res = await fetch(`${API}/users/${s.id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (res.ok || res.status === 204) {
+        toast('담당자가 삭제되었습니다.');
+        selectedStaffId = null;
+        await loadRealData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast(err.detail || '삭제 실패', 'error');
+      }
     };
   }
 
   function selectStaff(id) {
-    selectedStaffId = Number(id);
+    selectedStaffId = id;
     renderPage();
   }
 
@@ -2273,10 +2290,13 @@
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table id="staffTable">
-            <thead><tr><th>이름</th><th>역할</th><th>이메일</th><th>연락처</th></tr></thead>
+            <thead><tr><th>이름</th><th>아이디</th><th>연락처</th><th>가입일</th></tr></thead>
             <tbody>${DATA.staff.map(s => `
               <tr data-id="${s.id}" class="${selectedStaffId === s.id ? 'selected' : ''}">
-                <td>${s.name}</td><td>${s.role}</td><td>${s.email}</td><td>${s.phone}</td>
+                <td>${s.name}${s.id === _currentUserId ? ' <span class="badge badge-ok" style="font-size:10px">나</span>' : ''}</td>
+                <td>${s.username}</td>
+                <td>${s.phone || '—'}</td>
+                <td>${s.created_at ? s.created_at.split('T')[0] : '—'}</td>
               </tr>`).join('')}
             </tbody>
           </table>`)}
@@ -2285,22 +2305,54 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('staff', { desc: '담당자 · 좌측 목록 · 우측 상세' }),
       listCard,
-      selected ? inlineDetailCardHtml(selected.name, staffDetailBodyHtml(selected)) : ''
+      selected ? inlineDetailCardHtml(selected.name, staffDetailBodyHtml(selected), { saveLabel: '닫기' }) : ''
     );
     $('#staffTable tbody', root).querySelectorAll('tr[data-id]').forEach(tr => {
       tr.onclick = () => selectStaff(tr.dataset.id);
     });
     if (selected) bindStaffDetail(root, selected);
-    $('#addStaff', root).onclick = () => {
+    $('#addStaff', root).onclick = async () => {
+      const orgRes = await fetch(`${API}/organizations/me`, { headers: getAuthHeaders() });
+      const org = orgRes.ok ? await orgRes.json() : null;
+      const orgCode = org?.org_code || '';
       openModal('담당자 추가', `
-        <form>
+        <form id="addStaffForm">
           <div class="form-grid" style="max-width:100%">
-            <label>이름 *</label><input required>
-            <label>역할 *</label><select required><option>접수</option><option>배차</option></select>
-            <label>이메일</label><input type="email">
-            <label>연락처</label><input>
+            <label>이름 *</label><input id="sfName" required placeholder="홍길동">
+            <label>아이디 *</label><input id="sfUsername" required placeholder="login_id">
+            <label>비밀번호 *</label><input id="sfPassword" type="password" required placeholder="8자 이상">
+            <label>연락처 *</label><input id="sfPhone" required placeholder="010-0000-0000">
+          </div>
+          <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button type="button" class="btn" id="sfCancel">취소</button>
+            <button type="submit" class="btn btn-primary">추가</button>
           </div>
         </form>`);
+      document.getElementById('sfCancel').onclick = closeModal;
+      document.getElementById('addStaffForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const body = {
+          name: document.getElementById('sfName').value.trim(),
+          username: document.getElementById('sfUsername').value.trim(),
+          password: document.getElementById('sfPassword').value,
+          phone: document.getElementById('sfPhone').value.trim(),
+          org_code: orgCode,
+          role: 'admin',
+        };
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok || res.status === 201) {
+          toast('담당자가 추가되었습니다.');
+          closeModal();
+          await loadRealData();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toast(err.detail || '추가 실패', 'error');
+        }
+      };
     };
   }
 

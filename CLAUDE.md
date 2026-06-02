@@ -567,6 +567,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 프론트엔드 포트 변경 — `docker-compose.yml` `3000:80` → `80:80`, 표준 HTTP 포트로 서비스
 - [x] 채팅 알림 WS 연동 — dashboard.js `connectChatWebSocket()` + `loadChatConversations()` + `updateChatNotifUI()`, 🔔 빨간 점 배지, 알림 드롭다운 미읽 목록(클릭 시 chat.html 새 탭), 기사 테이블 행 unread 배지
 - [x] 페이지네이션 실 구현 — `PAGE_SIZE=20`, `orderPage`/`vehiclePage`/`customerPage`/`driverPage` 독립 상태, 실제 건수 기반 페이지 계산, ‹ › 이전/다음 버튼, 필터·검색 변경 시 1페이지 리셋
+- [x] 담당자(staff) 실 연동 — `GET /users?role=admin` 로드, `POST /auth/register(role=admin)` 추가 모달, `DELETE /users/{id}` 삭제 (본인 삭제 불가·"나" 배지)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
@@ -595,5 +596,5 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **엑셀 임포트 (오더 접수)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39)
 - [x] **채팅 알림 (dashboard)** — `connectChatWebSocket()` WS `/ws/chat` 수신 전용 연결, `loadChatConversations()` 초기 unread 반영, `updateChatNotifUI()` 🔔 배지 + 드롭다운 + 기사 테이블 배지 갱신
 - [x] **페이지네이션** — `PAGE_SIZE=20`, 리스트별 독립 페이지 상태(`orderPage`/`vehiclePage`/`customerPage`/`driverPage`), 필터·검색 변경 시 1페이지 리셋
-- [ ] **담당자(staff) 관리** — toast(목업) → 별도 staff 테이블 또는 admin 역할 유저 CRUD
+- [x] **담당자(staff) 관리** — `GET /users?role=admin` 실 연동, `POST /auth/register(role=admin)` 추가, `DELETE /users/{id}` 삭제, 본인 행 "나" 배지·삭제 불가 처리
 - [ ] **일정 캘린더/간트/마일스톤** — 전부 목업 → `/trips`, `/deliveries` 데이터 기반 실제 일정 표시
