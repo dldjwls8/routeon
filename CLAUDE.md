@@ -558,8 +558,6 @@ Android 앱 채팅 구현 필수 사항:
 - [x] `/optimize` `started_at` 버그 수정 — in_progress 전환 시 started_at 미기록 문제 수정 (ETA 계산 정상화)
 - [x] 다크/라이트/자동 테마 시스템 — CSS custom properties + `html[data-theme]` + FOUC 방지 스크립트, OS 설정 자동 감지(`prefers-color-scheme`), 테마 선택 UI settings.html 이관
 - [x] 탑바 버튼 수정 — 🔔 알림 드롭다운, ⚙ 설정 이동, 👤 관리자 드롭다운(프로필/설정/로그아웃)
-- [x] 채팅 알림 WS 연동 — dashboard.js `connectChatWebSocket()` + `loadChatConversations()` + `updateChatNotifUI()`, 🔔 빨간 점 배지, 알림 드롭다운 미읽 목록(클릭 시 chat.html 새 탭), 기사 테이블 행 unread 배지
-- [x] 페이지네이션 실 구현 — `PAGE_SIZE=20`, `orderPage`/`vehiclePage`/`customerPage`/`driverPage` 독립 상태, 실제 건수 기반 페이지 계산, ‹ › 이전/다음 버튼, 필터·검색 변경 시 1페이지 리셋
 - [x] settings.html UI/UX 개편 — 대시보드 디자인 시스템 통일, 화면 설정 카드(테마 세그먼트) 추가
 - [x] 전체 공개 페이지 테마 통일 — login / index / chat / register 다크·라이트 적용, register 파일 선택 UI 커스텀 드롭존
 - [x] LoginRequest.password 필드 누락 버그 수정 (로그인 500 오류)
@@ -567,6 +565,8 @@ Android 앱 채팅 구현 필수 사항:
 - [x] dashboard.html CSS/JS 파일 분리 — 6,048줄 → HTML 65줄 + `dashboard.css` + `dashboard.js` 별도 파일
 - [x] 대시보드 실 API 연동 완성 — 오더 목록·배차 assign·기사·차량·Trip 상태·통계 그래프·고객 위치 지도·Trip 폴리라인·거래처 CRUD (`GET/POST/PATCH/DELETE /customers`)
 - [x] 프론트엔드 포트 변경 — `docker-compose.yml` `3000:80` → `80:80`, 표준 HTTP 포트로 서비스
+- [x] 채팅 알림 WS 연동 — dashboard.js `connectChatWebSocket()` + `loadChatConversations()` + `updateChatNotifUI()`, 🔔 빨간 점 배지, 알림 드롭다운 미읽 목록(클릭 시 chat.html 새 탭), 기사 테이블 행 unread 배지
+- [x] 페이지네이션 실 구현 — `PAGE_SIZE=20`, `orderPage`/`vehiclePage`/`customerPage`/`driverPage` 독립 상태, 실제 건수 기반 페이지 계산, ‹ › 이전/다음 버튼, 필터·검색 변경 시 1페이지 리셋
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
@@ -592,8 +592,8 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **고객(거래처) 저장** — `GET/POST/PATCH/DELETE /customers` 신규 구현, `customerModal` · `bindCustomerDetail` · `openTempCustomerModal` 연동
 
 #### 낮은 우선순위 (Phase 2)
+- [x] **엑셀 임포트 (오더 접수)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39)
 - [x] **채팅 알림 (dashboard)** — `connectChatWebSocket()` WS `/ws/chat` 수신 전용 연결, `loadChatConversations()` 초기 unread 반영, `updateChatNotifUI()` 🔔 배지 + 드롭다운 + 기사 테이블 배지 갱신
 - [x] **페이지네이션** — `PAGE_SIZE=20`, 리스트별 독립 페이지 상태(`orderPage`/`vehiclePage`/`customerPage`/`driverPage`), 필터·검색 변경 시 1페이지 리셋
-- [ ] **일정 캘린더/간트/마일스톤** — 전부 목업 → `/trips`, `/deliveries` 데이터 기반 실제 일정 표시
 - [ ] **담당자(staff) 관리** — toast(목업) → 별도 staff 테이블 또는 admin 역할 유저 CRUD
-- [x] **엑셀 임포트 (오더 접수)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39)
+- [ ] **일정 캘린더/간트/마일스톤** — 전부 목업 → `/trips`, `/deliveries` 데이터 기반 실제 일정 표시
