@@ -430,10 +430,12 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 
 settings.html 구조 (관리자 전용):
 - 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
+- 디자인: 대시보드 CSS 변수 시스템 공유 (다크/라이트 모드, FOUC 방지 스크립트)
 - 섹션 ①: 조직코드 관리 — `GET /organizations/me` 조회, 복사(clipboard/fallback), `POST /organizations/regen-code` 재발급
 - 섹션 ②: 계정 정보 — `GET /auth/me`로 초기값 채움, 전화번호·비밀번호 변경 `PATCH /auth/me`
-- 섹션 ③: 운영 설정 — 기사 자동승인 토글 (`PATCH /organizations/me/settings` 호출, DB 반영, 초기값 OFF)
-- dashboard.html 좌측 하단 ⚙️ 버튼 → `/settings.html` 이동
+- 섹션 ③: 화면 설정 — 🖥 자동 / 🌙 다크 / ☀️ 라이트 세그먼트 선택, `localStorage('theme')` 저장, 즉시 반영
+- 섹션 ④: 운영 설정 — 기사 자동승인 토글 (`PATCH /organizations/me/settings` 호출, DB 반영, 초기값 OFF)
+- 탑바 ⚙ 버튼 또는 관리자 드롭다운 → `/settings.html` 이동
 
 drivers.html 구조 (관리자 전용):
 - 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
@@ -548,6 +550,9 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 운행 생성 패널 태스크 단위 입력 — 상차지+하차지 분리 목록 → 태스크 카드(상차지 N개+하차지 N개 묶음) 구조, 카카오 Places 자동완성 + 지도 클릭 병행, 상차지 복수 지원(`loadings[]`)
 - [x] OR-Tools pickup_deliveries 제약 도입 — `_apply_loading_precedence` 제거, `task_group` 필드로 상차-하차 쌍 보장하면서 전체 순서는 OR-Tools 자유 최적화
 - [x] `/optimize` `started_at` 버그 수정 — in_progress 전환 시 started_at 미기록 문제 수정 (ETA 계산 정상화)
+- [x] 다크/라이트/자동 테마 시스템 — CSS custom properties + `html[data-theme]` + FOUC 방지 스크립트, OS 설정 자동 감지(`prefers-color-scheme`), 테마 선택 UI settings.html 이관
+- [x] 탑바 버튼 수정 — 🔔 알림 드롭다운, ⚙ 설정 이동, 👤 관리자 드롭다운(프로필/설정/로그아웃)
+- [x] settings.html UI/UX 개편 — 대시보드 디자인 시스템 통일, 화면 설정 카드(테마 세그먼트) 추가
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)

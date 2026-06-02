@@ -2,242 +2,312 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>루트온 — 설정</title>
+  <!-- FOUC 방지: body 렌더 전 테마 적용 -->
   <script>
-    const API = 'http://168.138.45.63:8000';
-
-    function getToken() {
-      return localStorage.getItem('token');
-    }
-
-    function authHeaders() {
-      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
-    }
-
-    function redirectToLogin() {
-      location.href = '/login.html';
-    }
-
-    if (!getToken()) redirectToLogin();
+    (function () {
+      var saved = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+    })();
   </script>
   <style>
+    :root {
+      --lime: #c6f135;
+      --lime-dim: #a8d42e;
+      --lime-glow: rgba(198,241,53,.25);
+      --dark-bg:      #0c0e12;
+      --dark-surface: #151820;
+      --dark-card:    #1c2029;
+      --dark-border:  rgba(255,255,255,.08);
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --t-text:        #e8eaef;
+      --t-text-strong: #f3f4f6;
+      --t-text-muted:  #8b93a7;
+      --t-text-dim:    #c5cad6;
+      --t-deep:        #12151c;
+      --t-nav-hover:   rgba(255,255,255,.06);
+      --t-border-strong: rgba(255,255,255,.12);
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --dark-bg:      #f5f7fa;
+      --dark-surface: #ffffff;
+      --dark-card:    #ffffff;
+      --dark-border:  #e2e8f0;
+      --t-text:        #1e2230;
+      --t-text-strong: #0f1117;
+      --t-text-muted:  #5c6478;
+      --t-text-dim:    #374151;
+      --t-deep:        #f3f4f6;
+      --t-nav-hover:   rgba(0,0,0,.04);
+      --t-border-strong: rgba(0,0,0,.1);
+    }
+    html[data-theme="dark"] { color-scheme: dark; }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Malgun Gothic', sans-serif; background: #f4f7f6; min-height: 100vh; color: #333; }
+    body {
+      font-family: 'Noto Sans KR', system-ui, sans-serif;
+      background: var(--dark-bg); color: var(--t-text);
+      min-height: 100vh;
+    }
 
-    .header {
-      background: #fff;
-      border-bottom: 2px solid #FFE812;
-      padding: 16px 28px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    /* ── 탑바 ── */
+    .topbar {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);
+      padding: 0 24px; height: 56px; position: sticky; top: 0; z-index: 100;
     }
-    .header a {
-      text-decoration: none;
-      color: #555;
-      font-size: 14px;
-      padding: 6px 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      transition: 0.2s;
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 8px;
+      border: 1px solid var(--dark-border); background: var(--dark-surface);
+      color: var(--t-text-dim); font-size: 13px; font-family: inherit;
+      cursor: pointer; text-decoration: none; transition: background .15s, color .15s;
     }
-    .header a:hover { background: #f0f0f0; }
-    .header h1 { font-size: 20px; color: #333; }
+    .back-btn:hover { background: var(--t-nav-hover); color: var(--t-text); }
+    .topbar-title {
+      font-size: 15px; font-weight: 700; color: var(--t-text-strong);
+    }
 
-    .main { max-width: 920px; margin: 28px auto; padding: 0 20px 40px; }
-    .section {
-      background: #fff;
-      border-radius: 12px;
-      padding: 22px 24px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-      margin-bottom: 18px;
+    /* ── 레이아웃 ── */
+    .main { max-width: 660px; margin: 0 auto; padding: 28px 20px 64px; }
+
+    /* ── 카드 ── */
+    .card {
+      background: var(--dark-card); border: 1px solid var(--dark-border);
+      border-radius: var(--radius-md); padding: 24px; margin-bottom: 16px;
     }
-    .section-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 14px;
-      margin-bottom: 18px;
+    .card-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      border-bottom: 1px solid var(--dark-border);
+      padding-bottom: 16px; margin-bottom: 20px;
     }
-    .section h2 { font-size: 17px; color: #333; }
-    .section-sub { font-size: 12px; color: #888; margin-top: 4px; }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 12px;
-      padding: 4px 9px;
-      background: #f1f3f5;
-      color: #777;
-      font-size: 12px;
-      font-weight: bold;
-      white-space: nowrap;
+    .card-head h2 { font-size: 15px; font-weight: 700; color: var(--t-text-strong); }
+    .card-head p { font-size: 12px; color: var(--t-text-muted); margin-top: 4px; line-height: 1.5; }
+
+    /* ── 정보 행 ── */
+    .info-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+    .info-label {
+      font-size: 12px; color: var(--t-text-muted); font-weight: 600;
+      width: 100px; flex-shrink: 0; letter-spacing: .01em;
     }
-    .info-grid { display: grid; grid-template-columns: 130px 1fr; gap: 10px 14px; align-items: center; }
-    .label { font-size: 13px; color: #777; font-weight: bold; }
-    .value { font-size: 15px; color: #333; min-width: 0; }
-    .org-code-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .info-value { font-size: 14px; color: var(--t-text); }
+
+    /* ── 조직코드 ── */
     .org-code {
-      font-family: Consolas, 'Courier New', monospace;
-      font-size: 22px;
-      font-weight: 900;
-      letter-spacing: 0.05em;
-      color: #222;
-      background: #fffde8;
-      border: 1px solid #FFE812;
-      border-radius: 8px;
-      padding: 9px 13px;
-      user-select: all;
+      font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+      font-size: 21px; font-weight: 800; letter-spacing: .06em;
+      color: var(--lime);
+      background: rgba(198,241,53,.08); border: 1px solid rgba(198,241,53,.2);
+      border-radius: 8px; padding: 8px 14px; user-select: all;
     }
+    .org-code-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* ── 폼 ── */
+    .field-group { margin-bottom: 16px; }
+    .field-group:last-of-type { margin-bottom: 0; }
+    .field-label {
+      display: block; font-size: 12px; color: var(--t-text-muted);
+      font-weight: 600; margin-bottom: 8px; letter-spacing: .01em;
+    }
+    .field-row { display: flex; gap: 8px; align-items: flex-start; }
+    input[type=text],
+    input[type=password],
+    input[type=tel] {
+      flex: 1; padding: 10px 14px;
+      background: var(--dark-surface); border: 1px solid var(--dark-border);
+      border-radius: 8px; color: var(--t-text); font-size: 14px;
+      font-family: inherit; min-width: 0; transition: border-color .15s, box-shadow .15s;
+    }
+    input::placeholder { color: var(--t-text-muted); opacity: 1; }
+    input:focus { outline: none; border-color: var(--lime); box-shadow: 0 0 0 3px var(--lime-glow); }
+
+    /* ── 버튼 ── */
     .btn {
-      padding: 10px 14px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      font-size: 14px;
-      transition: 0.2s;
-      color: #fff;
-      background: #34495e;
+      padding: 10px 16px; border: none; border-radius: 8px;
+      cursor: pointer; font-weight: 600; font-size: 13px; font-family: inherit;
+      white-space: nowrap; transition: opacity .15s, background .15s;
     }
-    .btn:hover:not(:disabled) { opacity: 0.9; }
-    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    .btn-yellow { background: #f1c40f; color: #333; }
-    .btn-blue { background: #3498db; }
-    .btn-danger { background: #e67e22; }
-    .form-grid { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; margin-bottom: 14px; }
-    .form-stack { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: start; }
-    input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 14px;
-      min-width: 0;
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: var(--lime); color: #0c0e12; }
+    .btn-primary:hover:not(:disabled) { background: var(--lime-dim); }
+    .btn-ghost {
+      background: var(--dark-surface); color: var(--t-text-dim);
+      border: 1px solid var(--dark-border);
     }
-    input:focus { outline: none; border-color: #FFE812; box-shadow: 0 0 0 2px rgba(255,232,18,0.25); }
-    .field-caption { font-size: 12px; color: #888; margin: 0 0 8px; }
-    .message { display: none; margin-top: 12px; font-size: 13px; line-height: 1.45; }
-    .message.show { display: block; }
-    .message.info { color: #666; }
-    .message.success { color: #247a3d; }
-    .message.error { color: #c0392b; }
+    .btn-ghost:hover:not(:disabled) { background: var(--t-nav-hover); color: var(--t-text); }
+    .btn-danger {
+      background: rgba(239,68,68,.12); color: #f87171;
+      border: 1px solid rgba(239,68,68,.22);
+    }
+    .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,.2); }
+
+    /* ── 토글 스위치 ── */
     .toggle-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 14px;
-      border: 1px solid #eee;
-      border-radius: 8px;
-      background: #f8f9fa;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 16px; border: 1px solid var(--dark-border);
+      border-radius: var(--radius-sm); background: var(--dark-surface);
     }
-    .toggle-label { font-size: 15px; font-weight: bold; }
-    .toggle-desc { font-size: 12px; color: #888; margin-top: 3px; }
-    .switch { position: relative; display: inline-block; width: 52px; height: 28px; flex-shrink: 0; }
+    .toggle-label { font-size: 14px; font-weight: 600; color: var(--t-text); }
+    .toggle-desc { font-size: 12px; color: var(--t-text-muted); margin-top: 4px; line-height: 1.55; }
+    .switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider {
-      position: absolute;
-      cursor: pointer;
-      inset: 0;
-      background: #d8dde2;
-      transition: 0.2s;
-      border-radius: 28px;
+      position: absolute; cursor: pointer; inset: 0;
+      background: var(--dark-border); transition: .2s; border-radius: 26px;
     }
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 22px;
-      width: 22px;
-      left: 3px;
-      bottom: 3px;
-      background: #fff;
-      transition: 0.2s;
-      border-radius: 50%;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    .slider::before {
+      position: absolute; content: "";
+      height: 20px; width: 20px; left: 3px; bottom: 3px;
+      background: var(--t-text-muted); transition: .2s; border-radius: 50%;
     }
-    .switch input:checked + .slider { background: #3b82f6; }
-    .switch input:checked + .slider:before { transform: translateX(24px); }
-    .top-message { margin-bottom: 14px; }
+    .switch input:checked + .slider { background: var(--lime); }
+    .switch input:checked + .slider::before { transform: translateX(22px); background: #0c0e12; }
 
-    @media (max-width: 720px) {
-      .header { padding: 14px 16px; }
-      .main { margin: 18px auto; padding: 0 14px 28px; }
-      .section { padding: 18px 16px; }
-      .info-grid, .form-grid, .form-stack { grid-template-columns: 1fr; }
-      .section-head { align-items: flex-start; flex-direction: column; }
+    /* ── 메시지 ── */
+    .msg {
+      display: none; margin-top: 14px; font-size: 12px; line-height: 1.5;
+      padding: 10px 14px; border-radius: 8px;
+    }
+    .msg.show { display: block; }
+    .msg.info    { background: rgba(96,165,250,.08); color: #93c5fd; border: 1px solid rgba(96,165,250,.18); }
+    .msg.success { background: rgba(198,241,53,.07); color: var(--lime-dim); border: 1px solid rgba(198,241,53,.16); }
+    .msg.error   { background: rgba(239,68,68,.08); color: #f87171;  border: 1px solid rgba(239,68,68,.18); }
+
+    /* ── 테마 선택 ── */
+    .theme-seg { display: flex; gap: 8px; }
+    .theme-seg-item { flex: 1; position: relative; }
+    .theme-seg-item input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .theme-seg-label {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 16px 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--dark-border); background: var(--dark-surface);
+      cursor: pointer; transition: border-color .15s, background .15s;
+      font-size: 13px; color: var(--t-text-dim); font-weight: 500;
+    }
+    .theme-seg-label:hover { border-color: var(--t-border-strong); color: var(--t-text); }
+    .theme-seg-icon { font-size: 20px; }
+    .theme-seg-item input:checked + .theme-seg-label {
+      border-color: var(--lime); background: rgba(198,241,53,.08);
+      color: var(--t-text-strong);
+    }
+
+    /* ── 반응형 ── */
+    @media (max-width: 600px) {
+      .topbar { padding: 0 16px; }
+      .main   { padding: 20px 14px 52px; }
+      .card   { padding: 18px 16px; }
+      .field-row { flex-wrap: wrap; }
       .btn { width: 100%; }
+      .org-code-row { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
 <body>
 
-<div class="header">
-  <a href="/dashboard.html">← 대시보드</a>
-  <h1>⚙️ 루트온 설정</h1>
-</div>
+<header class="topbar">
+  <a href="/dashboard.html" class="back-btn">← 대시보드</a>
+  <span class="topbar-title">⚙ 설정</span>
+</header>
 
 <div class="main">
-  <div class="message top-message" id="page-message"></div>
+  <div class="msg" id="page-message"></div>
 
-  <section class="section" aria-labelledby="org-section-title">
-    <div class="section-head">
+  <!-- 조직코드 관리 -->
+  <div class="card" role="region" aria-labelledby="org-head">
+    <div class="card-head">
       <div>
-        <h2 id="org-section-title">조직코드 관리</h2>
-        <p class="section-sub">기사 가입에 사용하는 조직코드를 확인합니다.</p>
+        <h2 id="org-head">조직코드 관리</h2>
+        <p>기사 가입에 사용하는 조직코드를 확인하고 재발급합니다.</p>
       </div>
     </div>
-    <div class="info-grid">
-      <div class="label">기업명</div>
-      <div class="value" id="org-name">-</div>
-      <div class="label">조직코드</div>
-      <div class="value org-code-row">
-        <span class="org-code" id="org-code-value">-</span>
-        <button class="btn btn-blue" id="copy-org-code-btn" type="button" disabled>복사</button>
+    <div class="info-row">
+      <span class="info-label">기업명</span>
+      <span class="info-value" id="org-name">—</span>
+    </div>
+    <div class="info-row" style="align-items:flex-start">
+      <span class="info-label" style="padding-top:8px">조직코드</span>
+      <div class="org-code-row">
+        <span class="org-code" id="org-code-value">—</span>
+        <button class="btn btn-ghost" id="copy-org-code-btn" type="button" disabled>복사</button>
         <button class="btn btn-danger" id="reissue-org-code-btn" type="button" disabled>재발급</button>
       </div>
     </div>
-    <div class="message" id="org-message"></div>
-  </section>
+    <div class="msg" id="org-message"></div>
+  </div>
 
-  <section class="section" aria-labelledby="account-section-title">
-    <div class="section-head">
+  <!-- 계정 정보 -->
+  <div class="card" role="region" aria-labelledby="account-head">
+    <div class="card-head">
       <div>
-        <h2 id="account-section-title">계정 정보</h2>
-        <p class="section-sub">현재 관리자 계정의 전화번호와 비밀번호를 변경합니다.</p>
+        <h2 id="account-head">계정 정보</h2>
+        <p>현재 관리자 계정의 전화번호와 비밀번호를 변경합니다.</p>
       </div>
     </div>
-    <div class="info-grid" style="margin-bottom:18px;">
-      <div class="label">아이디</div>
-      <div class="value" id="account-username">-</div>
-      <div class="label">현재 전화번호</div>
-      <div class="value" id="account-phone">-</div>
+    <div class="info-row">
+      <span class="info-label">아이디</span>
+      <span class="info-value" id="account-username">—</span>
+    </div>
+    <div class="info-row" style="margin-bottom:22px">
+      <span class="info-label">현재 전화번호</span>
+      <span class="info-value" id="account-phone">—</span>
     </div>
     <form id="phone-form">
-      <p class="field-caption">전화번호 변경</p>
-      <div class="form-grid">
-        <input id="phone-input" type="text" autocomplete="tel" placeholder="변경할 전화번호">
-        <button class="btn btn-yellow" id="update-phone-btn" type="submit" disabled>전화번호 저장</button>
+      <div class="field-group">
+        <label class="field-label" for="phone-input">전화번호 변경</label>
+        <div class="field-row">
+          <input id="phone-input" type="tel" autocomplete="tel" placeholder="변경할 전화번호">
+          <button class="btn btn-primary" id="update-phone-btn" type="submit" disabled>저장</button>
+        </div>
       </div>
     </form>
     <form id="password-form">
-      <p class="field-caption">비밀번호 변경</p>
-      <div class="form-stack">
-        <input id="current-password-input" type="password" autocomplete="current-password" placeholder="현재 비밀번호">
-        <input id="new-password-input" type="password" autocomplete="new-password" placeholder="새 비밀번호 (4자 이상)">
-        <button class="btn btn-blue" id="update-password-btn" type="submit" disabled>비밀번호 저장</button>
+      <div class="field-group">
+        <label class="field-label">비밀번호 변경</label>
+        <div class="field-row" style="flex-wrap:wrap">
+          <input id="current-password-input" type="password" autocomplete="current-password" placeholder="현재 비밀번호" style="min-width:140px">
+          <input id="new-password-input" type="password" autocomplete="new-password" placeholder="새 비밀번호 (4자 이상)" style="min-width:160px">
+          <button class="btn btn-primary" id="update-password-btn" type="submit" disabled>저장</button>
+        </div>
       </div>
     </form>
-    <div class="message" id="account-message"></div>
-  </section>
+    <div class="msg" id="account-message"></div>
+  </div>
 
-  <section class="section" aria-labelledby="ops-section-title">
-    <div class="section-head">
+  <!-- 화면 설정 -->
+  <div class="card" role="region" aria-labelledby="display-head">
+    <div class="card-head">
       <div>
-        <h2 id="ops-section-title">운영 설정</h2>
-        <p class="section-sub">운영 관련 옵션을 관리합니다.</p>
+        <h2 id="display-head">화면 설정</h2>
+        <p>모든 페이지의 테마를 변경합니다. 즉시 적용됩니다.</p>
+      </div>
+    </div>
+    <div class="theme-seg">
+      <label class="theme-seg-item">
+        <input type="radio" name="theme" value="auto">
+        <span class="theme-seg-label"><span class="theme-seg-icon">🖥</span>자동</span>
+      </label>
+      <label class="theme-seg-item">
+        <input type="radio" name="theme" value="dark">
+        <span class="theme-seg-label"><span class="theme-seg-icon">🌙</span>다크</span>
+      </label>
+      <label class="theme-seg-item">
+        <input type="radio" name="theme" value="light">
+        <span class="theme-seg-label"><span class="theme-seg-icon">☀️</span>라이트</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 운영 설정 -->
+  <div class="card" role="region" aria-labelledby="ops-head">
+    <div class="card-head">
+      <div>
+        <h2 id="ops-head">운영 설정</h2>
+        <p>운영 관련 옵션을 관리합니다.</p>
       </div>
     </div>
     <div class="toggle-row">
@@ -245,21 +315,31 @@
         <div class="toggle-label">기사 자동승인</div>
         <div class="toggle-desc">켜면 조직코드로 가입한 기사가 승인 절차 없이 즉시 활성화됩니다.</div>
       </div>
-      <label class="switch">
+      <label class="switch" aria-label="기사 자동승인 토글">
         <input id="auto-approve-toggle" type="checkbox">
         <span class="slider"></span>
       </label>
     </div>
-    <div class="message" id="ops-message"></div>
-  </section>
+    <div class="msg" id="ops-message"></div>
+  </div>
 </div>
 
 <script>
+  const API = 'http://168.138.45.63:8000';
+
+  function getToken() { return localStorage.getItem('token'); }
+  function authHeaders() {
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` };
+  }
+  function redirectToLogin() { location.href = '/login.html'; }
+
+  if (!getToken()) redirectToLogin();
+
   let currentOrgCode = '';
 
   function requireAdmin(user) {
     if (!user || user.role !== 'admin') {
-      showMessage('page-message', '관리자 계정만 설정 페이지에 접근할 수 있습니다.', 'error');
+      showMsg('page-message', '관리자 계정만 설정 페이지에 접근할 수 있습니다.', 'error');
       setTimeout(() => {
         location.href = user && user.role === 'driver' ? '/driver.html' : '/login.html';
       }, 800);
@@ -268,7 +348,7 @@
     return true;
   }
 
-  async function initSettingsPage() {
+  async function initPage() {
     try {
       const user = await loadCurrentUser();
       if (!requireAdmin(user)) return;
@@ -276,41 +356,34 @@
       const org = await loadOrganization();
       renderOrganization(org);
     } catch (e) {
-      console.error('설정 페이지 초기화 오류:', e);
-      showMessage('page-message', e.message || '설정 정보를 불러오지 못했습니다.', 'error');
+      showMsg('page-message', e.message || '설정 정보를 불러오지 못했습니다.', 'error');
     }
   }
 
   async function loadCurrentUser() {
-    const response = await fetch(`${API}/auth/me`, { headers: authHeaders() });
-    if (response.status === 401) {
-      redirectToLogin();
-      throw new Error('로그인이 필요합니다.');
-    }
-    if (!response.ok) throw new Error(await parseErrorMessage(response, '계정 정보를 불러오지 못했습니다.'));
-    return response.json();
+    const r = await fetch(`${API}/auth/me`, { headers: authHeaders() });
+    if (r.status === 401) { redirectToLogin(); throw new Error('로그인이 필요합니다.'); }
+    if (!r.ok) throw new Error(await parseErrorMessage(r, '계정 정보를 불러오지 못했습니다.'));
+    return r.json();
   }
 
   async function loadOrganization() {
-    const response = await fetch(`${API}/organizations/me`, { headers: authHeaders() });
-    if (response.status === 401) {
-      redirectToLogin();
-      throw new Error('로그인이 필요합니다.');
-    }
-    if (!response.ok) throw new Error(await parseErrorMessage(response, '조직 정보를 불러오지 못했습니다.'));
-    return response.json();
+    const r = await fetch(`${API}/organizations/me`, { headers: authHeaders() });
+    if (r.status === 401) { redirectToLogin(); throw new Error('로그인이 필요합니다.'); }
+    if (!r.ok) throw new Error(await parseErrorMessage(r, '조직 정보를 불러오지 못했습니다.'));
+    return r.json();
   }
 
   function renderCurrentUser(user) {
-    document.getElementById('account-username').textContent = user.username || '-';
-    document.getElementById('account-phone').textContent = user.phone || '-';
+    document.getElementById('account-username').textContent = user.username || '—';
+    document.getElementById('account-phone').textContent = user.phone || '—';
     document.getElementById('phone-input').value = user.phone || '';
   }
 
   function renderOrganization(org) {
     currentOrgCode = org.org_code || '';
-    document.getElementById('org-name').textContent = org.name || '-';
-    document.getElementById('org-code-value').textContent = currentOrgCode || '-';
+    document.getElementById('org-name').textContent = org.name || '—';
+    document.getElementById('org-code-value').textContent = currentOrgCode || '—';
     document.getElementById('copy-org-code-btn').disabled = !currentOrgCode;
     document.getElementById('reissue-org-code-btn').disabled = false;
     document.getElementById('update-phone-btn').disabled = false;
@@ -320,203 +393,165 @@
 
   async function toggleAutoApprove(enabled) {
     try {
-      const response = await fetch(`${API}/organizations/me/settings`, {
+      const r = await fetch(`${API}/organizations/me/settings`, {
         method: 'PATCH',
         headers: authHeaders(),
         body: JSON.stringify({ auto_approve_drivers: enabled }),
       });
-      if (response.status === 401) { redirectToLogin(); return; }
-      if (!response.ok) throw new Error(await parseErrorMessage(response, '설정 변경에 실패했습니다.'));
-      showMessage('ops-message', `기사 자동승인이 ${enabled ? '활성화' : '비활성화'}됐습니다.`, 'success');
+      if (r.status === 401) { redirectToLogin(); return; }
+      if (!r.ok) throw new Error(await parseErrorMessage(r, '설정 변경에 실패했습니다.'));
+      showMsg('ops-message', `기사 자동승인이 ${enabled ? '활성화' : '비활성화'}됐습니다.`, 'success');
     } catch (e) {
-      showMessage('ops-message', e.message || '설정 변경에 실패했습니다.', 'error');
+      showMsg('ops-message', e.message || '설정 변경에 실패했습니다.', 'error');
       document.getElementById('auto-approve-toggle').checked = !enabled;
     }
   }
 
   async function copyOrgCode() {
-    if (!currentOrgCode) {
-      showMessage('org-message', '복사할 조직코드가 없습니다.', 'error');
-      return;
-    }
-
+    if (!currentOrgCode) { showMsg('org-message', '복사할 조직코드가 없습니다.', 'error'); return; }
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(currentOrgCode);
       } else {
-        copyTextFallback(currentOrgCode);
+        const ta = document.createElement('textarea');
+        ta.value = currentOrgCode;
+        ta.style.cssText = 'position:fixed;top:-1000px';
+        document.body.appendChild(ta);
+        ta.select();
+        if (!document.execCommand('copy')) throw new Error('copy failed');
+        document.body.removeChild(ta);
       }
-      showMessage('org-message', `조직코드 [${currentOrgCode}]가 복사됐습니다.`, 'success');
+      showMsg('org-message', `조직코드 [${currentOrgCode}]가 복사됐습니다.`, 'success');
     } catch (e) {
-      showMessage('org-message', '자동 복사에 실패했습니다. 조직코드를 선택해 직접 복사해주세요.', 'error');
+      showMsg('org-message', '자동 복사에 실패했습니다. 조직코드를 직접 선택해 복사해주세요.', 'error');
     }
   }
 
   async function reissueOrgCode() {
     if (!confirm('조직코드를 새로 발급하시겠습니까?\n기존 코드로는 더 이상 가입할 수 없으며 되돌릴 수 없습니다.')) return;
-
-    const button = document.getElementById('reissue-org-code-btn');
-    setLoading(button, true);
-    showMessage('org-message', '조직코드를 재발급하는 중입니다.', 'info');
-
+    const btn = document.getElementById('reissue-org-code-btn');
+    setLoading(btn, true);
+    showMsg('org-message', '조직코드를 재발급하는 중입니다.', 'info');
     try {
-      const response = await fetch(`${API}/organizations/regen-code`, {
-        method: 'POST',
-        headers: authHeaders(),
-      });
-      if (response.status === 401) {
-        redirectToLogin();
-        return;
-      }
-      if (!response.ok) throw new Error(await parseErrorMessage(response, '조직코드 재발급에 실패했습니다.'));
-
-      const data = await response.json();
+      const r = await fetch(`${API}/organizations/regen-code`, { method: 'POST', headers: authHeaders() });
+      if (r.status === 401) { redirectToLogin(); return; }
+      if (!r.ok) throw new Error(await parseErrorMessage(r, '조직코드 재발급에 실패했습니다.'));
+      const data = await r.json();
       currentOrgCode = data.org_code || '';
-      document.getElementById('org-code-value').textContent = currentOrgCode || '-';
+      document.getElementById('org-code-value').textContent = currentOrgCode || '—';
       document.getElementById('copy-org-code-btn').disabled = !currentOrgCode;
-      showMessage('org-message', `새 조직코드 [${currentOrgCode}]가 발급됐습니다.`, 'success');
+      showMsg('org-message', `새 조직코드 [${currentOrgCode}]가 발급됐습니다.`, 'success');
     } catch (e) {
-      showMessage('org-message', e.message || '조직코드 재발급에 실패했습니다.', 'error');
+      showMsg('org-message', e.message || '조직코드 재발급에 실패했습니다.', 'error');
     } finally {
-      setLoading(button, false);
+      setLoading(btn, false);
     }
   }
 
-  async function updatePhone(event) {
-    event.preventDefault();
-    const phone = getInputValue('phone-input');
-    if (!phone) {
-      showMessage('account-message', '변경할 전화번호를 입력해주세요.', 'error');
-      return;
-    }
-
-    const button = document.getElementById('update-phone-btn');
-    setLoading(button, true);
-    showMessage('account-message', '전화번호를 저장하는 중입니다.', 'info');
-
+  async function updatePhone(e) {
+    e.preventDefault();
+    const phone = document.getElementById('phone-input').value.trim();
+    if (!phone) { showMsg('account-message', '변경할 전화번호를 입력해주세요.', 'error'); return; }
+    const btn = document.getElementById('update-phone-btn');
+    setLoading(btn, true);
+    showMsg('account-message', '전화번호를 저장하는 중입니다.', 'info');
     try {
-      const response = await fetch(`${API}/auth/me`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ phone }),
+      const r = await fetch(`${API}/auth/me`, {
+        method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ phone }),
       });
-      if (response.status === 401) {
-        redirectToLogin();
-        return;
-      }
-      if (!response.ok) throw new Error(await parseErrorMessage(response, '전화번호 변경에 실패했습니다.'));
-
-      const user = await response.json();
-      renderCurrentUser(user);
-      showMessage('account-message', '전화번호가 변경됐습니다.', 'success');
+      if (r.status === 401) { redirectToLogin(); return; }
+      if (!r.ok) throw new Error(await parseErrorMessage(r, '전화번호 변경에 실패했습니다.'));
+      renderCurrentUser(await r.json());
+      showMsg('account-message', '전화번호가 변경됐습니다.', 'success');
     } catch (e) {
-      showMessage('account-message', e.message || '전화번호 변경에 실패했습니다.', 'error');
+      showMsg('account-message', e.message || '전화번호 변경에 실패했습니다.', 'error');
     } finally {
-      setLoading(button, false);
+      setLoading(btn, false);
     }
   }
 
-  async function updatePassword(event) {
-    event.preventDefault();
-    const currentPassword = getInputValue('current-password-input');
-    const newPassword = getInputValue('new-password-input');
-
-    if (!currentPassword) {
-      showMessage('account-message', '현재 비밀번호를 입력해주세요.', 'error');
-      return;
-    }
-    if (!newPassword) {
-      showMessage('account-message', '새 비밀번호를 입력해주세요.', 'error');
-      return;
-    }
-    if (newPassword.length < 4) {
-      showMessage('account-message', '새 비밀번호는 4자 이상이어야 합니다.', 'error');
-      return;
-    }
-
-    const button = document.getElementById('update-password-btn');
-    setLoading(button, true);
-    showMessage('account-message', '비밀번호를 저장하는 중입니다.', 'info');
-
+  async function updatePassword(e) {
+    e.preventDefault();
+    const currentPassword = document.getElementById('current-password-input').value.trim();
+    const newPassword     = document.getElementById('new-password-input').value.trim();
+    if (!currentPassword) { showMsg('account-message', '현재 비밀번호를 입력해주세요.', 'error'); return; }
+    if (!newPassword)      { showMsg('account-message', '새 비밀번호를 입력해주세요.', 'error'); return; }
+    if (newPassword.length < 4) { showMsg('account-message', '새 비밀번호는 4자 이상이어야 합니다.', 'error'); return; }
+    const btn = document.getElementById('update-password-btn');
+    setLoading(btn, true);
+    showMsg('account-message', '비밀번호를 저장하는 중입니다.', 'info');
     try {
-      const response = await fetch(`${API}/auth/me`, {
-        method: 'PATCH',
-        headers: authHeaders(),
+      const r = await fetch(`${API}/auth/me`, {
+        method: 'PATCH', headers: authHeaders(),
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       });
-      if (response.status === 401) {
-        redirectToLogin();
-        return;
-      }
-      if (!response.ok) throw new Error(await parseErrorMessage(response, '비밀번호 변경에 실패했습니다.'));
-
-      resetPasswordForm();
-      showMessage('account-message', '비밀번호가 변경됐습니다. 다음 로그인 시 새 비밀번호가 적용됩니다.', 'success');
+      if (r.status === 401) { redirectToLogin(); return; }
+      if (!r.ok) throw new Error(await parseErrorMessage(r, '비밀번호 변경에 실패했습니다.'));
+      document.getElementById('current-password-input').value = '';
+      document.getElementById('new-password-input').value = '';
+      showMsg('account-message', '비밀번호가 변경됐습니다. 다음 로그인 시 새 비밀번호가 적용됩니다.', 'success');
     } catch (e) {
-      showMessage('account-message', e.message || '비밀번호 변경에 실패했습니다.', 'error');
+      showMsg('account-message', e.message || '비밀번호 변경에 실패했습니다.', 'error');
     } finally {
-      setLoading(button, false);
+      setLoading(btn, false);
     }
   }
 
-  function setLoading(buttonOrId, isLoading) {
-    const button = typeof buttonOrId === 'string' ? document.getElementById(buttonOrId) : buttonOrId;
-    if (!button) return;
-    if (isLoading) {
-      button.dataset.originalText = button.textContent;
-      button.disabled = true;
-      button.textContent = '처리 중...';
-      return;
-    }
-    button.disabled = false;
-    if (button.dataset.originalText) button.textContent = button.dataset.originalText;
+  function setLoading(btn, loading) {
+    if (!btn) return;
+    if (loading) { btn.dataset.orig = btn.textContent; btn.disabled = true; btn.textContent = '처리 중…'; }
+    else { btn.disabled = false; if (btn.dataset.orig) btn.textContent = btn.dataset.orig; }
   }
 
-  function resetPasswordForm() {
-    document.getElementById('current-password-input').value = '';
-    document.getElementById('new-password-input').value = '';
-  }
-
-  function getInputValue(id) {
-    return document.getElementById(id).value.trim();
-  }
-
-  function copyTextFallback(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.top = '-1000px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    const copied = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    if (!copied) throw new Error('copy failed');
-  }
-
-  function showMessage(targetId, message, type = 'info') {
-    const el = document.getElementById(targetId);
+  function showMsg(id, text, type) {
+    const el = document.getElementById(id);
     if (!el) return;
-    el.textContent = message || '';
-    el.className = `message ${type} ${message ? 'show' : ''}`;
+    el.textContent = text || '';
+    el.className = `msg ${type || 'info'} ${text ? 'show' : ''}`;
   }
 
-  async function parseErrorMessage(response, fallback) {
+  async function parseErrorMessage(r, fallback) {
     try {
-      const data = await response.json();
-      if (typeof data.detail === 'string') return data.detail;
-      if (data.detail) return JSON.stringify(data.detail);
-      if (data.message) return data.message;
+      const d = await r.json();
+      if (typeof d.detail === 'string') return d.detail;
+      if (d.detail) return JSON.stringify(d.detail);
+      if (d.message) return d.message;
     } catch (_) {}
     return fallback;
   }
+
+  /* ── 테마 선택 ── */
+  function applyTheme(value) {
+    if (value === 'auto') {
+      localStorage.removeItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    } else {
+      localStorage.setItem('theme', value);
+      document.documentElement.setAttribute('data-theme', value);
+    }
+  }
+  function initThemeSeg() {
+    const current = localStorage.getItem('theme') || 'auto';
+    document.querySelectorAll('input[name="theme"]').forEach(r => {
+      r.checked = r.value === current;
+      r.addEventListener('change', () => { if (r.checked) applyTheme(r.value); });
+    });
+  }
+  /* OS 테마 변경 시 '자동' 상태이면 즉시 반영 */
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    if (!localStorage.getItem('theme')) {
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    }
+  });
+  initThemeSeg();
 
   document.getElementById('copy-org-code-btn').addEventListener('click', copyOrgCode);
   document.getElementById('reissue-org-code-btn').addEventListener('click', reissueOrgCode);
   document.getElementById('phone-form').addEventListener('submit', updatePhone);
   document.getElementById('password-form').addEventListener('submit', updatePassword);
   document.getElementById('auto-approve-toggle').addEventListener('change', e => toggleAutoApprove(e.target.checked));
-  document.addEventListener('DOMContentLoaded', initSettingsPage);
+  document.addEventListener('DOMContentLoaded', initPage);
 </script>
 </body>
 </html>
