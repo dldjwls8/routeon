@@ -65,8 +65,20 @@
     input[type="email"]:focus,
     input[type="tel"]:focus,
     input[type="password"]:focus { border-color: var(--lime); }
-    input[type="file"] { width: 100%; padding: 8px; border: 1px solid var(--t-border); border-radius: 6px; font-size: 13px; background: var(--t-input-bg); color: var(--t-text); cursor: pointer; }
-    .file-hint { font-size: 12px; color: var(--t-text-muted); display: block; margin-top: 4px; }
+    input[type="file"] { display: none; }
+    .file-drop {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      width: 100%; padding: 20px 16px;
+      border: 1.5px dashed var(--t-border); border-radius: 8px;
+      cursor: pointer; text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .file-drop:hover { border-color: var(--lime); background: rgba(198,241,53,.04); }
+    .file-drop.has-file { border-color: var(--lime); background: rgba(198,241,53,.06); border-style: solid; }
+    .file-drop-icon { font-size: 22px; line-height: 1; }
+    .file-drop-text { font-size: 13px; color: var(--t-text-muted); font-weight: 500; word-break: break-all; }
+    .file-drop.has-file .file-drop-text { color: var(--t-text); }
+    .file-drop-hint { font-size: 11px; color: var(--t-text-muted); opacity: 0.7; }
     .btn-submit { width: 100%; padding: 14px; background: var(--lime); color: #111; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 14px; }
     .btn-submit:hover { background: #a8d42e; }
     .link { display: block; margin-top: 16px; font-size: 13px; color: var(--t-text-muted); text-decoration: none; text-align: center; }
@@ -127,8 +139,12 @@
 
       <div class="form-group">
         <label>첨부 파일 (사업자등록증 등)</label>
+        <label class="file-drop" for="docFile">
+          <span class="file-drop-icon">📎</span>
+          <span class="file-drop-text" id="fileLabel">클릭하여 파일 선택</span>
+          <span class="file-drop-hint">PDF · JPG · PNG / 최대 10MB</span>
+        </label>
         <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required>
-        <small class="file-hint">PDF, JPG, PNG / 최대 10MB</small>
         <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
       </div>
 
@@ -143,6 +159,18 @@
       const h = location.hostname;
       return (h === 'localhost' || h === '127.0.0.1') ? 'http://localhost:8000' : `${location.protocol}//${h}:8000`;
     })();
+
+    document.getElementById('docFile').addEventListener('change', function () {
+      const label = document.getElementById('fileLabel');
+      const drop = document.querySelector('.file-drop');
+      if (this.files[0]) {
+        label.textContent = this.files[0].name;
+        drop.classList.add('has-file');
+      } else {
+        label.textContent = '클릭하여 파일 선택';
+        drop.classList.remove('has-file');
+      }
+    });
 
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
       if (!localStorage.getItem('theme')) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
