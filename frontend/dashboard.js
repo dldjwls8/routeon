@@ -559,7 +559,11 @@
   let customerDetailTab = 'info';
   let orderFilter = '전체';
   let customerListFilter = '전체';
-  let fakePage = 1;
+  const PAGE_SIZE = 20;
+  let orderPage = 1;
+  let vehiclePage = 1;
+  let customerPage = 1;
+  let driverPage = 1;
   let statsPeriod = '주';
   let dispatchPreviewTab = 0;
   let dispatchRan = false;
@@ -1776,20 +1780,26 @@
     return ok;
   }
 
-  function paginationHtml(totalPages) {
-    let btns = '';
+  function paginationHtml(totalItems, currentPage, listKey) {
+    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+    if (totalPages <= 1) return '';
+    let btns = `<button type="button"${currentPage <= 1 ? ' disabled' : ''} data-page="${Math.max(1, currentPage - 1)}" data-list="${listKey}">‹</button>`;
     for (let i = 1; i <= totalPages; i++) {
-      btns += `<button type="button" data-page="${i}" class="${i === fakePage ? 'active' : ''}">${i}</button>`;
+      btns += `<button type="button" class="${i === currentPage ? 'active' : ''}" data-page="${i}" data-list="${listKey}">${i}</button>`;
     }
-    return `<div class="pagination">${btns}<span>${fakePage} / ${totalPages} 페이지 (목업)</span></div>`;
+    btns += `<button type="button"${currentPage >= totalPages ? ' disabled' : ''} data-page="${Math.min(totalPages, currentPage + 1)}" data-list="${listKey}">›</button>`;
+    return `<div class="pagination">${btns}<span>${currentPage} / ${totalPages} 페이지</span></div>`;
   }
 
   function bindPagination(container) {
-    container.querySelectorAll('.pagination button[data-page]').forEach(btn => {
+    container.querySelectorAll('.pagination button[data-list]:not([disabled])').forEach(btn => {
       btn.onclick = () => {
-        fakePage = Number(btn.dataset.page);
+        const pg = Number(btn.dataset.page);
+        if (btn.dataset.list === 'orders') orderPage = pg;
+        else if (btn.dataset.list === 'vehicles') vehiclePage = pg;
+        else if (btn.dataset.list === 'customers') customerPage = pg;
+        else if (btn.dataset.list === 'drivers') driverPage = pg;
         renderPage();
-        toast('페이지를 변경했습니다 (목업)');
       };
     });
   }
@@ -2025,9 +2035,10 @@
 
   function renderDrivers(root) {
     const q = root._search || '';
-    const rows = DATA.drivers.filter(d =>
+    const allRows = DATA.drivers.filter(d =>
       !q || d.name.includes(q) || driverVehicleLabel(d).includes(q) || d.phone.includes(q)
     );
+    const rows = allRows.slice((driverPage - 1) * PAGE_SIZE, driverPage * PAGE_SIZE);
     const selected = selectedDriverId ? DATA.drivers.find(d => d.id === selectedDriverId) : null;
     const pendingHtml = DATA.pendingDrivers.length ? `
       <div class="card" style="margin-bottom:12px;border-left:3px solid var(--lime)">
@@ -2069,6 +2080,7 @@
               </tr>`).join('')}
             </tbody>
           </table>`)}
+          ${paginationHtml(allRows.length, driverPage, 'drivers')}
         </div>
       </div>`;
     root.innerHTML = masterDetailShell(
@@ -2077,7 +2089,7 @@
       selected ? inlineDetailCardHtml(selected.name, driverDetailBodyHtml(selected)) : ''
     );
 
-    $('#driverSearch', root).oninput = (e) => { root._search = e.target.value; renderDrivers(root); };
+    $('#driverSearch', root).oninput = (e) => { driverPage = 1; root._search = e.target.value; renderDrivers(root); };
 
     // 기사 추가
     $('#addDriver', root).onclick = () => {
@@ -2152,11 +2164,12 @@
 
   function renderVehicles(root) {
     const q = (root._search || '').trim().toLowerCase();
-    const rows = DATA.vehicles.filter(v => {
+    const allRows = DATA.vehicles.filter(v => {
       if (!q) return true;
       const hay = `${v.plate} ${v.tonnage} ${v.type} ${vehicleLastGpsLabel(v)} ${v.status} ${vehicleDriverLabel(v)}`.toLowerCase();
       return hay.includes(q);
     });
+    const rows = allRows.slice((vehiclePage - 1) * PAGE_SIZE, vehiclePage * PAGE_SIZE);
     const selected = selectedVehicleId ? vehicleById(selectedVehicleId) : null;
     const listCard = `
       <div class="card card-fill">
@@ -2183,7 +2196,7 @@
               <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">검색 결과가 없습니다</td></tr>`}
             </tbody>
           </table>`)}
-          ${paginationHtml(2)}
+          ${paginationHtml(allRows.length, vehiclePage, 'vehicles')}
         </div>
       </div>`;
     root.innerHTML = masterDetailShell(
@@ -2192,7 +2205,7 @@
       selected ? inlineDetailCardHtml(selected.plate, vehicleDetailBodyHtml(selected)) : ''
     );
 
-    $('#vehicleSearch', root).oninput = (e) => { root._search = e.target.value; renderVehicles(root); };
+    $('#vehicleSearch', root).oninput = (e) => { vehiclePage = 1; root._search = e.target.value; renderVehicles(root); };
     $('#addVehicle', root).onclick = () => {
       openModal('차량 등록', `
         <form id="vehicleForm">
@@ -2342,10 +2355,11 @@
   function renderCustomers(root) {
     const q = root._search || '';
     const filterChips = ['전체', '정규', '임시(당일)'];
-    const rows = DATA.customers.filter(c =>
+    const allRows = DATA.customers.filter(c =>
       customerMatchesListFilter(c, customerListFilter) &&
       (!q || c.name.includes(q) || (c.contact || '').includes(q) || (c.phone || '').includes(q))
     );
+    const rows = allRows.slice((customerPage - 1) * PAGE_SIZE, customerPage * PAGE_SIZE);
     const selected = selectedCustomerId ? customerById(selectedCustomerId) : null;
     const detailTab = selected ? customerDetailTab : 'info';
     const listCard = `
@@ -2374,7 +2388,7 @@
               <tr><td colspan="6" class="empty-hint" style="padding:16px">표시할 고객이 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
-          ${paginationHtml(2)}
+          ${paginationHtml(allRows.length, customerPage, 'customers')}
         </div>
       </div>`;
     const detailTitle = selected
@@ -2387,11 +2401,12 @@
     );
     root.querySelectorAll('#custFilterChips .chip').forEach(chip => {
       chip.onclick = () => {
+        customerPage = 1;
         customerListFilter = chip.dataset.cf;
         renderCustomers(root);
       };
     });
-    $('#custSearch', root).oninput = (e) => { root._search = e.target.value; renderCustomers(root); };
+    $('#custSearch', root).oninput = (e) => { customerPage = 1; root._search = e.target.value; renderCustomers(root); };
     $('#addCust', root).onclick = () => customerModal();
     root.querySelectorAll('.edit-cust').forEach((btn, i) => {
       btn.onclick = (e) => { e.stopPropagation(); customerModal(rows[i] || DATA.customers[i]); };
@@ -4069,7 +4084,8 @@
 
   function renderOrderList(root) {
     const statuses = ['전체', '접수', '배차대기', '배차', '운행중', '완료', '취소'];
-    const rows = DATA.orders.filter(o => orderMatchesFilter(o, orderFilter));
+    const allRows = DATA.orders.filter(o => orderMatchesFilter(o, orderFilter));
+    const rows = allRows.slice((orderPage - 1) * PAGE_SIZE, orderPage * PAGE_SIZE);
     const selected = selectedOrderId ? orderById(selectedOrderId) : null;
     const detailTab = selected ? orderDetailTab : 'info';
     const listCard = `
@@ -4104,7 +4120,7 @@
               <tr><td colspan="10" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
-          ${paginationHtml(4)}
+          ${paginationHtml(allRows.length, orderPage, 'orders')}
         </div>
       </div>`;
     root.innerHTML = masterDetailShell(
@@ -4113,7 +4129,7 @@
       selected ? inlineDetailCardHtml(`${selected.id} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), { saveLabel: '수정' }) : ''
     );
     root.querySelectorAll('#orderChips .chip').forEach(chip => {
-      chip.onclick = () => { orderFilter = chip.dataset.f; selectedOrderId = null; renderOrderList(root); };
+      chip.onclick = () => { orderPage = 1; orderFilter = chip.dataset.f; selectedOrderId = null; renderOrderList(root); };
     });
     root.querySelectorAll('.edit-order').forEach(btn => {
       btn.onclick = (e) => {
