@@ -38,12 +38,18 @@ router = APIRouter()
 
 class DeliveryCreate(BaseModel):
     address:          str
-    lat:              float
-    lon:              float
+    lat:              Optional[float] = None
+    lon:              Optional[float] = None
     deadline:         Optional[str]   = None
     recipient_name:   Optional[str]   = None
     cargo_type:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
+    pickup_address:   Optional[str]   = None
+    pickup_lat:       Optional[float] = None
+    pickup_lon:       Optional[float] = None
+    shipper_name:     Optional[str]   = None
+    contact_name:     Optional[str]   = None
+    mixed_load:       bool            = False
 
 class DeliveryAssign(BaseModel):
     driver_id: str   # UUID 문자열
@@ -72,6 +78,12 @@ async def create_delivery(
         recipient_name   = req.recipient_name,
         cargo_type       = req.cargo_type,
         cargo_weight_ton = req.cargo_weight_ton,
+        pickup_address   = req.pickup_address,
+        pickup_lat       = req.pickup_lat,
+        pickup_lon       = req.pickup_lon,
+        shipper_name     = req.shipper_name,
+        contact_name     = req.contact_name,
+        mixed_load       = req.mixed_load,
     )
     db.add(delivery)
     await db.commit()
@@ -99,6 +111,9 @@ async def create_deliveries_batch(
             address=req.address, lat=req.lat, lon=req.lon, deadline=deadline,
             recipient_name=req.recipient_name, cargo_type=req.cargo_type,
             cargo_weight_ton=req.cargo_weight_ton,
+            pickup_address=req.pickup_address, pickup_lat=req.pickup_lat,
+            pickup_lon=req.pickup_lon, shipper_name=req.shipper_name,
+            contact_name=req.contact_name, mixed_load=req.mixed_load,
         )
         db.add(d)
         deliveries.append(d)
@@ -198,6 +213,12 @@ def _delivery_schema(d: Delivery) -> dict:
         "address":          d.address,
         "lat":              d.lat,
         "lon":              d.lon,
+        "pickup_address":   d.pickup_address,
+        "pickup_lat":       d.pickup_lat,
+        "pickup_lon":       d.pickup_lon,
+        "shipper_name":     d.shipper_name,
+        "contact_name":     d.contact_name,
+        "mixed_load":       d.mixed_load,
         "recipient_name":   d.recipient_name,
         "cargo_type":       d.cargo_type,
         "cargo_weight_ton": d.cargo_weight_ton,

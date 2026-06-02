@@ -249,12 +249,18 @@ class Delivery(Base):
     id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     assigned_to      = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     trip_id          = Column(UUID(as_uuid=True), ForeignKey("trips.id"), nullable=True)
-    address          = Column(String(255), nullable=False)
-    lat              = Column(Float, nullable=False)
-    lon              = Column(Float, nullable=False)
-    recipient_name   = Column(String(100), nullable=True)   # 수신자(고객사명)
-    cargo_type       = Column(String(100), nullable=True)   # 화물 종류
-    cargo_weight_ton = Column(Float, nullable=True)         # 화물 톤수
+    address          = Column(String(255), nullable=False)   # 하차 주소
+    lat              = Column(Float, nullable=True)           # 하차 위도
+    lon              = Column(Float, nullable=True)           # 하차 경도
+    pickup_address   = Column(String(255), nullable=True)    # 상차 주소
+    pickup_lat       = Column(Float, nullable=True)
+    pickup_lon       = Column(Float, nullable=True)
+    shipper_name     = Column(String(100), nullable=True)    # 화주명
+    contact_name     = Column(String(100), nullable=True)    # 담당자명
+    mixed_load       = Column(Boolean, default=False, nullable=False)
+    recipient_name   = Column(String(100), nullable=True)    # 수신자(고객사명)
+    cargo_type       = Column(String(100), nullable=True)    # 화물 종류
+    cargo_weight_ton = Column(Float, nullable=True)          # 화물 톤수
     status           = Column(SAEnum(DeliveryStatus),
                                default=DeliveryStatus.pending, nullable=False)
     sequence         = Column(Integer)

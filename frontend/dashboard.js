@@ -278,6 +278,7 @@
   const DATA = {
     vehicles: [],
     drivers: [],
+    pendingDrivers: [],
     staff: [],
     customers: [],
     locations: [],
@@ -429,6 +430,39 @@
         const org = await or2.json();
         const bt = document.querySelector('.brand-text');
         if (bt && bt.childNodes[0]) bt.childNodes[0].nodeValue = org.name || 'RouteOn';
+      }
+
+      // 배송(오더) 목록
+      const dvr = await fetch(`${API}/deliveries`, { headers: hdrs });
+      if (dvr.ok) {
+        const deliveries = await dvr.json();
+        const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료' };
+        DATA.orders = deliveries.map(d => ({
+          id: d.id,
+          customer: d.shipper_name || '—',
+          status: deliveryStatusMap[d.status] || d.status,
+          pickup: d.pickup_address || '—',
+          delivery: d.address,
+          window: d.deadline ? d.deadline.slice(0, 16).replace('T', ' ') : '—',
+          driver: DATA.drivers.find(dr => dr.id === d.assigned_to)?.name || null,
+          recipient: d.recipient_name || '',
+          cargo: d.cargo_type || '',
+          tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
+          contact: d.contact_name || '',
+          mixed_load: !!d.mixed_load,
+        }));
+      }
+
+      // 승인 대기 기사 목록
+      const pr = await fetch(`${API}/users?role=pending`, { headers: hdrs });
+      if (pr.ok) {
+        const pending = await pr.json();
+        DATA.pendingDrivers = pending.map(u => ({
+          id: u.id,
+          name: u.name || u.username,
+          phone: u.phone || '',
+          created_at: u.created_at,
+        }));
       }
 
       // dispatchFleet 생성 (차량 + 기사 매핑)
@@ -683,27 +717,57 @@
     return `${prefix}${String(max + 1).padStart(3, '0')}`;
   }
 
-  function commitPendingRowsToOrders(rows) {
-    rows.forEach(r => {
+  async function commitPendingRowsToOrders(rows) {
+    const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    const batch = rows.map(r => ({
+      address: r.delivery || '주소 미입력',
+      lat: null,
+      lon: null,
+      deadline: r.latestAt ? r.latestAt.replace('T', ' ').slice(0, 16) : null,
+      recipient_name: r.recipient || null,
+      cargo_type: r.cargo || null,
+      cargo_weight_ton: r.tons ? parseFloat(r.tons) || null : null,
+      pickup_address: r.pickup || null,
+      pickup_lat: null,
+      pickup_lon: null,
+      shipper_name: r.customer || null,
+      contact_name: r.contact || null,
+      mixed_load: !!r.mixed_load,
+    }));
+    const res = await fetch(`${API}/deliveries/batch`, {
+      method: 'POST',
+      headers: hdrs,
+      body: JSON.stringify(batch),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || '접수 저장 실패');
+      return false;
+    }
+    const saved = await res.json();
+    const statusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료' };
+    saved.forEach(d => {
       DATA.orders.unshift({
-        id: nextOrderId(),
-        customer: r.customer || '—',
-        status: '접수',
-        pickup: r.pickup,
-        delivery: r.delivery,
-        window: formatIntakeWindow(r.latestAt),
+        id: d.id,
+        customer: d.shipper_name || '—',
+        status: statusMap[d.status] || '접수',
+        pickup: d.pickup_address || '—',
+        delivery: d.address,
+        window: d.deadline ? d.deadline.slice(0, 16).replace('T', ' ') : '—',
         driver: null,
-        recipient: r.recipient || '',
-        cargo: r.cargo || '',
-        tons: r.tons || '',
-        contact: r.contact || '',
-        mixed_load: !!r.mixed_load,
+        recipient: d.recipient_name || '',
+        cargo: d.cargo_type || '',
+        tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
+        contact: d.contact_name || '',
+        mixed_load: !!d.mixed_load,
       });
     });
+    return true;
   }
 
   function vehicleById(id) {
-    return DATA.vehicles.find(v => v.id === Number(id)) || null;
+    const nid = Number(id);
+    return DATA.vehicles.find(v => v.id === nid) || null;
   }
 
   function vehicleLastGpsAt(v) {
@@ -739,7 +803,7 @@
   }
 
   function driverById(id) {
-    return DATA.drivers.find(d => d.id === Number(id)) || null;
+    return DATA.drivers.find(d => d.id === id || d.id === Number(id)) || null;
   }
 
   function driverByName(name) {
@@ -1160,7 +1224,7 @@
     $('#inlineDetailSave', root).onclick = () => {
       d.status = $('#driverStatus', root).value;
       const vid = $('#driverVehicleAssign', root).value;
-      d.vehicleId = vid ? Number(vid) : null;
+      d.vehicleId = vid ? Number(vid) : null;  // vehicle id는 integer
       d.history.push({ at: new Date().toISOString().slice(0, 10), note: `배정 차량 → ${vid ? driverVehicleLabel(d) : '미배정'}` });
       toast('기사·차량 정보가 저장되었습니다 (목업)');
       renderPage();
@@ -1176,7 +1240,7 @@
   }
 
   function selectDriver(id) {
-    selectedDriverId = Number(id);
+    selectedDriverId = id;
     renderPage();
   }
 
@@ -1586,6 +1650,10 @@
     if (d) plan.driver = d.name;
   }
 
+  function escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   function toast(msg) {
     const t = $('#toast');
     t.textContent = msg || '저장되었습니다';
@@ -1887,8 +1955,28 @@
       !q || d.name.includes(q) || driverVehicleLabel(d).includes(q) || d.phone.includes(q)
     );
     const selected = selectedDriverId ? DATA.drivers.find(d => d.id === selectedDriverId) : null;
+    const pendingHtml = DATA.pendingDrivers.length ? `
+      <div class="card" style="margin-bottom:12px;border-left:3px solid var(--lime)">
+        <div class="card-hd" style="padding:12px 16px">
+          <h3 style="font-size:14px;margin:0">승인 대기 <span class="badge badge-warn">${DATA.pendingDrivers.length}</span></h3>
+        </div>
+        <div class="card-bd" style="padding:0">
+          <table style="width:100%">
+            <thead><tr><th>이름</th><th>연락처</th><th>가입일</th><th></th></tr></thead>
+            <tbody>${DATA.pendingDrivers.map(p => `
+              <tr data-pending-id="${p.id}">
+                <td>${p.name}</td><td>${p.phone}</td><td>${(p.created_at || '').slice(0, 10)}</td>
+                <td style="white-space:nowrap">
+                  <button type="button" class="btn btn-sm btn-primary btn-approve-driver" data-uid="${p.id}" data-name="${escapeHtml(p.name)}">승인</button>
+                  <button type="button" class="btn btn-sm btn-danger-outline btn-reject-driver" data-uid="${p.id}" data-name="${escapeHtml(p.name)}" style="margin-left:4px">거절</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : '';
     const listCard = `
-      <div class="card card-fill">
+      <div class="card card-fill" style="display:flex;flex-direction:column;min-height:0">
         <div class="card-hd">
           <h2>기사 목록</h2>
           <div class="toolbar">
@@ -1896,16 +1984,17 @@
             <button type="button" class="btn btn-primary" id="addDriver">+ 추가</button>
           </div>
         </div>
-        <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+        <div class="card-bd" style="padding:8px 12px 0;overflow-y:auto;flex:1;min-height:0">
+          ${pendingHtml}
           ${tableScrollWrap(`<table id="driverTable">
-            <thead><tr><th>이름</th><th>배정 차량</th><th>상태</th><th>연락처</th></tr></thead>
+            <thead><tr><th>이름</th><th>배정 차량</th><th>상태</th><th>연락처</th><th></th></tr></thead>
             <tbody>${rows.map(d => `
               <tr data-id="${d.id}" class="${selectedDriverId === d.id ? 'selected' : ''}">
                 <td>${d.name}</td><td>${driverVehicleLabel(d)}</td><td>${statusBadge(d.status)}</td><td>${d.phone}</td>
+                <td><button type="button" class="btn btn-sm btn-danger-outline btn-del-driver" data-uid="${d.id}" data-name="${escapeHtml(d.name)}">삭제</button></td>
               </tr>`).join('')}
             </tbody>
           </table>`)}
-          ${paginationHtml(3)}
         </div>
       </div>`;
     root.innerHTML = masterDetailShell(
@@ -1915,23 +2004,73 @@
     );
 
     $('#driverSearch', root).oninput = (e) => { root._search = e.target.value; renderDrivers(root); };
+
+    // 기사 추가
     $('#addDriver', root).onclick = () => {
       openModal('기사 추가', `
         <form id="driverForm">
           <div class="form-grid" style="max-width:100%">
+            <label>아이디 *</label><input name="username" required placeholder="로그인 아이디">
             <label>이름 *</label><input name="name" required>
-            <label>배정 차량</label>
-            <select name="vehicleId">${vehicleSelectOptions('', { allowEmpty: true })}</select>
-            <label>연락처 *</label><input name="phone" required>
-            <label>상태</label>
-            <select name="status"><option>운행가능</option><option>휴무</option></select>
+            <label>연락처 *</label><input name="phone" required placeholder="010-0000-0000">
+            <label>비밀번호 *</label><input name="password" type="password" required placeholder="초기 비밀번호">
           </div>
-        </form>`, () => toast('기사가 등록되었습니다 (목업)'));
+        </form>`, async () => {
+        const form = document.getElementById('driverForm');
+        const fd = Object.fromEntries(new FormData(form));
+        if (!fd.username || !fd.name || !fd.phone || !fd.password) { toast('모든 필수 항목을 입력하세요'); return; }
+        const orgRes = await fetch(`${API}/organizations/me`, { headers: getAuthHeaders() });
+        const org = orgRes.ok ? await orgRes.json() : {};
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: fd.username, password: fd.password, phone: fd.phone, name: fd.name, org_code: org.org_code || '', role: 'driver' }),
+        });
+        if (!res.ok) { const e = await res.json(); toast(e.detail || '등록 실패'); return; }
+        toast(`기사 «${fd.name}» 등록 완료 · 승인 후 앱 이용 가능`);
+        await loadRealData();
+      });
     };
 
+    // 기사 삭제
+    root.querySelectorAll('.btn-del-driver').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`기사 «${btn.dataset.name}»를 삭제하시겠습니까?\n관련 배송·대화 이력도 함께 삭제됩니다.`)) return;
+        const res = await fetch(`${API}/users/${btn.dataset.uid}`, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패'); return; }
+        toast('기사가 삭제되었습니다');
+        if (selectedDriverId === btn.dataset.uid) selectedDriverId = null;
+        await loadRealData();
+      };
+    });
+
+    // pending 기사 승인
+    root.querySelectorAll('.btn-approve-driver').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const res = await fetch(`${API}/auth/approve/${btn.dataset.uid}`, { method: 'POST', headers: getAuthHeaders() });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '승인 실패'); return; }
+        toast(`기사 «${btn.dataset.name}» 승인 완료`);
+        await loadRealData();
+      };
+    });
+
+    // pending 기사 거절(삭제)
+    root.querySelectorAll('.btn-reject-driver').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`기사 «${btn.dataset.name}» 가입을 거절하시겠습니까?`)) return;
+        const res = await fetch(`${API}/users/${btn.dataset.uid}`, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '거절 실패'); return; }
+        toast(`기사 «${btn.dataset.name}» 가입 거절`);
+        await loadRealData();
+      };
+    });
+
     const tbody = $('#driverTable tbody', root);
-    tbody.querySelectorAll('tr').forEach(tr => {
-      tr.onclick = () => selectDriver(tr.dataset.id);
+    tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.onclick = (e) => { if (e.target.closest('button')) return; selectDriver(tr.dataset.id); };
     });
     if (selected) bindDriverDetail(root, selected);
     bindPagination(root);
@@ -1956,7 +2095,7 @@
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table id="vehicleTable">
-            <thead><tr><th>번호판</th><th>톤급</th><th>차종</th><th>최근 위치</th><th>상태</th><th>연결 기사</th></tr></thead>
+            <thead><tr><th>번호판</th><th>톤급</th><th>차종</th><th>최근 위치</th><th>상태</th><th>연결 기사</th><th></th></tr></thead>
             <tbody>${rows.length ? rows.map(v => `
               <tr data-id="${v.id}" class="${selectedVehicleId === v.id ? 'selected' : ''}">
                 <td><strong>${v.plate}</strong></td>
@@ -1965,6 +2104,7 @@
                 <td>${vehicleLastGpsTableCell(v)}</td>
                 <td>${statusBadge(v.status)}</td>
                 <td>${vehicleDriverLabel(v)}</td>
+                <td><button type="button" class="btn btn-sm btn-danger-outline btn-del-vehicle" data-vid="${v.id}" data-plate="${escapeHtml(v.plate)}">삭제</button></td>
               </tr>`).join('') : `
               <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">검색 결과가 없습니다</td></tr>`}
             </tbody>
@@ -1983,21 +2123,55 @@
       openModal('차량 등록', `
         <form id="vehicleForm">
           <div class="form-grid" style="max-width:100%">
-            <label>번호판 *</label><input name="plate" required placeholder="12가3456">
-            <label>톤급</label>
-            <select name="tonnage"><option>1톤</option><option>1.4톤</option><option>2.5톤</option><option>3.5톤</option><option>5톤</option></select>
-            <label>차종</label>
-            <select name="type"><option>윙바디</option><option>탑차</option><option>카고</option></select>
-            <label>상태</label>
-            <select name="status"><option>가용</option><option>운행중</option><option>정비</option></select>
+            <label>번호판 *</label><input name="plate_number" required placeholder="12가3456">
+            <label>차종 *</label>
+            <select name="vehicle_type"><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="카고">카고</option></select>
+            <label>총중량(kg) *</label><input name="weight_kg" type="number" min="0" required placeholder="예: 5000">
+            <label>높이(m) *</label><input name="height_m" type="number" step="0.01" min="0" required placeholder="예: 2.5">
+            <label>길이(cm)</label><input name="length_cm" type="number" min="0" placeholder="예: 650">
+            <label>폭(cm)</label><input name="width_cm" type="number" min="0" placeholder="예: 220">
           </div>
-        </form>`, () => toast('차량이 등록되었습니다 (목업)'));
+        </form>`, async () => {
+        const form = document.getElementById('vehicleForm');
+        const fd = Object.fromEntries(new FormData(form));
+        if (!fd.plate_number || !fd.vehicle_type || !fd.weight_kg || !fd.height_m) { toast('필수 항목을 입력하세요'); return; }
+        const body = {
+          plate_number: fd.plate_number.trim(),
+          vehicle_type: fd.vehicle_type,
+          weight_kg: parseFloat(fd.weight_kg),
+          height_m: parseFloat(fd.height_m),
+          length_cm: fd.length_cm ? parseFloat(fd.length_cm) : null,
+          width_cm: fd.width_cm ? parseFloat(fd.width_cm) : null,
+        };
+        const res = await fetch(`${API}/vehicles`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 등록 실패'); return; }
+        toast(`차량 «${fd.plate_number}» 등록 완료`);
+        await loadRealData();
+      });
     };
 
     const tbody = $('#vehicleTable tbody', root);
     tbody.querySelectorAll('tr[data-id]').forEach(tr => {
-      tr.onclick = () => selectVehicle(tr.dataset.id);
+      tr.onclick = (e) => { if (e.target.closest('button')) return; selectVehicle(tr.dataset.id); };
     });
+
+    // 차량 삭제
+    root.querySelectorAll('.btn-del-vehicle').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`차량 «${btn.dataset.plate}»를 비활성화하시겠습니까?`)) return;
+        const res = await fetch(`${API}/vehicles/${btn.dataset.vid}`, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패'); return; }
+        toast(`차량 «${btn.dataset.plate}» 비활성화 완료`);
+        if (selectedVehicleId === Number(btn.dataset.vid)) selectedVehicleId = null;
+        await loadRealData();
+      };
+    });
+
     if (selected) bindVehicleDetail(root, selected);
     bindPagination(root);
   }
@@ -2553,7 +2727,7 @@
       row.onclick = () => {
         root.querySelectorAll(`#${ids.drivers} .driver-row`).forEach(r => r.classList.remove('picked'));
         row.classList.add('picked');
-        dispatchManualDriverId = Number(row.dataset.id);
+        dispatchManualDriverId = row.dataset.id;
         const d = DATA.drivers.find(x => x.id === dispatchManualDriverId);
         const pd = $(`#${ids.pickedDriver}`, root);
         if (pd) pd.textContent = d ? d.name : '없음';
@@ -2818,21 +2992,36 @@
       });
       bindManualAssignPanel(root, assignIds);
       bindRouteCalc($('#calcRouteAssign', root), $('#routeBoxAssign', root), $('#routeListAssign', root));
-      $('#confirmDispatchAssign', root).onclick = () => {
+      $('#confirmDispatchAssign', root).onclick = async () => {
         if (!dispatchManualVehicleId) {
           toast('투입 차량을 선택하세요');
           return;
         }
-        const v = vehicleById(dispatchManualVehicleId);
-        const d = dispatchManualDriverId ? driverById(dispatchManualDriverId) : null;
-        const idx = pendingIntakes.findIndex(p => p.id === dispatchPendingSelectedId);
-        if (idx >= 0) pendingIntakes.splice(idx, 1);
-        const ord = DATA.orders.find(o => o.id === dispatchPendingSelectedId);
-        if (ord) {
-          ord.status = '배차';
-          ord.driver = d?.name || '—';
+        if (!dispatchManualDriverId) {
+          toast('기사를 선택하세요');
+          return;
         }
-        toast(`배정 완료 · ${v?.plate || ''} ${d ? '· ' + d.name : ''} (목업)`);
+        const v = vehicleById(dispatchManualVehicleId);
+        const d = driverById(dispatchManualDriverId);
+        const ordId = dispatchPendingSelectedId;
+        if (ordId) {
+          const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+          const res = await fetch(`${API}/deliveries/${ordId}/assign`, {
+            method: 'PATCH',
+            headers: hdrs,
+            body: JSON.stringify({ driver_id: dispatchManualDriverId }),
+          });
+          if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            toast(e.detail || '배정 실패');
+            return;
+          }
+          const ord = DATA.orders.find(o => o.id === ordId);
+          if (ord) { ord.status = '배차'; ord.driver = d?.name || '—'; }
+          const idx = pendingIntakes.findIndex(p => p.id === ordId);
+          if (idx >= 0) pendingIntakes.splice(idx, 1);
+        }
+        toast(`배정 완료 · ${v?.plate || ''} ${d ? '· ' + d.name : ''}`);
         dispatchPendingSelectedId = null;
         dispatchRan = true;
         renderDispatchAssign(root);
@@ -3564,7 +3753,7 @@
       commitIntakeRow(root, taskNum);
     };
 
-    $('#submitOrder', root).onclick = () => {
+    $('#submitOrder', root).onclick = async () => {
       const form = $('#intakeForm', root);
       for (const card of root.querySelectorAll('[data-task]')) {
         const taskNum = Number(card.dataset.task);
@@ -3582,7 +3771,11 @@
         toast('접수할 건을 입력하거나 대기 목록에 추가하세요');
         return;
       }
-      commitPendingRowsToOrders(queue);
+      const btn = $('#submitOrder', root);
+      if (btn) { btn.disabled = true; btn.textContent = '저장 중…'; }
+      const ok = await commitPendingRowsToOrders(queue);
+      if (btn) { btn.disabled = false; btn.textContent = '접수 저장'; }
+      if (!ok) return;
       const day = new Date().toISOString().slice(2, 10).replace(/-/g, '');
       queue.forEach((row) => {
         const n = pendingIntakes.length + 1;
@@ -3601,7 +3794,7 @@
       const total = queue.length;
       root._pendingIntakes = [];
       renderPendingIntakePanel(root);
-      toast(`접수 완료 ${total}건 · 오더 목록·배차·지정에 반영`);
+      toast(`접수 완료 ${total}건 · DB 저장 완료`);
     };
   }
 

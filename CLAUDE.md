@@ -562,3 +562,28 @@ Android 앱 채팅 구현 필수 사항:
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
 - [ ] 카카오톡 알림 (배차·경유지 추가·완료 등)
 - [ ] 발표 준비
+
+### dashboard.js 목업 → 실 API 연동 예정 목록
+
+#### 높은 우선순위 (핵심 업무 흐름)
+- [x] **오더 목록 실 API 연동** — `DATA.orders` 인메모리 → `GET /deliveries` 조회, 오더 접수 `POST /deliveries/batch` 저장
+- [x] **배차 assign 저장** — toast(목업) → `PATCH /deliveries/{id}/assign` 실제 연동
+- [x] **dashboard 내 기사 등록/수정/삭제** — toast(목업) → `POST /auth/register`, `DELETE /users/{id}`, `POST /auth/approve/{id}` (drivers.html과 동기화)
+- [x] **dashboard 내 차량 등록/삭제** — toast(목업) → `POST /vehicles`, `DELETE /vehicles/{id}` (vehicles.html과 동기화)
+- [x] **pending 기사 승인** — dashboard에서 승인 대기 목록 표시 + `POST /auth/approve/{user_id}` 연동
+
+#### 중간 우선순위
+- [ ] **Trip 상태 변경 UI** — 관리자가 완료/취소 처리 → `PATCH /trips/{id}/status`
+- [ ] **Trip 경로 폴리라인** — `map-placeholder` → 실제 카카오맵 + `GET /trips/{id}/polyline`
+- [ ] **Trip 궤적 지도 (통계 페이지)** — `map-placeholder` → `GET /stats/route-history` + 카카오맵 폴리라인
+- [ ] **고객(거래처) 저장** — toast(목업) → 고객 CRUD API 설계 및 엔드포인트 신규 구현
+- [ ] **고객 위치 지도** — `map-placeholder` → 카카오맵 마커 + `GET /address/coord` 좌표 변환
+- [ ] **통계 추가 표시** — `GET /stats/by-day`, `GET /stats/by-driver-day` 그래프 연동
+- [ ] **기사·차량 교체/대차** — 목업 배너 → `PATCH /trips/{id}/reassign` 실 연동 (백엔드 완성)
+
+#### 낮은 우선순위 (Phase 2)
+- [ ] **채팅 알림 (dashboard)** — 알림 드롭다운에 unread 메시지 표시 (WS `/ws/chat` 수신 연동)
+- [ ] **일정 캘린더/간트/마일스톤** — 전부 목업 → `/trips`, `/deliveries` 데이터 기반 실제 일정 표시
+- [ ] **페이지네이션** — `fakePage` 목업 → 실제 offset/limit API 쿼리
+- [ ] **담당자(staff) 관리** — toast(목업) → 별도 staff 테이블 또는 admin 역할 유저 CRUD
+- [ ] **엑셀 임포트 (오더 접수)** — toast(목업) → SheetJS 파싱 + `POST /deliveries/batch` 실 연동 (운행 생성 패널의 엑셀 불러오기는 완성)

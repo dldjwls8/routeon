@@ -6,6 +6,30 @@
 
 ---
 
+## v1.0.39 (2026-06-02)
+
+### 대시보드 실 API 연동 — 높은 우선순위 5종
+
+**백엔드**
+- `Delivery` 모델에 필드 추가: `pickup_address`, `pickup_lat`, `pickup_lon`, `shipper_name`, `contact_name`, `mixed_load`
+- `lat`·`lon` nullable 변경 (접수 시 좌표 없이 저장 가능)
+- `DeliveryCreate` 스키마 + `_delivery_schema()` 응답 업데이트
+- DB 마이그레이션: `deliveries` 테이블 `ALTER TABLE`
+
+**프론트엔드 (dashboard.js)**
+- **오더 목록 API 연동**: `DATA.orders` 인메모리 → `GET /deliveries` 실 API 로드
+- **오더 접수 저장**: `commitPendingRowsToOrders()` → `POST /deliveries/batch` 실 DB 저장 (비동기)
+- **배차 assign**: `#confirmDispatchAssign` → `PATCH /deliveries/{id}/assign` 실 API 연동 + 기사 선택 필수 검사
+- **기사 등록**: `POST /auth/register` API 연동 (조직코드 자동 조회)
+- **기사 삭제**: `DELETE /users/{id}` API 연동 (confirm 대화상자)
+- **승인 대기 기사**: `GET /users?role=pending` 로드 + `POST /auth/approve/{id}` 승인 / `DELETE /users/{id}` 거절 UI
+- **차량 등록**: `POST /vehicles` API 연동 (번호판·차종·총중량·높이 필수)
+- **차량 삭제**: `DELETE /vehicles/{id}` API 연동
+- **driver id 타입 버그 수정**: `driverById()`, `selectDriver()`, `dispatchManualDriverId`의 `Number()` 변환 제거 (UUID 문자열로 처리)
+- `escapeHtml()` 유틸 함수 추가
+
+---
+
 ## v1.0.38 (2026-06-02)
 
 ### 리팩토링 — dashboard.html CSS/JS 파일 분리
