@@ -46,6 +46,7 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str
+    password: str
 
 @router.get("/auth/check-username")
 async def check_username(
