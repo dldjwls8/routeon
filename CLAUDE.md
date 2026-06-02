@@ -553,6 +553,8 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 다크/라이트/자동 테마 시스템 — CSS custom properties + `html[data-theme]` + FOUC 방지 스크립트, OS 설정 자동 감지(`prefers-color-scheme`), 테마 선택 UI settings.html 이관
 - [x] 탑바 버튼 수정 — 🔔 알림 드롭다운, ⚙ 설정 이동, 👤 관리자 드롭다운(프로필/설정/로그아웃)
 - [x] settings.html UI/UX 개편 — 대시보드 디자인 시스템 통일, 화면 설정 카드(테마 세그먼트) 추가
+- [x] 전체 공개 페이지 테마 통일 — login / index / chat / register 다크·라이트 적용, register 파일 선택 UI 커스텀 드롭존
+- [x] LoginRequest.password 필드 누락 버그 수정 (로그인 500 오류)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
