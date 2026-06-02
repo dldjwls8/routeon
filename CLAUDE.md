@@ -82,7 +82,9 @@ routeon/
     ├── intro.html          서비스 소개
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
-    ├── dashboard.html      관리자 대시보드 (카카오맵 + 실시간 위치 + 경로선)
+    ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
+    ├── dashboard.css       대시보드 스타일 (2,173줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (3,808줄, dashboard.html에서 분리)
     ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
     ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)

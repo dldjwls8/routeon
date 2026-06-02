@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.38 (2026-06-02)
+
+### 리팩토링 — dashboard.html CSS/JS 파일 분리
+
+**프론트엔드 (dashboard)**
+- `dashboard.html` 6,048줄 → 65줄 (HTML 껍데기만 유지)
+- CSS 2,173줄 → `dashboard.css` 분리 (`<link rel="stylesheet">` 로드)
+- JS 3,808줄 → `dashboard.js` 분리 (`<script src>` 로드)
+- 코드 동작·기능 변경 없음 (파일 분리만)
+
+---
+
 ## v1.0.37 (2026-06-02)
 
 ### 버그 수정 + 기능 개선 — register.html 테마 + 파일 선택 UI + 로그인 버그
