@@ -6,6 +6,16 @@
 
 ---
 
+## v1.0.48 (2026-06-02)
+### vehicles weight_kg 필드명 불일치 버그 수정
+- **원인**: API 응답은 `weight_kg`인데 프론트가 `max_load_kg`로 접근 → 항상 `undefined` → 톤수 "0.0톤" 표시
+- `loadRealData()` 차량 매핑: `v.max_load_kg` → `v.weight_kg`, 저장 키 `max_load_kg` → `weight_kg`
+- `vehiclePreviewHtml()`: `max ${v.max_load_kg} kg` → `max ${v.weight_kg} kg`
+- `applyVehicleMetaToRow()`: `max_load_kg` in row 체크 → `weight_kg`
+- 일괄배차 차량 프리뷰: `max ${v.max_load_kg} kg` → `max ${v.weight_kg} kg`
+
+---
+
 ## v1.0.47 (2026-06-02)
 ### 배차 탭 빈 페이지 버그 수정
 - **원인**: `DATA.dispatchPlans = []`일 때 `plan = undefined` → template literal 내 `plan.visits.map()` / `plan.duration` / `plan.distance` 즉시 평가 → TypeError → `root.innerHTML` 미설정 → 단건·수동 배차·일괄 배차 탭 완전 공백

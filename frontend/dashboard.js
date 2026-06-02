@@ -340,9 +340,9 @@
         vehs.forEach(v => DATA.vehicles.push({
           id: v.id,
           plate: v.plate_number,
-          tonnage: v.tonnage || `${((v.max_load_kg || 0) / 1000).toFixed(1)}톤`,
+          tonnage: v.tonnage || `${((v.weight_kg || 0) / 1000).toFixed(1)}톤`,
           type: v.vehicle_type || '카고',
-          max_load_kg: v.max_load_kg || 0,
+          weight_kg: v.weight_kg || 0,
           start_lat: 37.4563,
           start_lon: 126.7052,
           last_gps_label: '',
@@ -1770,7 +1770,7 @@
 
   function vehiclePreviewHtml(v) {
     if (!v) return '<span class="empty-hint">차량 미선택</span>';
-    return `<strong>${v.plate}</strong> · ${v.tonnage} · ${v.type} · max ${v.max_load_kg} kg
+    return `<strong>${v.plate}</strong> · ${v.tonnage} · ${v.type} · max ${v.weight_kg} kg
       <div class="fleet-meta" style="margin-top:4px">
         <span>출발: 최근 GPS ${vehicleGpsCoordText(v)}</span>
         <span class="coord">${vehicleLastGpsLabel(v)} · 갱신 ${vehicleLastGpsAt(v)}</span>
@@ -1802,7 +1802,7 @@
     if ('plate' in row) row.plate = v.plate;
     if ('tonnage' in row) row.tonnage = v.tonnage;
     if ('type' in row) row.type = v.type;
-    if ('max_load_kg' in row) row.max_load_kg = v.max_load_kg;
+    if ('weight_kg' in row) row.weight_kg = v.weight_kg;
   }
 
   function applyVehicleToFleetRow(fleetRow, vehicleId) {
@@ -2772,7 +2772,7 @@
                     ${bulkEndPolicyBadge(v.end_policy)}
                   </div>
                   <div class="vehicle-preview bulk-vehicle-preview" data-bulk-row="${v.id}">
-                    <strong>${v.plate}</strong> · ${v.tonnage || '—'} · ${v.type || '—'} · max ${v.max_load_kg} kg
+                    <strong>${v.plate}</strong> · ${v.tonnage || '—'} · ${v.type || '—'} · max ${v.weight_kg} kg
                     <div class="fleet-meta">
                       <span>출발: 최근 GPS (${Number(v.start_lat).toFixed(2)}, ${Number(v.start_lon).toFixed(2)})</span>
                       <span class="coord">${v.start_city || '—'} · GPS</span>
