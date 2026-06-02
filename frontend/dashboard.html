@@ -485,44 +485,355 @@
     }
     .rs-transfer-row input[type=checkbox] { margin-top: 2px; flex-shrink: 0; }
     .rs-transfer-row label { font-size: 13px; color: #5d4037; line-height: 1.5; cursor: pointer; }
+
+    :root {
+      --lime: #c6f135;
+      --lime-dim: #a8d42e;
+      --dark-bg: #0c0e12;
+      --dark-surface: #151820;
+      --dark-card: #1c2029;
+      --dark-border: rgba(255,255,255,.08);
+      --header-h: 60px;
+    }
+
+    body {
+      display: block;
+      height: 100vh;
+      background: var(--dark-bg);
+      color: #e8eaef;
+      overflow: hidden;
+    }
+
+    .left-panel, .admin-header, .left-footer { display: none !important; }
+
+    #app-topbar {
+      height: var(--header-h);
+      background: var(--dark-bg);
+      border-bottom: 1px solid var(--dark-border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-sizing: border-box;
+    }
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 160px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .brand-lockup .logo-img { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; }
+    #main-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    #main-nav::-webkit-scrollbar { display: none; }
+    .nav-pill-btn {
+      border: none;
+      background: transparent;
+      color: #8b93a7;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .nav-pill-btn.active {
+      background: var(--lime);
+      color: #0c0e12;
+    }
+    #topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #aeb6c7;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    #main-stage {
+      position: relative;
+      height: calc(100vh - var(--header-h));
+      background: var(--dark-surface);
+      overflow: auto;
+    }
+    #section-host {
+      position: relative;
+      min-height: 100%;
+      box-sizing: border-box;
+      padding: 24px;
+    }
+    .section-view { min-height: 100%; }
+    .section-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .section-header h1 { margin: 0; color: #f6f7fb; font-size: 24px; letter-spacing: 0; }
+    .section-header p { margin: 6px 0 0; color: #8b93a7; font-size: 13px; }
+    .section-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .dark-btn {
+      border: 1px solid var(--dark-border);
+      background: #242936;
+      color: #e8eaef;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .dark-btn.primary { background: var(--lime); color: #0c0e12; border-color: var(--lime); }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(360px, 1.1fr) minmax(360px, .9fr);
+      gap: 18px;
+      padding-right: 0;
+    }
+    .dashboard-left, .dashboard-right { min-width: 0; }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric-card, .ops-card, .dispatch-builder, .management-card {
+      background: var(--dark-card);
+      border: 1px solid var(--dark-border);
+      border-radius: 8px;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .metric-label { color: #8b93a7; font-size: 12px; font-weight: 700; }
+    .metric-value { color: #fff; font-size: 28px; font-weight: 800; margin-top: 8px; }
+    .driver-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .driver-card {
+      background: #202532;
+      border-color: var(--dark-border);
+      color: #e8eaef;
+      border-radius: 8px;
+      margin-bottom: 0;
+    }
+    .driver-card:hover, .driver-card.active { border-color: var(--lime); background: #252b36; }
+    .driver-card strong, .custom-app-marker .name { color: inherit; }
+    .card-chat-btn:hover { background: rgba(255,255,255,.08); }
+    .dash-map-zone {
+      height: 360px;
+      border: 1px solid var(--dark-border);
+      border-radius: 8px;
+      background: #11141b;
+      margin-bottom: 16px;
+    }
+    .dash-map-caption { margin: 0 0 8px; color: #8b93a7; font-size: 12px; }
+    .ops-table { color: #dfe3eb; }
+    .ops-table th {
+      background: #222733;
+      color: #aeb6c7;
+      border-bottom: 1px solid var(--dark-border);
+    }
+    .ops-table td { border-bottom: 1px solid var(--dark-border); color: #dfe3eb; }
+    .ops-table tr.clickable { cursor: pointer; }
+    .ops-table tr.clickable:hover { background: rgba(255,255,255,.04); }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      display: inline-block;
+      border-radius: 50%;
+      margin-right: 6px;
+      background: #727b91;
+    }
+    .status-dot.running { background: #2ecc71; }
+    .status-dot.scheduled { background: #e67e22; }
+    .empty-state { color: #8b93a7; text-align: center; padding: 24px; font-size: 13px; }
+
+    .dispatch-layout {
+      position: relative;
+      min-height: calc(100vh - var(--header-h) - 48px);
+      padding-left: 390px;
+    }
+    .dispatch-builder {
+      position: fixed;
+      top: calc(var(--header-h) + 24px);
+      left: 24px;
+      width: 360px;
+      max-height: calc(100vh - var(--header-h) - 48px);
+      overflow-y: auto;
+      z-index: 25;
+    }
+    .dispatch-map-hint {
+      position: fixed;
+      left: 408px;
+      top: calc(var(--header-h) + 24px);
+      z-index: 20;
+      color: #e8eaef;
+      background: rgba(12,14,18,.72);
+      border: 1px solid var(--dark-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .map-container {
+      position: fixed;
+      z-index: 5;
+      background: #11141b;
+      transition: top .2s ease, left .2s ease, right .2s ease, bottom .2s ease, width .2s ease, height .2s ease;
+    }
+    #map { width: 100%; height: 100%; }
+    .map-container.map-mode-dashboard {
+      top: calc(var(--header-h) + 104px);
+      right: 24px;
+      width: calc(45vw - 36px);
+      height: 360px;
+      border: 1px solid var(--dark-border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .map-container.map-mode-dispatch {
+      top: var(--header-h);
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      height: auto;
+      border: none;
+      border-radius: 0;
+    }
+    .panel-toggle-btn { display: none; }
+    .map-search-bar { top: 16px; left: 16px; }
+    .map-dispatch-btn { top: 16px; left: 282px; background: var(--lime); color: #0c0e12; }
+    .map-dispatch-btn:hover { background: var(--lime-dim); }
+
+    #right-panel {
+      position: fixed;
+      right: 0;
+      top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      width: 360px;
+      background: var(--dark-card);
+      border-left: 1px solid var(--dark-border);
+      color: #e8eaef;
+      z-index: 50;
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform .25s ease;
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      box-sizing: border-box;
+      box-shadow: -14px 0 30px rgba(0,0,0,.28);
+    }
+    #right-panel.open { transform: translateX(0); }
+    #right-panel h2, #right-panel h3, #right-panel strong { color: #f6f7fb !important; }
+    #right-panel small, #right-panel div { color: inherit; }
+    #trip-info-box, #no-trip-box, #new-trip-section {
+      background: #202532 !important;
+      border-color: var(--dark-border) !important;
+    }
+    #trip-eta-row { background: #151820 !important; border-color: var(--dark-border) !important; }
+    input[type="text"], input[type="datetime-local"], input[type="number"], select, .tb-task-input {
+      background: #11141b !important;
+      border-color: var(--dark-border) !important;
+      color: #e8eaef !important;
+    }
+    .tb-task-card, .ad-task-card {
+      background: #202532;
+      border-color: var(--dark-border);
+      color: #e8eaef;
+    }
+    .tb-task-header { color: #dfe3eb; }
+    .ac-dropdown, .node-popup, .search-pin-popup, .ad-modal, .rs-modal {
+      background: #1c2029;
+      border-color: var(--dark-border);
+      color: #e8eaef;
+    }
+    .ac-item { border-bottom-color: var(--dark-border); }
+    .ac-item:hover { background: rgba(198,241,53,.12); }
+    .ac-item-name, .node-popup-title, .search-pin-popup .pin-name { color: #f6f7fb; }
+    .ac-item-addr, .node-popup-row, .search-pin-popup .pin-info-row { color: #aeb6c7; }
+
+    @media (max-width: 980px) {
+      #app-topbar { padding: 0 12px; gap: 10px; }
+      .brand-lockup { min-width: auto; }
+      #topbar-user { display: none; }
+      #section-host { padding: 16px; }
+      .dashboard-grid, .metric-grid { grid-template-columns: 1fr; }
+      .map-container.map-mode-dashboard {
+        top: calc(var(--header-h) + 172px);
+        left: 16px;
+        right: 16px;
+        width: auto;
+        height: 320px;
+      }
+      .dash-map-zone { height: 320px; }
+      .dispatch-layout { padding-left: 0; padding-top: 390px; }
+      .dispatch-builder {
+        left: 16px;
+        right: 16px;
+        width: auto;
+        top: calc(var(--header-h) + 16px);
+        max-height: 360px;
+      }
+      .dispatch-map-hint { left: 16px; top: calc(var(--header-h) + 392px); }
+      #right-panel { width: min(360px, 92vw); }
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
-  <div class="left-panel" id="left-panel">
-    <div class="admin-header">
+  <header id="app-topbar">
+    <div class="brand-lockup">
       <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
       <span class="title-text">관리자페이지</span>
     </div>
-    
-    <div id="driver-list"></div>
-
-    <div class="left-footer">
-      <button class="nav-btn" type="button" title="기사 관리" onclick="location.href='/drivers.html'">
-        <span class="nav-icon" aria-hidden="true">👥</span>
-        <span class="nav-label">기사</span>
-      </button>
-      <button class="nav-btn" type="button" title="차량 관리" onclick="location.href='/vehicles.html'">
-        <span class="nav-icon" aria-hidden="true">🚗</span>
-        <span class="nav-label">차량</span>
-      </button>
-      <button class="nav-btn" type="button" title="통계" onclick="location.href='/stats.html'">
-        <span class="nav-icon" aria-hidden="true">📊</span>
-        <span class="nav-label">통계</span>
-      </button>
-      <button class="nav-btn" type="button" title="설정" onclick="location.href='/settings.html'">
-        <span class="nav-icon" aria-hidden="true">⚙️</span>
-        <span class="nav-label">설정</span>
-      </button>
-      <button class="nav-btn logout" type="button" title="로그아웃" onclick="logout()">
-        <span class="nav-icon" aria-hidden="true">🚪</span>
-        <span class="nav-label">로그아웃</span>
-      </button>
+    <nav id="main-nav" aria-label="주요 메뉴">
+      <button class="nav-pill-btn active" type="button" data-section="dashboard" onclick="setSection('dashboard')">관제 대시보드</button>
+      <button class="nav-pill-btn" type="button" data-section="dispatch" onclick="setSection('dispatch')">배차</button>
+      <button class="nav-pill-btn" type="button" data-section="drivers" onclick="setSection('drivers')">기사관리</button>
+      <button class="nav-pill-btn" type="button" data-section="vehicles" onclick="setSection('vehicles')">차량관리</button>
+      <button class="nav-pill-btn" type="button" data-section="stats" onclick="setSection('stats')">운행통계</button>
+    </nav>
+    <div id="topbar-user">
+      <button class="dark-btn" type="button" onclick="location.href='/settings.html'">설정</button>
+      <button class="dark-btn" type="button" onclick="logout()">로그아웃</button>
     </div>
+  </header>
+
+  <main id="main-stage">
+    <div id="section-host"></div>
+  </main>
+
+  <div class="left-panel" id="left-panel">
+    <div id="driver-list"></div>
   </div>
 
-  <div class="map-container">
+  <div class="map-container" id="map-container">
     <button class="panel-toggle-btn" id="toggle-btn" onclick="togglePanel()" title="메뉴 접기">◀</button>
 
     <!-- 지도 검색바 -->
@@ -651,6 +962,8 @@
     let convDriverMap = {};  // conversation_id → driver_id
     let currentUserId = null;
     let driverCurrentPositions = {};  // driver_id → {lat, lon}
+    let currentSection = 'dashboard';
+    let vehiclesDashboardCache = null;
 
     // ── 기능 전역 상태 ────────────────────────────────
     let _acCoords    = {};   // inputId → {lat, lon}  자동완성 선택 좌표
@@ -814,6 +1127,7 @@
     function togglePanel() {
       const panel = document.getElementById('left-panel');
       const btn = document.getElementById('toggle-btn');
+      if (!panel || !btn) return;
       panel.classList.toggle('collapsed');
       
       if (panel.classList.contains('collapsed')) {
@@ -826,23 +1140,106 @@
       setTimeout(() => map.relayout(), 300);
     }
 
+    function initShellNavigation() {
+      renderSection(currentSection);
+      updateActiveNav(currentSection);
+    }
+
+    function setSection(name) {
+      if (name === currentSection) {
+        renderSection(name);
+        return;
+      }
+      beforeSectionUnmount(currentSection);
+      currentSection = name;
+      updateActiveNav(name);
+      renderSection(name);
+    }
+
+    function beforeSectionUnmount(name) {
+      if (name === 'dispatch') clearTbTaskPins();
+    }
+
+    function updateActiveNav(name) {
+      document.querySelectorAll('.nav-pill-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.section === name);
+      });
+    }
+
+    function setMapVisible(visible) {
+      const mc = document.getElementById('map-container');
+      if (mc) mc.style.display = visible ? '' : 'none';
+    }
+
+    function setMapMode(mode) {
+      const mc = document.getElementById('map-container');
+      if (!mc) return;
+      mc.classList.remove('map-mode-dashboard', 'map-mode-dispatch', 'map-mode-hidden');
+      mc.classList.add(`map-mode-${mode}`);
+    }
+
+    function relayoutMapSoon() {
+      setTimeout(() => { if (typeof map !== 'undefined' && map) map.relayout(); }, 100);
+    }
+
+    function renderSection(name) {
+      switch (name) {
+        case 'dashboard':
+          renderDashboardSection();
+          setMapVisible(true);
+          setMapMode('dashboard');
+          break;
+        case 'dispatch':
+          renderDispatchSection();
+          setMapVisible(true);
+          setMapMode('dispatch');
+          break;
+        case 'drivers':
+          renderDriversSection();
+          setMapVisible(false);
+          setMapMode('hidden');
+          break;
+        case 'vehicles':
+          renderVehiclesSection();
+          setMapVisible(false);
+          setMapMode('hidden');
+          break;
+        case 'stats':
+          renderStatsSection();
+          setMapVisible(false);
+          setMapMode('hidden');
+          break;
+      }
+      relayoutMapSoon();
+    }
+
+    function refreshCurrentSection() {
+      renderSection(currentSection);
+    }
+
     // 전체 기사+운행 정보 캐시
     let driversCache = [];
     let tripsCache = {};  // driver_id → trip
+    let completedTripCount = 0;
 
     async function loadDrivers() {
       const res = await fetch(`${API}/users?role=driver`, { headers: authHeaders() });
       if (res.status === 401) { window.location.href = '/login.html'; return; }
       driversCache = await res.json();
+      tripsCache = {};
 
       // 각 기사의 진행 중 운행 조회
+      completedTripCount = 0;
       const tripPromises = driversCache.map(d =>
         fetch(`${API}/trips?driver_id=${d.id}`, { headers: authHeaders() })
           .then(r => r.ok ? r.json() : [])
-          .then(trips => { tripsCache[d.id] = trips.find(t => ['scheduled','in_progress'].includes(t.status)) || null; })
-          .catch(() => { tripsCache[d.id] = null; })
+          .then(trips => {
+            tripsCache[d.id] = trips.find(t => ['scheduled','in_progress'].includes(t.status)) || null;
+            return trips.filter(t => t.status === 'completed').length;
+          })
+          .catch(() => { tripsCache[d.id] = null; return 0; })
       );
-      await Promise.all(tripPromises);
+      completedTripCount = (await Promise.all(tripPromises)).reduce((sum, count) => sum + count, 0);
 
       // 기사별 고정 색상 배정 (순서 기반, 새로고침 후에도 동일)
       driversCache.forEach((d, i) => {
@@ -854,6 +1251,7 @@
       await loadChatConversations();
       renderLeftPanel(driversCache);
       initTripBuilder();
+      if (currentSection === 'dashboard' || currentSection === 'dispatch') refreshCurrentSection();
       await drawAllRunningPolylines();
     }
 
@@ -874,6 +1272,7 @@
 
     function renderLeftPanel(drivers) {
       const listDiv = document.getElementById('driver-list');
+      if (!listDiv) return;
       listDiv.innerHTML = '';
 
       if (drivers.length === 0) {
@@ -917,6 +1316,243 @@
         listDiv.appendChild(card);
         updateDriverUnreadBadge(d.id, driverUnreadCounts[d.id] || 0);
       });
+    }
+
+    function getDriverStatusSummary(drivers, tripsByDriver) {
+      return drivers.reduce((acc, d) => {
+        const trip = tripsByDriver[d.id];
+        if (trip?.status === 'in_progress') acc.running++;
+        else if (trip?.status === 'scheduled') acc.scheduled++;
+        else acc.idle++;
+        if (trip?.status === 'completed') acc.completed++;
+        return acc;
+      }, { running: 0, scheduled: 0, idle: 0, completed: 0 });
+    }
+
+    function getActiveTripRows(drivers, tripsByDriver) {
+      return drivers
+        .map(d => ({ driver: d, trip: tripsByDriver[d.id] }))
+        .filter(row => row.trip && ['scheduled', 'in_progress'].includes(row.trip.status));
+    }
+
+    function getDashboardStats(drivers, tripsByDriver) {
+      const activeRows = getActiveTripRows(drivers, tripsByDriver);
+      return {
+        ...getDriverStatusSummary(drivers, tripsByDriver),
+        activeTrips: activeRows.length,
+        completed: completedTripCount,
+      };
+    }
+
+    function renderSectionHeader(title, subtitle, actionsHtml = '') {
+      return `
+        <div class="section-header">
+          <div>
+            <h1>${escapeHtml(title)}</h1>
+            <p>${escapeHtml(subtitle)}</p>
+          </div>
+          ${actionsHtml ? `<div class="section-actions">${actionsHtml}</div>` : ''}
+        </div>`;
+    }
+
+    function renderEmptyState(title, message, actionHtml = '') {
+      return `<div class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(message)}${actionHtml ? `<div style="margin-top:12px;">${actionHtml}</div>` : ''}</div>`;
+    }
+
+    function renderDriverSummaryCards(drivers, tripsByDriver) {
+      const stats = getDashboardStats(drivers, tripsByDriver);
+      return `
+        <div class="metric-grid">
+          <div class="metric-card"><div class="metric-label">운행중</div><div class="metric-value">${stats.running}명</div></div>
+          <div class="metric-card"><div class="metric-label">배차대기</div><div class="metric-value">${stats.scheduled}건</div></div>
+          <div class="metric-card"><div class="metric-label">완료</div><div class="metric-value">${stats.completed}건</div></div>
+        </div>`;
+    }
+
+    function renderActiveTripsTable(drivers, tripsByDriver) {
+      const rows = getActiveTripRows(drivers, tripsByDriver);
+      if (!rows.length) {
+        return `<div class="ops-card">${renderEmptyState('진행 중인 운행 없음', '현재 scheduled 또는 in_progress 운행이 없습니다.')}</div>`;
+      }
+      return `
+        <div class="ops-card">
+          <h3 style="margin:0 0 10px;color:#f6f7fb;">진행 중 운행</h3>
+          <table class="ops-table">
+            <thead><tr><th>상태</th><th>기사</th><th>운행</th><th>ETA</th></tr></thead>
+            <tbody>
+              ${rows.map(({ driver, trip }) => `
+                <tr class="clickable" onclick="showDriverDetail('${driver.id}')">
+                  <td><span class="status-dot ${trip.status === 'in_progress' ? 'running' : 'scheduled'}"></span>${trip.status === 'in_progress' ? '운행 중' : '출발 대기'}</td>
+                  <td>${escapeHtml(driver.name || driver.username || driver.id)}</td>
+                  <td>${escapeHtml(trip.dest_name || `상차 ${trip.loading_count || 0}건 / 하차 ${trip.unloading_count || 0}건`)}</td>
+                  <td>${escapeHtml(formatCardETA(trip, driver.id) || '-')}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderDashboardSection() {
+      const host = document.getElementById('section-host');
+      if (!host) return;
+      const driverCards = driversCache.length
+        ? driversCache.map(d => {
+            const trip = tripsCache[d.id];
+            const isRunning = trip?.status === 'in_progress';
+            const isScheduled = trip?.status === 'scheduled';
+            return `
+              <div class="driver-card ${d.id === currentDriverId ? 'active' : ''}" id="card-${d.id}" onclick="showDriverDetail('${d.id}')">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <strong style="font-size:15px;">${escapeHtml(d.name || d.username || d.id)} 기사</strong>
+                  <span class="status-badge ${isRunning ? 'bg-green' : isScheduled ? 'bg-orange' : ''}" style="${!isRunning && !isScheduled ? 'background:#727b91' : ''}">${isRunning ? '운행 중' : isScheduled ? '출발 대기' : '대기 중'}</span>
+                </div>
+                <small style="color:#aeb6c7;display:block;margin-top:7px;">${trip ? escapeHtml(trip.dest_name || `상차 ${trip.loading_count || 0}건 / 하차 ${trip.unloading_count || 0}건`) : '배차 없음'}</small>
+                ${isRunning ? `<small id="card-eta-${d.id}" style="color:#cfd5df;display:block;margin-top:4px;font-size:11px;">${escapeHtml(formatCardETA(trip, d.id))}</small>` : ''}
+                ${trip?.cancel_requested ? '<small style="color:#ffb74d;display:block;margin-top:4px;font-size:11px;font-weight:bold;">배차 취소 요청</small>' : ''}
+              </div>`;
+          }).join('')
+        : renderEmptyState('등록된 기사 없음', '기사 데이터가 로드되면 이 영역에 표시됩니다.');
+
+      host.innerHTML = `
+        <section class="section-view">
+          ${renderSectionHeader('관제 대시보드', '기사 위치, 배차 상태, 진행 중 운행을 한 화면에서 확인합니다.',
+            `<button class="dark-btn primary" onclick="setSection('dispatch')">배차 생성</button>`)}
+          <div class="dashboard-grid">
+            <div class="dashboard-left">
+              ${renderDriverSummaryCards(driversCache, tripsCache)}
+              <div class="driver-grid">${driverCards}</div>
+              ${renderActiveTripsTable(driversCache, tripsCache)}
+            </div>
+            <div class="dashboard-right">
+              <p class="dash-map-caption">실시간 기사 위치</p>
+              <div class="dash-map-zone"></div>
+              <div class="ops-card">
+                <h3 style="margin:0 0 10px;color:#f6f7fb;">관제 메모</h3>
+                <div style="color:#aeb6c7;font-size:13px;line-height:1.6;">지도 클릭은 대시보드와 배차 섹션 모두에서 유지됩니다. 장소 핀에서 상차지/하차지를 태스크에 추가할 수 있습니다.</div>
+              </div>
+            </div>
+          </div>
+        </section>`;
+      driversCache.forEach(d => updateDriverUnreadBadge(d.id, driverUnreadCounts[d.id] || 0));
+    }
+
+    function renderDispatchSection() {
+      const host = document.getElementById('section-host');
+      if (!host) return;
+      const src = document.querySelector('#right-panel #new-trip-section');
+      const builderHtml = src ? src.innerHTML : '';
+      host.innerHTML = `
+        <section class="section-view dispatch-layout">
+          <aside class="dispatch-builder">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <div>
+                <h1 style="margin:0;color:#f6f7fb;font-size:20px;">배차</h1>
+                <p style="margin:5px 0 0;color:#8b93a7;font-size:12px;">지도 검색과 클릭으로 태스크를 구성합니다.</p>
+              </div>
+              <button class="dark-btn primary" onclick="openAutoDispatchModal()">일괄배차</button>
+            </div>
+            <div id="new-trip-section" style="display:block;">${builderHtml}</div>
+          </aside>
+          <div class="dispatch-map-hint">지도를 클릭해 장소 핀을 만들고 상차지/하차지로 추가하세요.</div>
+        </section>`;
+      initTripBuilder();
+    }
+
+    function renderDriversSection() {
+      const host = document.getElementById('section-host');
+      if (!host) return;
+      const pending = driversCache.filter(d => d.is_approved === false || d.approved === false || d.status === 'pending');
+      const rows = driversCache.map(d => {
+        const trip = tripsCache[d.id];
+        return `
+          <tr class="clickable" onclick="showDriverDetail('${d.id}')">
+            <td>${escapeHtml(d.name || d.username || d.id)}</td>
+            <td>${escapeHtml(d.phone || d.phone_number || '-')}</td>
+            <td>${trip ? escapeHtml(trip.status === 'in_progress' ? '운행 중' : '출발 대기') : '대기 중'}</td>
+            <td>${trip ? escapeHtml(trip.dest_name || `상차 ${trip.loading_count || 0}건 / 하차 ${trip.unloading_count || 0}건`) : '-'}</td>
+          </tr>`;
+      }).join('');
+      host.innerHTML = `
+        <section class="section-view">
+          ${renderSectionHeader('기사관리', `승인 대기 ${pending.length}명 · 전체 ${driversCache.length}명`,
+            '<a class="dark-btn" href="/drivers.html">기존 기사관리 열기</a>')}
+          <div class="management-card">
+            ${driversCache.length ? `
+              <table class="ops-table">
+                <thead><tr><th>기사</th><th>연락처</th><th>상태</th><th>현재 운행</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>` : renderEmptyState('기사 없음', '등록된 기사 데이터가 없습니다.')}
+          </div>
+        </section>`;
+    }
+
+    async function loadVehiclesForDashboard() {
+      try {
+        const res = await fetch(`${API}/vehicles`, { headers: authHeaders() });
+        vehiclesDashboardCache = res.ok ? await res.json() : [];
+      } catch(e) {
+        vehiclesDashboardCache = [];
+      }
+      return vehiclesDashboardCache;
+    }
+
+    function renderVehicleRows(vehicles) {
+      if (!vehicles.length) return '';
+      return vehicles.map(v => `
+        <tr>
+          <td>${escapeHtml(v.plate_number || v.plate || '-')}</td>
+          <td>${escapeHtml(v.vehicle_type || v.type || '-')}</td>
+          <td>${escapeHtml(v.model || '-')}</td>
+          <td>${escapeHtml(v.status || '-')}</td>
+        </tr>`).join('');
+    }
+
+    async function renderVehiclesSection() {
+      const host = document.getElementById('section-host');
+      if (!host) return;
+      host.innerHTML = `
+        <section class="section-view">
+          ${renderSectionHeader('차량관리', '등록 차량과 차량 기본 정보를 확인합니다.',
+            '<a class="dark-btn" href="/vehicles.html">기존 차량관리 열기</a>')}
+          <div class="management-card"><div class="empty-state">차량 목록 로드 중...</div></div>
+        </section>`;
+      const vehicles = await loadVehiclesForDashboard();
+      if (currentSection !== 'vehicles') return;
+      host.querySelector('.management-card').innerHTML = vehicles.length ? `
+        <table class="ops-table">
+          <thead><tr><th>차량번호</th><th>유형</th><th>모델</th><th>상태</th></tr></thead>
+          <tbody>${renderVehicleRows(vehicles)}</tbody>
+        </table>` : renderEmptyState('차량 없음', '조회된 차량 데이터가 없습니다.', '<a class="dark-btn" href="/vehicles.html">차량관리 페이지</a>');
+    }
+
+    function renderStatsSection() {
+      const host = document.getElementById('section-host');
+      if (!host) return;
+      const stats = getDashboardStats(driversCache, tripsCache);
+      host.innerHTML = `
+        <section class="section-view">
+          ${renderSectionHeader('운행통계', '현재 대시보드 캐시 기준의 간단 요약입니다.',
+            '<a class="dark-btn" href="/stats.html">상세 통계 열기</a>')}
+          <div class="metric-grid">
+            <div class="metric-card"><div class="metric-label">전체 기사</div><div class="metric-value">${driversCache.length}명</div></div>
+            <div class="metric-card"><div class="metric-label">활성 운행</div><div class="metric-value">${stats.activeTrips}건</div></div>
+            <div class="metric-card"><div class="metric-label">대기 기사</div><div class="metric-value">${stats.idle}명</div></div>
+          </div>
+          ${renderActiveTripsTable(driversCache, tripsCache)}
+        </section>`;
+    }
+
+    function renderManagementToolbar(sectionName) {
+      return sectionName;
+    }
+
+    function focusDriverOnMap(driverId) {
+      const pos = driverCurrentPositions[driverId];
+      if (pos && map) map.panTo(new kakao.maps.LatLng(pos.lat, pos.lon));
+    }
+
+    function openTripDrawer(driverId) {
+      return showDriverDetail(driverId);
     }
 
     function createCustomMarkerElement(name, id) {
@@ -1007,7 +1643,7 @@
       // 우측 패널
       const driverCard = document.getElementById(`card-${id}`);
       const driverName = driverCard ? driverCard.querySelector('strong').innerText : id;
-      document.getElementById('right-panel').style.display = 'flex';
+      document.getElementById('right-panel').classList.add('open');
       document.getElementById('detail-name').innerText = driverName;
 
       // 운행 정보 박스
@@ -1239,9 +1875,10 @@
     }
 
     function hideRightPanel() {
-      document.getElementById('right-panel').style.display = 'none';
+      document.getElementById('right-panel').classList.remove('open');
       document.getElementById('route-nodes-box').style.display = 'none';
-      document.getElementById('new-trip-section').style.display = 'none';
+      const newTripSection = document.querySelector('#right-panel #new-trip-section');
+      if (newTripSection) newTripSection.style.display = 'none';
       currentDriverId = null;
       cancelEmergencyLoading();
       hideNodePopup();
@@ -1391,7 +2028,7 @@
     }
 
     async function renderNewTripSection(trip) {
-      const section = document.getElementById('new-trip-section');
+      const section = document.querySelector('#right-panel #new-trip-section');
       if (!section) return;
       const hasActiveTrip = trip && ['scheduled', 'in_progress'].includes(trip.status);
       if (hasActiveTrip) {
@@ -1843,7 +2480,7 @@
       const vehicleId = document.getElementById('rp-vehicle').value;
       const departure = document.getElementById('rp-departure').value;
 
-      if (!currentDriverId) return alert('좌측 패널에서 기사를 먼저 선택하세요.');
+      if (!currentDriverId) return alert('대시보드에서 기사를 먼저 선택하세요.');
       if (!vehicleId)        return alert('차량을 선택하세요.');
       if (tbTasks.length === 0) return alert('태스크를 1개 이상 추가하세요.');
       const incomplete = tbTasks.findIndex(t => !t.loadings.length || t.loadings.every(l => !l));
@@ -2165,6 +2802,7 @@
         kakao.maps.load(() => {
           initMap();
           initMapSearch();
+          initShellNavigation();
           loadDrivers().then(async () => {
             // 초기 로드: 모든 기사의 마지막 위치 조회 → 마커 생성
             await Promise.all(driversCache.map(async d => {
