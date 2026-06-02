@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from database import init_db
-from routers import misc, vehicles, trips, optimize, dispatch, organizations, chat, deliveries, location, stats
+from routers import misc, vehicles, trips, optimize, dispatch, organizations, chat, deliveries, location, stats, customers
 from routers import auth as auth_router
 
 
@@ -57,3 +57,4 @@ app.include_router(chat.router)
 app.include_router(deliveries.router)
 app.include_router(location.router)
 app.include_router(stats.router)
+app.include_router(customers.router)

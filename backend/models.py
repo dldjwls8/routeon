@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Float, Integer, Boolean,
-    DateTime, ForeignKey, Text, Enum as SAEnum,
+    DateTime, Date, ForeignKey, Text, Enum as SAEnum,
     Index, UniqueConstraint
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -304,3 +304,23 @@ class Preset(Base):
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     organization = relationship("Organization")
+
+
+# ────────────────────────────────────────────────
+# customers  (거래처 마스터)
+# ────────────────────────────────────────────────
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    name            = Column(String(100), nullable=False)
+    contact         = Column(String(100))      # 담당자명
+    phone           = Column(String(20))
+    address         = Column(String(255))
+    memo            = Column(Text)
+    temporary       = Column(Boolean, nullable=False, default=False)
+    valid_date      = Column(Date)             # 임시 화주 유효일 (YYYY-MM-DD)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    organization    = relationship("Organization")

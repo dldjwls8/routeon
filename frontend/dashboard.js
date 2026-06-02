@@ -30,6 +30,8 @@
   let _trajectoryPolyline = null;
   let _miniMapInstance = null;
   let _miniMapMarkers = [];
+  let _tripRouteMapInstance = null;
+  let _tripRoutePolyline = null;
 
   function getToken() { return localStorage.getItem('token'); }
   function getAuthHeaders() {
@@ -470,6 +472,25 @@
           name: u.name || u.username,
           phone: u.phone || '',
           created_at: u.created_at,
+        }));
+      }
+
+      // 고객(거래처) 목록
+      const cr = await fetch(`${API}/customers`, { headers: hdrs });
+      if (cr.ok) {
+        const customers = await cr.json();
+        DATA.customers = customers.map(c => ({
+          id:              c.id,
+          name:            c.name,
+          contact:         c.contact || '',
+          phone:           c.phone || '',
+          address:         c.address || '',
+          memo:            c.memo || '',
+          temporary:       !!c.temporary,
+          valid_date:      c.valid_date || null,
+          totalShipments:  0,
+          lastOrderDate:   null,
+          shipmentHistory: [],
         }));
       }
 
@@ -1067,26 +1088,28 @@
           <label>연락처</label><input name="phone" placeholder="010-0000-0000">
           <label>메모</label><input name="memo" value="당일 의뢰" placeholder="당일 의뢰">
         </div>
-      </form>`, () => {
+      </form>`, async () => {
       const form = $('#tempCustForm');
       if (!form) return;
-      const name = form.querySelector('[name="name"]').value.trim();
+      const name  = form.querySelector('[name="name"]').value.trim();
       const phone = form.querySelector('[name="phone"]').value.trim();
-      const memo = form.querySelector('[name="memo"]').value.trim() || '당일 의뢰';
-      const created = {
-        id: nextCustomerId(),
-        name,
-        contact: name,
-        phone,
-        address: '',
-        temporary: true,
-        valid_date: mockToday(),
-        memo,
-        totalShipments: 0,
-        lastOrderDate: mockToday(),
-        shipmentHistory: [],
-      };
-      DATA.customers.push(created);
+      const memo  = form.querySelector('[name="memo"]').value.trim() || '당일 의뢰';
+      const today = mockToday();
+      const res = await fetch(`${API}/customers`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone: phone || null, memo, temporary: true, valid_date: today }),
+      });
+      let created;
+      if (res.ok) {
+        const saved = await res.json();
+        created = { ...saved, contact: saved.contact || name, totalShipments: 0, lastOrderDate: today, shipmentHistory: [] };
+        DATA.customers.push(created);
+      } else {
+        // API 실패 시 로컬 fallback
+        created = { id: nextCustomerId(), name, contact: name, phone, address: '', temporary: true, valid_date: today, memo, totalShipments: 0, lastOrderDate: today, shipmentHistory: [] };
+        DATA.customers.push(created);
+      }
       toast(`임시 화주 «${name}» 등록 (당일)`);
       if (onSaved) onSaved(created);
     });
@@ -1200,11 +1223,21 @@
   function bindCustomerDetail(root, c) {
     const card = $('#inlineDetail', root);
     $('#inlineDetailBack', root).onclick = () => { selectedCustomerId = null; customerDetailTab = 'info'; renderPage(); };
-    $('#inlineDetailSave', root).onclick = () => {
-      c.contact = $('#custContact', root).value.trim() || c.contact;
-      c.phone = $('#custPhone', root).value.trim() || c.phone;
-      c.address = $('#custAddress', root).value.trim() || c.address;
-      toast('고객 정보가 저장되었습니다 (목업)');
+    $('#inlineDetailSave', root).onclick = async () => {
+      const contact = $('#custContact', root).value.trim();
+      const phone   = $('#custPhone', root).value.trim();
+      const address = $('#custAddress', root).value.trim();
+      const res = await fetch(`${API}/customers/${c.id}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact: contact || null, phone: phone || null, address: address || null }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패'); return; }
+      const saved = await res.json();
+      const idx = DATA.customers.findIndex(x => x.id === c.id);
+      if (idx >= 0) Object.assign(DATA.customers[idx], saved);
+      Object.assign(c, saved);
+      toast('고객 정보가 저장되었습니다');
       renderPage();
     };
     bindDetailTabs(card);
@@ -1364,7 +1397,9 @@
       <p style="font-size:13px">상차 체류: <strong>${t.dwellPickup}</strong><br>하차 체류: <strong>${t.dwellDelivery}</strong></p>
       <h4 style="color:var(--text-muted);margin-top:16px">인수인계 이력</h4>
       ${hist}
-      <p style="font-size:11px;color:var(--text-muted);margin-top:12px">계획 vs 실제·재경로·휴게소 상세는 관제 화면에 표시하지 않습니다.</p>`;
+      <p style="font-size:11px;color:var(--text-muted);margin-top:12px">계획 vs 실제·재경로·휴게소 상세는 관제 화면에 표시하지 않습니다.</p>
+      <h4 style="margin-top:16px">경로 지도</h4>
+      <div id="tripRouteMapCanvas" style="width:100%;height:260px;background:var(--bg-card);border-radius:8px;overflow:hidden;margin-top:8px"></div>`;
   }
 
   function selectTrip(id) {
@@ -2370,14 +2405,47 @@
   function customerModal(c) {
     const isEdit = !!c;
     openModal(isEdit ? '고객 수정' : '고객 추가', `
-      <form>
+      <form id="custModalForm">
         <div class="form-grid" style="max-width:100%">
           <label>고객명 *</label><input name="name" required value="${c?.name || ''}">
           <label>담당자</label><input name="contact" value="${c?.contact || ''}">
           <label>연락처</label><input name="phone" value="${c?.phone || ''}">
           <label>주소</label><input name="address" value="${c?.address || ''}">
         </div>
-      </form>`);
+      </form>`, async () => {
+      const form = $('#custModalForm');
+      if (!form) return;
+      const name    = form.querySelector('[name="name"]').value.trim();
+      const contact = form.querySelector('[name="contact"]').value.trim();
+      const phone   = form.querySelector('[name="phone"]').value.trim();
+      const address = form.querySelector('[name="address"]').value.trim();
+      if (!name) { toast('고객명을 입력하세요'); return; }
+      const body = { name, contact: contact || null, phone: phone || null, address: address || null };
+      let res;
+      if (isEdit) {
+        res = await fetch(`${API}/customers/${c.id}`, {
+          method: 'PATCH',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${API}/customers`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      }
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패'); return; }
+      const saved = await res.json();
+      if (isEdit) {
+        const idx = DATA.customers.findIndex(x => x.id === c.id);
+        if (idx >= 0) Object.assign(DATA.customers[idx], saved);
+      } else {
+        DATA.customers.push({ ...saved, shipmentHistory: [], totalShipments: 0, lastOrderDate: null });
+      }
+      toast(isEdit ? '고객 정보 수정됨' : '고객이 등록됐습니다');
+      renderPage();
+    });
   }
 
   function renderCustomerLoc(root) {
@@ -3324,6 +3392,8 @@
       $('#inlineDetailBack', root).onclick = () => { selectedTripId = null; renderPage(); };
       $('#inlineDetailSave', root).onclick = () => { selectedTripId = null; renderPage(); };
       bindHandoverActions(root, tripSelected);
+      const tripMapEl = root.querySelector('#tripRouteMapCanvas');
+      if (tripMapEl) showTripRoutePolyline(tripMapEl, tripSelected.id);
     }
   }
 
@@ -3382,6 +3452,52 @@
       map.setBounds(bounds);
     }
     toast(`${driverName} 궤적 표시 (${coords.length}개 포인트)`);
+  }
+
+  async function showTripRoutePolyline(el, tripId) {
+    if (!el || !window.kakao?.maps) return;
+    if (_tripRoutePolyline) { _tripRoutePolyline.setMap(null); _tripRoutePolyline = null; }
+    _tripRouteMapInstance = new kakao.maps.Map(el, {
+      center: new kakao.maps.LatLng(36.5, 127.5),
+      level: 10,
+    });
+    kakao.maps.event.trigger(_tripRouteMapInstance, 'resize');
+
+    const res = await fetch(`${API}/trips/${tripId}/polyline`, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      el.innerHTML = '<p style="padding:24px;text-align:center;color:var(--text-muted)">경로 데이터 없음 (최적화 전)</p>';
+      return;
+    }
+    const data = await res.json();
+    if (!data.polyline?.length) {
+      el.innerHTML = '<p style="padding:24px;text-align:center;color:var(--text-muted)">경로 좌표 없음</p>';
+      return;
+    }
+
+    const path = data.polyline.map(p => new kakao.maps.LatLng(p.lat, p.lon));
+    _tripRoutePolyline = new kakao.maps.Polyline({
+      path,
+      strokeWeight: 4,
+      strokeColor: '#4f7cff',
+      strokeOpacity: 0.9,
+      strokeStyle: 'solid',
+      map: _tripRouteMapInstance,
+    });
+
+    const bounds = new kakao.maps.LatLngBounds();
+    path.forEach(p => bounds.extend(p));
+    _tripRouteMapInstance.setBounds(bounds);
+
+    const nodeIcon = { origin: '🏁', destination: '🏴', waypoint: '📦', rest_stop: '☕' };
+    (data.nodes || []).forEach(n => {
+      const icon = nodeIcon[n.type] || '📍';
+      new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(n.lat, n.lon),
+        content: `<div style="background:#fff;border:1px solid #ccc;border-radius:4px;padding:2px 6px;font-size:11px;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">${icon} ${n.name}</div>`,
+        yAnchor: 1.5,
+        map: _tripRouteMapInstance,
+      });
+    });
   }
 
   function intakePlaceInput(name, value, required, tabindex) {

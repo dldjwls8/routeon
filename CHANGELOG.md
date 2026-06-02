@@ -6,6 +6,21 @@
 
 ---
 
+## v1.0.41 (2026-06-02)
+
+### 대시보드 실 API 연동 — 중간 우선순위 잔여 2종
+
+**백엔드**
+- **거래처 CRUD API 신규 구현**: `Customer` 모델 추가 (`customers` 테이블), `/customers` GET/POST/PATCH/DELETE (조직별 격리)
+- `Date` 컬럼 추가 (임시 화주 유효일 `valid_date`)
+
+**프론트엔드**
+- **Trip 경로 폴리라인**: Trip 상세 패널에 경로 지도 추가 → `GET /trips/{id}/polyline` 호출 + `showTripRoutePolyline()` (독립 카카오맵 인스턴스, 노드 오버레이)
+- **고객(거래처) 저장 실 API 연동**: `customerModal()` → `POST /customers` / `PATCH /customers/{id}`, `bindCustomerDetail()` 저장 → `PATCH /customers/{id}`, `openTempCustomerModal()` → `POST /customers` (임시 화주), `loadRealData()` → `GET /customers`
+- 전역 변수 `_tripRouteMapInstance`, `_tripRoutePolyline` 추가
+
+---
+
 ## v1.0.40 (2026-06-02)
 
 ### 대시보드 실 API 연동 — 중간 우선순위 5종

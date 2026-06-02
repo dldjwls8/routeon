@@ -395,6 +395,10 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `GET /presets` | 관리자 | 같은 조직의 경유지 프리셋 목록 (최신순) |
 | `POST /presets` | 관리자 | 프리셋 저장 `{name, waypoints}` |
 | `DELETE /presets/{id}` | 관리자 | 프리셋 삭제 (같은 조직만) |
+| `GET /customers` | 관리자 | 같은 조직 거래처 목록 |
+| `POST /customers` | 관리자 | 거래처 등록 `{name, contact?, phone?, address?, memo?, temporary, valid_date?}` |
+| `PATCH /customers/{id}` | 관리자 | 거래처 수정 |
+| `DELETE /customers/{id}` | 관리자 | 거래처 삭제 |
 | `WS /ws/location` | 로그인 | 실시간 위치 + 재경로 알림 WebSocket. 관리자→GPS 수신, 기사→replan_requested 수신 |
 
 ### 통계
@@ -578,8 +582,8 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **고객 위치 지도** — `map-placeholder` → 카카오맵 마커 (`initCustomerLocMap`) 배송지 좌표 표시
 - [x] **통계 일별 그래프** — `GET /stats/by-day` SVG 막대 그래프 (`renderByDayChart`) 조회 버튼 연동
 - [x] **기사·차량 교체/대차** — 목업 배너 제거 + `PATCH /trips/{id}/reassign` 실 연동
-- [ ] **Trip 경로 폴리라인** — `map-placeholder` → 실제 카카오맵 + `GET /trips/{id}/polyline`
-- [ ] **고객(거래처) 저장** — toast(목업) → 고객 CRUD API 설계 및 엔드포인트 신규 구현
+- [x] **Trip 경로 폴리라인** — Trip 상세 패널 `tripRouteMapCanvas` + `showTripRoutePolyline()` + `GET /trips/{id}/polyline`
+- [x] **고객(거래처) 저장** — `GET/POST/PATCH/DELETE /customers` 신규 구현, `customerModal` · `bindCustomerDetail` · `openTempCustomerModal` 연동
 
 #### 낮은 우선순위 (Phase 2)
 - [ ] **채팅 알림 (dashboard)** — 알림 드롭다운에 unread 메시지 표시 (WS `/ws/chat` 수신 연동)

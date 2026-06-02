@@ -178,6 +178,25 @@
 
 ---
 
+### `customers`
+
+거래처 마스터. 조직 단위로 격리, 임시 화주(당일 의뢰용) 포함.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `id` | INTEGER | PK AUTOINCREMENT | |
+| `organization_id` | INTEGER | FK → organizations.id | 소속 조직 |
+| `name` | VARCHAR(100) | NOT NULL | 거래처명 |
+| `contact` | VARCHAR(100) | NULLABLE | 담당자명 |
+| `phone` | VARCHAR(20) | NULLABLE | 연락처 |
+| `address` | VARCHAR(255) | NULLABLE | 주소 |
+| `memo` | TEXT | NULLABLE | 메모 |
+| `temporary` | BOOLEAN | NOT NULL DEFAULT FALSE | 임시 화주 여부 (당일 의뢰용) |
+| `valid_date` | DATE | NULLABLE | 임시 화주 유효일 (YYYY-MM-DD) |
+| `created_at` | DATETIME | NOT NULL | |
+
+---
+
 ### `locations`
 
 GPS 이동 이력. TimescaleDB hypertable (7일 retention).
