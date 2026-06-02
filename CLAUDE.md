@@ -83,8 +83,8 @@ routeon/
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
-    ├── dashboard.css       대시보드 스타일 (2,204줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (4,490줄, dashboard.html에서 분리)
+    ├── dashboard.css       대시보드 스타일 (2,226줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (4,491줄, dashboard.html에서 분리)
     ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
     ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
@@ -573,6 +573,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] vehicles `weight_kg` 필드명 불일치 버그 수정 — API 응답 `weight_kg`를 프론트가 `max_load_kg`로 접근 → 톤수 항상 "0.0톤" 표시, `loadRealData`·`vehiclePreviewHtml`·`applyVehicleMetaToRow`·일괄배차 프리뷰 4개소 수정
 - [x] 대시보드 필터 클릭 시 지도 사라짐 버그 수정 — `renderDashboard()` 내 `root.innerHTML` 실행 전에 `hideDashboardMap()` 호출 추가, `#map-container` 파괴 방지
 - [x] 다크모드 모달 흰 배경 버그 수정 — `.modal { background: #fff }` 하드코딩 → `var(--dark-card)`, `.modal-hd/.modal-ft` 보더 `var(--dark-border)`, 모달 내 input/select/textarea 다크 스타일, 라이트모드 오버라이드
+- [x] UI 레이아웃 버그 4건 수정 — 접수 버튼 sticky 고정, 좌우 패널 `grid-template-rows:1fr`로 높이 일치, 고객위치 맵 재로드 시 `_miniMapInstance` 초기화, 자기사·차량 좌측 패널 높이 채움
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)

@@ -6,6 +6,15 @@
 
 ---
 
+## v1.0.50 (2026-06-02)
+### UI 레이아웃 버그 4건 수정
+- **접수 버튼 벗어남**: `.intake-actions`에 `position:sticky;bottom:0` 적용, `.intake-viewport` 레이아웃을 `height:100%` 기반 → flex 기반으로 교체
+- **좌우 패널 높이·위치 어긋남**: `.master-detail-split`에 `grid-template-rows:1fr` 추가, `.master-detail-list/.master-detail-pane`에 `height:100%` 추가, `inline-detail margin-top:0` 재정의
+- **고객 위치 두 번째 로드 안뜸**: `renderCustomerLoc()` 진입 시 `_miniMapInstance = null` 초기화 → 매 렌더마다 새 카카오맵 인스턴스 생성
+- **자기사·차량 좌측 패널 미채움**: 위 `grid-template-rows:1fr` 수정으로 동시 해결
+
+---
+
 ## v1.0.49 (2026-06-02)
 ### 대시보드 필터 클릭 시 지도 사라짐 버그 수정
 - **원인**: `renderDashboard(root)` 내 `root.innerHTML = ...` 실행 시 `.dash-map-card` 안에 있던 `#map-container`가 같이 파괴됨 → `showDashboardMap()`에서 `getElementById('map-container')` null 반환 → 지도 미복원
