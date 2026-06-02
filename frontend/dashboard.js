@@ -2604,6 +2604,7 @@
   }
 
   function renderCustomerLoc(root) {
+    _miniMapInstance = null;
     const custOpts = DATA.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     root.innerHTML = `
       <div class="page-sticky-top">
@@ -4103,7 +4104,7 @@
         ${pageChromeHtml('order-intake', { desc: '화주·상·하차 입력 · Enter 대기열 · 저장 후 배차·지정' })}
         </div>
         <form id="intakeForm" class="page-body-fill intake-viewport">
-          <div class="card intake-compact" style="margin-bottom:0;height:100%;display:flex;flex-direction:column;min-height:0">
+          <div class="card intake-compact" style="margin-bottom:0;flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="card-hd intake-hd">
               <h2>배송 접수</h2>
               <div class="intake-hd-meta">
