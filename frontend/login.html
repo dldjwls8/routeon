@@ -3,51 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <title>루트온 - 로그인</title>
+  <script>
+    (function () {
+      var s = localStorage.getItem('theme');
+      var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', s || (d ? 'dark' : 'light'));
+    })();
+  </script>
   <style>
-    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f4f7f6; font-family: 'Malgun Gothic', sans-serif; }
-    .auth-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 350px; text-align: center; }
+    :root {
+      --lime: #c6f135;
+      --t-bg: #0c0e12;
+      --t-card: #1c2029;
+      --t-border: rgba(255,255,255,.08);
+      --t-text: #e8eaef;
+      --t-text-strong: #f3f4f6;
+      --t-text-muted: #8b93a7;
+      --t-input-bg: #151820;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --t-bg: #f5f7fa;
+      --t-card: #ffffff;
+      --t-border: #e2e8f0;
+      --t-text: #1e2230;
+      --t-text-strong: #0f1117;
+      --t-text-muted: #5c6478;
+      --t-input-bg: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: var(--t-bg); font-family: 'Malgun Gothic', sans-serif; }
+    .auth-card { background: var(--t-card); padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.2); width: 350px; text-align: center; border: 1px solid var(--t-border); }
     .logo-img { height: 50px; margin-bottom: 20px; }
-    h2 { margin: 0 0 20px 0; color: #333; }
-    input { width: 100%; box-sizing: border-box; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
-    input:focus { border-color: #FFE812; outline: none; }
-    .btn { width: 100%; padding: 12px; background: #FFE812; color: #333; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-    .btn:hover { background: #e5cf00; }
-    .link { display: block; margin-top: 15px; font-size: 14px; color: #555; text-decoration: none; }
-    .link:hover { text-decoration: underline; color: #333; }
+    h2 { margin: 0 0 20px 0; color: var(--t-text-strong); font-size: 20px; }
+    input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1px solid var(--t-border); border-radius: 6px; font-size: 14px; background: var(--t-input-bg); color: var(--t-text); outline: none; }
+    input:focus { border-color: var(--lime); }
+    input::placeholder { color: var(--t-text-muted); }
+    .btn { width: 100%; padding: 12px; background: var(--lime); color: #111; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 4px; }
+    .btn:hover { background: #a8d42e; }
+    .link { display: block; margin-top: 16px; font-size: 13px; color: var(--t-text-muted); text-decoration: none; }
+    .link:hover { color: var(--t-text); text-decoration: underline; }
   </style>
 </head>
 <body>
-
   <div class="auth-card">
     <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
     <h2>로그인</h2>
-    
     <form id="loginForm">
       <input type="text" id="username" placeholder="아이디" required>
       <input type="password" id="password" placeholder="비밀번호" required>
       <button type="submit" class="btn">로그인</button>
     </form>
-    
     <a href="/register.html" class="link">관리자 계정이 없으신가요? 가입하기</a>
   </div>
 
   <script>
-    const API = 'http://168.138.45.63:8000';
+    const API = (() => {
+      const h = location.hostname;
+      return (h === 'localhost' || h === '127.0.0.1') ? 'http://localhost:8000' : `${location.protocol}//${h}:8000`;
+    })();
 
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (!localStorage.getItem('theme')) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async e => {
       e.preventDefault();
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
-
       const res = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
-
       const data = await res.json();
       if (res.ok && data.access_token) {
-        // JWT 토큰 저장
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('user_id', data.user_id);
         localStorage.setItem('username', data.username);

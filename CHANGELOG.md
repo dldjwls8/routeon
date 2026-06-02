@@ -6,6 +6,29 @@
 
 ---
 
+## v1.0.36 (2026-06-02)
+
+### 기능 개선 — login / index / chat 페이지 다크·라이트 테마 지원
+
+**프론트엔드 (login.html)**
+- CSS 변수 기반 테마 시스템 적용 (`--t-bg`, `--t-card`, `--t-border`, `--t-text-*`)
+- `html[data-theme="light"]` 오버라이드 추가
+- FOUC 방지 인라인 스크립트, OS 변경 리스너 추가
+- 로그인 버튼 색상 Routeon lime(`#c6f135`)으로 통일
+- API URL 동적 감지 방식으로 변경 (하드코딩 IP 제거)
+
+**프론트엔드 (index.html)**
+- `--t-*` 시맨틱 토큰 추가, `html[data-theme="dark"]` 오버라이드 추가
+- body, nav, hero-card, feature-card, tech-chip, cta-section 등 테마 변수 적용
+- FOUC 방지 인라인 스크립트, OS 변경 리스너 추가
+
+**프론트엔드 (chat.html)**
+- CSS 변수 기반 테마 시스템 전면 적용 (사이드바·메시지 영역·입력창)
+- 내 메시지 버블 색상 lime(`#c6f135`)으로 통일
+- FOUC 방지 인라인 스크립트, OS 변경 리스너 추가
+
+---
+
 ## v1.0.35 (2026-06-02)
 
 ### 기능 개선 — 테마 설정 settings.html 이관 + UI 통일
