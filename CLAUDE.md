@@ -573,13 +573,13 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **pending 기사 승인** — dashboard에서 승인 대기 목록 표시 + `POST /auth/approve/{user_id}` 연동
 
 #### 중간 우선순위
-- [ ] **Trip 상태 변경 UI** — 관리자가 완료/취소 처리 → `PATCH /trips/{id}/status`
+- [x] **Trip 상태 변경 UI** — `tripDetailBodyHtml` 완료/취소 버튼 + `PATCH /trips/{id}/status` 연동
+- [x] **Trip 궤적 지도 (통계 페이지)** — 기사별 실적 행 클릭 → `GET /stats/route-history` + 카카오맵 폴리라인
+- [x] **고객 위치 지도** — `map-placeholder` → 카카오맵 마커 (`initCustomerLocMap`) 배송지 좌표 표시
+- [x] **통계 일별 그래프** — `GET /stats/by-day` SVG 막대 그래프 (`renderByDayChart`) 조회 버튼 연동
+- [x] **기사·차량 교체/대차** — 목업 배너 제거 + `PATCH /trips/{id}/reassign` 실 연동
 - [ ] **Trip 경로 폴리라인** — `map-placeholder` → 실제 카카오맵 + `GET /trips/{id}/polyline`
-- [ ] **Trip 궤적 지도 (통계 페이지)** — `map-placeholder` → `GET /stats/route-history` + 카카오맵 폴리라인
 - [ ] **고객(거래처) 저장** — toast(목업) → 고객 CRUD API 설계 및 엔드포인트 신규 구현
-- [ ] **고객 위치 지도** — `map-placeholder` → 카카오맵 마커 + `GET /address/coord` 좌표 변환
-- [ ] **통계 추가 표시** — `GET /stats/by-day`, `GET /stats/by-driver-day` 그래프 연동
-- [ ] **기사·차량 교체/대차** — 목업 배너 → `PATCH /trips/{id}/reassign` 실 연동 (백엔드 완성)
 
 #### 낮은 우선순위 (Phase 2)
 - [ ] **채팅 알림 (dashboard)** — 알림 드롭다운에 unread 메시지 표시 (WS `/ws/chat` 수신 연동)

@@ -27,6 +27,9 @@
   let map = null;
   let _driverMarkers = {};
   let _locationWS = null;
+  let _trajectoryPolyline = null;
+  let _miniMapInstance = null;
+  let _miniMapMarkers = [];
 
   function getToken() { return localStorage.getItem('token'); }
   function getAuthHeaders() {
@@ -374,12 +377,12 @@
       if (sr.ok) {
         const s = await sr.json();
         Object.assign(DATA.statsSummary, {
-          completed: s.completed || 0,
-          inProgress: s.in_progress || 0,
-          cancelled: s.cancelled || 0,
-          incomplete: s.incomplete || 0,
-          assignedOk: s.assigned_ok || 0,
-          assignedPending: s.assigned_pending || 0,
+          completed: s.by_status?.completed || 0,
+          inProgress: s.by_status?.in_progress || 0,
+          cancelled: s.by_status?.cancelled || 0,
+          incomplete: s.by_status?.scheduled || 0,
+          assignedOk: s.assigned_deliveries || 0,
+          assignedPending: s.unassigned_deliveries || 0,
           safetyIssues: s.safety_issues || 0,
         });
       }
@@ -389,13 +392,14 @@
       if (dbdr.ok) {
         const rows = await dbdr.json();
         DATA.driverStats = rows.map(r => ({
-          name: r.name || '',
-          trips: r.trip_count || 0,
-          hoursSum: r.total_duration_min != null ? `${Math.floor(r.total_duration_min/60)}h ${r.total_duration_min%60}m` : '—',
-          hoursAvg: r.avg_duration_min != null ? `${Math.floor(r.avg_duration_min/60)}h ${r.avg_duration_min%60}m` : '—',
+          name: r.name || r.username || '',
+          driverId: r.driver_id,
+          trips: r.total_trips || 0,
+          hoursSum: r.total_duration_min != null ? `${Math.floor(r.total_duration_min/60)}h ${Math.round(r.total_duration_min%60)}m` : '—',
+          hoursAvg: r.avg_duration_min != null ? `${Math.floor(r.avg_duration_min/60)}h ${Math.round(r.avg_duration_min%60)}m` : '—',
           distSum: r.total_distance_km != null ? `${Math.round(r.total_distance_km)} km` : '—',
-          distAvg: r.avg_distance_km != null ? `${Math.round(r.avg_distance_km)} km` : '—',
-          days: r.active_days || 0,
+          distAvg: '—',
+          days: r.work_days || 0,
         }));
       }
 
@@ -409,8 +413,8 @@
           return {
             plate: r.plate_number || '',
             driver: d?.name || '—',
-            trips: r.trip_count || 0,
-            hoursSum: r.total_duration_min != null ? `${Math.floor(r.total_duration_min/60)}h ${r.total_duration_min%60}m` : '—',
+            trips: r.total_trips || 0,
+            hoursSum: r.total_duration_min != null ? `${Math.floor(r.total_duration_min/60)}h ${Math.round(r.total_duration_min%60)}m` : '—',
             distSum: r.total_distance_km != null ? `${Math.round(r.total_distance_km)} km` : '—',
           };
         });
@@ -443,6 +447,10 @@
           status: deliveryStatusMap[d.status] || d.status,
           pickup: d.pickup_address || '—',
           delivery: d.address,
+          lat: d.lat,
+          lon: d.lon,
+          pickup_lat: d.pickup_lat,
+          pickup_lon: d.pickup_lon,
           window: d.deadline ? d.deadline.slice(0, 16).replace('T', ' ') : '—',
           driver: DATA.drivers.find(dr => dr.id === d.assigned_to)?.name || null,
           recipient: d.recipient_name || '',
@@ -845,7 +853,6 @@
   function openDriverChangeModal(trip) {
     const n = trip.remainingStops ?? 0;
     openModal('기사 교체', `
-      ${handoverMockDisclaimerHtml()}
       <form id="handoverDriverForm">
         <div class="form-grid" style="max-width:100%">
           <label>Trip</label><span><code>${trip.id}</code> ${statusBadge(trip.status)}</span>
@@ -857,24 +864,28 @@
           <label>새 기사 *</label>
           <select name="driverId" required>${driverSelectOptions(null, { allowEmpty: true })}</select>
         </div>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:12px">남은 <strong>${n}</strong>개 정류 · replan 미호출(목업)</p>
-      </form>`, () => {
+        ${n ? `<p style="font-size:12px;color:var(--text-muted);margin-top:12px">남은 <strong>${n}</strong>개 정류</p>` : ''}
+      </form>`, async () => {
       const form = $('#handoverDriverForm');
       if (!form) return;
-      const driverId = Number(form.querySelector('[name="driverId"]').value);
-      const d = driverById(driverId);
+      const driverId = form.querySelector('[name="driverId"]').value;
       const reason = form.querySelector('[name="reason"]').value;
-      if (!d) return;
+      if (!driverId || !reason) { toast('기사와 사유를 선택하세요'); return; }
+      const d = driverById(driverId);
+      const res = await fetch(`${API}/trips/${trip.id}/reassign`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_driver_id: driverId, transfer_remaining: false }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '기사 교체 실패'); return; }
       const prev = trip.driver;
-      trip.driver = d.name;
-      trip.driverId = d.id;
+      trip.driver = d?.name || driverId;
+      trip.driverId = driverId;
       if (!trip.flags) trip.flags = [];
       if (!trip.flags.includes('handover')) trip.flags.push('handover');
-      pushHandoverHistory(trip, { type: 'driver', reason, from: prev, to: d.name });
-      const ord = trip.orderId ? orderById(trip.orderId) : null;
-      if (ord) ord.driver = d.name;
-      toast('기사 교체 반영(목업)');
-      renderPage();
+      pushHandoverHistory(trip, { type: 'driver', reason, from: prev, to: d?.name });
+      toast('기사 교체 완료');
+      await loadRealData();
     }, { saveLabel: '확인 반영' });
   }
 
@@ -887,7 +898,6 @@
       return `<option value="${v.id}"${sel}${dis}>${vehicleOptionLabel(v)}</option>`;
     }).join('');
     openModal('차량 교체(대차)', `
-      ${handoverMockDisclaimerHtml()}
       <form id="handoverVehicleForm">
         <div class="form-grid" style="max-width:100%">
           <label>Trip</label><span><code>${trip.id}</code> · ${trip.plate || '—'}</span>
@@ -899,29 +909,34 @@
           <label>새 차량 *</label>
           <select name="vehicleId" required>${opts || '<option value="">가용 차량 없음</option>'}</select>
         </div>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:12px">인근 거점 환적 가정(목업) · 지게차·환적 UI 없음</p>
-      </form>`, () => {
+      </form>`, async () => {
       const form = $('#handoverVehicleForm');
       if (!form) return;
       const vehicleId = Number(form.querySelector('[name="vehicleId"]').value);
       const v = vehicleById(vehicleId);
       const reason = form.querySelector('[name="reason"]').value;
-      if (!v || v.id === curVid) return;
+      if (!vehicleId || !reason) { toast('차량과 사유를 선택하세요'); return; }
+      if (vehicleId === curVid) { toast('동일 차량입니다'); return; }
+      const res = await fetch(`${API}/trips/${trip.id}/reassign`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_vehicle_id: vehicleId, transfer_remaining: false }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 교체 실패'); return; }
       const prev = trip.plate || vehicleById(curVid)?.plate || '—';
-      trip.vehicleId = v.id;
-      trip.plate = v.plate;
+      trip.vehicleId = vehicleId;
+      trip.plate = v?.plate || '—';
       if (!trip.flags) trip.flags = [];
       if (!trip.flags.includes('relay')) trip.flags.push('relay');
       if (!trip.flags.includes('handover')) trip.flags.push('handover');
-      pushHandoverHistory(trip, { type: 'vehicle', reason, from: prev, to: v.plate });
-      toast('차량 교체(대차) 반영(목업)');
-      renderPage();
+      pushHandoverHistory(trip, { type: 'vehicle', reason, from: prev, to: v?.plate });
+      toast('차량 교체 완료');
+      await loadRealData();
     }, { saveLabel: '확인 반영' });
   }
 
   function openAccidentReportModal(trip) {
     openModal('사고·지연 신고', `
-      ${handoverMockDisclaimerHtml()}
       <form id="handoverAccidentForm">
         <div class="form-grid" style="max-width:100%">
           <label>Trip</label><span><code>${trip.id}</code></span>
@@ -956,6 +971,22 @@
     $('#btnHandoverDriver', root)?.addEventListener('click', () => openDriverChangeModal(trip));
     $('#btnHandoverVehicle', root)?.addEventListener('click', () => openVehicleChangeModal(trip));
     $('#btnHandoverAccident', root)?.addEventListener('click', () => openAccidentReportModal(trip));
+    $('#btnTripComplete', root)?.addEventListener('click', async () => {
+      if (!confirm('운행을 완료 처리하시겠습니까?')) return;
+      const res = await fetch(`${API}/trips/${trip.id}/status?status=completed`, { method: 'PATCH', headers: getAuthHeaders() });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '처리 실패'); return; }
+      toast('운행 완료 처리됨');
+      await loadRealData();
+      selectedTripId = null;
+    });
+    $('#btnTripCancel', root)?.addEventListener('click', async () => {
+      if (!confirm('운행을 취소하시겠습니까?')) return;
+      const res = await fetch(`${API}/trips/${trip.id}/status?status=cancelled`, { method: 'PATCH', headers: getAuthHeaders() });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '처리 실패'); return; }
+      toast('운행 취소됨');
+      await loadRealData();
+      selectedTripId = null;
+    });
   }
 
   function orderHandoverBarHtml(o) {
@@ -1305,11 +1336,14 @@
         : '<span class="badge badge-muted">—</span>';
     const plate = t.plate || (t.vehicleId ? vehicleById(t.vehicleId)?.plate : '—');
     const handoverBtns = tripSupportsHandover(t) ? `
-      ${handoverMockDisclaimerHtml()}
       <div class="trip-handover-actions">
         <button type="button" class="btn btn-sm btn-primary" id="btnHandoverDriver">기사 교체</button>
         <button type="button" class="btn btn-sm" id="btnHandoverVehicle">차량 교체(대차)</button>
         <button type="button" class="btn btn-sm btn-danger-outline" id="btnHandoverAccident">사고·지연 신고</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button type="button" class="btn btn-sm btn-primary" id="btnTripComplete">운행 완료</button>
+        <button type="button" class="btn btn-sm btn-danger-outline" id="btnTripCancel">운행 취소</button>
       </div>` : '';
     const hist = t.handoverHistory?.length
       ? `<ul style="font-size:12px;margin:8px 0 0;padding-left:18px;color:var(--text-muted)">
@@ -2375,9 +2409,8 @@
         </div>
         <div class="card">
           <div class="card-hd"><h2>지도</h2></div>
-          <div class="card-bd">
-            <div class="map-placeholder map-tall" id="miniMap" aria-label="고객 위치 지도"></div>
-            <p style="font-size:11px;color:var(--text-muted);margin-top:8px">좌표 선택·편집 시 Kakao 지도 연동 예정</p>
+          <div class="card-bd" style="padding:0;height:400px">
+            <div id="miniMapCanvas" style="width:100%;height:100%"></div>
           </div>
         </div>
       </div>
@@ -2397,6 +2430,35 @@
         gotoPage('customers', 'customer-list');
       };
     });
+    // 배송지 좌표 마커 표시
+    initCustomerLocMap(root);
+  }
+
+  function initCustomerLocMap(root) {
+    if (!window.kakao || !window.kakao.maps) return;
+    const canvas = $('#miniMapCanvas', root);
+    if (!canvas) return;
+    _miniMapMarkers.forEach(m => m.setMap(null));
+    _miniMapMarkers = [];
+    if (_miniMapInstance) {
+      // 이미 존재하면 재사용
+    } else {
+      _miniMapInstance = new kakao.maps.Map(canvas, {
+        center: new kakao.maps.LatLng(37.5665, 126.978),
+        level: 10,
+      });
+    }
+    const points = DATA.orders.filter(o => o.lat && o.lon);
+    if (!points.length) return;
+    const bounds = new kakao.maps.LatLngBounds();
+    points.forEach(o => {
+      const pos = new kakao.maps.LatLng(o.lat, o.lon);
+      const marker = new kakao.maps.Marker({ position: pos, map: _miniMapInstance, title: o.delivery });
+      _miniMapMarkers.push(marker);
+      bounds.extend(pos);
+    });
+    _miniMapInstance.setBounds(bounds);
+    kakao.maps.event.trigger(_miniMapInstance, 'resize');
   }
 
   function locModal(l) {
@@ -3162,6 +3224,13 @@
         <div class="lbl">안전 이슈 Trip (주의 수준 포함)</div>
       </div>
 
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd"><h2>일별 운행 현황</h2></div>
+        <div class="card-bd">
+          <div id="byDayChart"><p style="text-align:center;color:var(--text-muted);padding:24px">조회 버튼을 눌러 그래프를 불러오세요</p></div>
+        </div>
+      </div>
+
       <details class="dispatch-collapse" open>
         <summary>기사·차량 실적 · 궤적 지도</summary>
         <div class="dispatch-collapse-bd">
@@ -3202,8 +3271,8 @@
       <div class="card">
         <div class="card-hd"><h2>Trip 궤적 (지도)</h2></div>
         <div class="card-bd">
-          <p class="page-desc" style="margin-bottom:8px">선택 기간·기사 Trip 궤적 — location_logs 연결선 (연동 전 목업)</p>
-          <div class="map-placeholder map-tall" aria-label="Trip 궤적 지도"></div>
+          <p class="page-desc" style="margin-bottom:8px">기사별 실적 행 클릭 → 해당 기사의 GPS 궤적 표시</p>
+          <div id="tripTrajectoryMap" style="width:100%;height:320px;background:var(--bg-card);border-radius:8px;overflow:hidden"></div>
         </div>
       </div>
         </div>
@@ -3222,18 +3291,97 @@
     root.querySelectorAll('#statsPeriodChips .chip').forEach(chip => {
       chip.onclick = () => { statsPeriod = chip.dataset.p; renderTripStats(root); };
     });
-    $('#statsApply', root).onclick = () => toast(`조회: ${statsPeriod}간 필터 적용 (목업)`);
+    $('#statsApply', root).onclick = async () => {
+      const periodMap = { '일': 'today', '주': 'week', '월': 'month' };
+      const period = periodMap[statsPeriod] || 'week';
+      const driverName = $('#statsDriver', root)?.value || '';
+      const driver = driverName ? DATA.drivers.find(d => d.name === driverName) : null;
+      const params = new URLSearchParams({ period });
+      if (driver) params.set('driver_id', driver.id);
+      const res = await fetch(`${API}/stats/by-day?${params}`, { headers: getAuthHeaders() });
+      if (!res.ok) { toast('조회 실패'); return; }
+      const rows = await res.json();
+      renderByDayChart($('#byDayChart', root), rows, `${statsPeriod}간 일별 운행 현황${driverName ? ` · ${driverName}` : ''}`);
+    };
     root.querySelectorAll('tbody .trip-row[data-trip]').forEach(tr => {
       tr.onclick = () => selectTrip(tr.dataset.trip);
     });
     root.querySelectorAll('tbody .trip-row[data-driver]').forEach(tr => {
-      tr.onclick = () => toast(`${tr.dataset.driver} 궤적을 지도에 표시 (목업)`);
+      tr.onclick = async () => {
+        const driverName = tr.dataset.driver;
+        const driver = DATA.drivers.find(d => d.name === driverName);
+        if (!driver) { toast('기사 정보를 찾을 수 없습니다'); return; }
+        const periodMap = { '일': 'today', '주': 'week', '월': 'month' };
+        const period = periodMap[statsPeriod] || 'week';
+        const res = await fetch(`${API}/stats/route-history?driver_id=${driver.id}&period=${period}`, { headers: getAuthHeaders() });
+        if (!res.ok) { toast('궤적 조회 실패'); return; }
+        const coords = await res.json();
+        if (!coords.length) { toast(`${driverName} 궤적 데이터 없음`); return; }
+        showRouteOnTrajectoryMap($('#tripTrajectoryMap', root), coords, driverName);
+      };
     });
     if (tripSelected) {
       $('#inlineDetailBack', root).onclick = () => { selectedTripId = null; renderPage(); };
       $('#inlineDetailSave', root).onclick = () => { selectedTripId = null; renderPage(); };
       bindHandoverActions(root, tripSelected);
     }
+  }
+
+  function renderByDayChart(el, rows, title) {
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:24px">데이터 없음</p>';
+      return;
+    }
+    const max = Math.max(...rows.map(r => r.count), 1);
+    const W = 600, H = 160, padL = 24, padR = 8, padB = 36, padT = 16;
+    const n = rows.length;
+    const step = (W - padL - padR) / n;
+    const barW = Math.max(4, Math.min(28, step - 6));
+    const bars = rows.map((r, i) => {
+      const x = padL + i * step + (step - barW) / 2;
+      const bh = Math.max(2, (r.count / max) * (H - padT - padB));
+      const y = padT + (H - padT - padB) - bh;
+      const label = r.date.slice(5);
+      return `
+        <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW}" height="${bh.toFixed(1)}" fill="var(--primary,#4f7cff)" rx="2"/>
+        <text x="${(x + barW / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" fill="currentColor">${r.count}</text>
+        <text x="${(x + barW / 2).toFixed(1)}" y="${(H - 6).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--text-muted,#888)"
+          transform="rotate(-40,${(x + barW / 2).toFixed(1)},${(H - 6).toFixed(1)})">${label}</text>`;
+    }).join('');
+    el.innerHTML = `
+      <p style="font-size:12px;font-weight:600;margin-bottom:4px">${escapeHtml(title || '일별 운행')}</p>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-height:${H}px;overflow:visible">${bars}</svg>`;
+  }
+
+  function showRouteOnTrajectoryMap(el, coords, driverName) {
+    if (!el || !coords.length) return;
+    if (!map) { el.innerHTML = '<p style="padding:24px;color:var(--text-muted)">지도가 초기화되지 않았습니다</p>'; return; }
+    if (_trajectoryPolyline) { _trajectoryPolyline.setMap(null); _trajectoryPolyline = null; }
+    const path = coords.map(c => new kakao.maps.LatLng(c.lat, c.lon));
+    _trajectoryPolyline = new kakao.maps.Polyline({
+      path,
+      strokeWeight: 3,
+      strokeColor: '#4f7cff',
+      strokeOpacity: 0.9,
+      strokeStyle: 'solid',
+      map,
+    });
+    const bounds = new kakao.maps.LatLngBounds();
+    path.forEach(p => bounds.extend(p));
+    map.setBounds(bounds);
+    const container = document.getElementById('map-container');
+    if (container) {
+      el.innerHTML = '';
+      container.style.display = 'block';
+      container.style.position = 'relative';
+      container.style.width = '100%';
+      container.style.height = '320px';
+      el.appendChild(container);
+      kakao.maps.event.trigger(map, 'resize');
+      map.setBounds(bounds);
+    }
+    toast(`${driverName} 궤적 표시 (${coords.length}개 포인트)`);
   }
 
   function intakePlaceInput(name, value, required, tabindex) {

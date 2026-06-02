@@ -158,9 +158,18 @@
 | `id` | UUID | PK | |
 | `assigned_to` | UUID | FK → users.id | 담당 기사 |
 | `trip_id` | UUID | FK → trips.id | 소속 운행 |
-| `address` | VARCHAR(255) | NOT NULL | |
-| `lat` | FLOAT | NOT NULL | 위도 |
-| `lon` | FLOAT | NOT NULL | 경도 |
+| `address` | VARCHAR(255) | NOT NULL | 하차 주소 |
+| `lat` | FLOAT | NULLABLE | 하차 위도 (접수 시 좌표 미확인 가능) |
+| `lon` | FLOAT | NULLABLE | 하차 경도 |
+| `pickup_address` | VARCHAR(255) | NULLABLE | 상차 주소 |
+| `pickup_lat` | FLOAT | NULLABLE | 상차 위도 |
+| `pickup_lon` | FLOAT | NULLABLE | 상차 경도 |
+| `shipper_name` | VARCHAR(100) | NULLABLE | 화주명 |
+| `contact_name` | VARCHAR(100) | NULLABLE | 담당자명 |
+| `mixed_load` | BOOLEAN | NOT NULL DEFAULT FALSE | 혼적 여부 |
+| `recipient_name` | VARCHAR(100) | NULLABLE | 수신자(고객사명) |
+| `cargo_type` | VARCHAR(100) | NULLABLE | 화물 종류 |
+| `cargo_weight_ton` | FLOAT | NULLABLE | 화물 톤수 |
 | `status` | deliverystatus | NOT NULL DEFAULT 'pending' | |
 | `sequence` | INTEGER | | 최적화 후 배송 순서 |
 | `deadline` | DATETIME | | 희망 도착 시각 |

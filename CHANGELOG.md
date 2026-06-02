@@ -6,6 +6,23 @@
 
 ---
 
+## v1.0.40 (2026-06-02)
+
+### 대시보드 실 API 연동 — 중간 우선순위 5종
+
+**프론트엔드**
+- **Trip 상태 변경 UI**: `tripDetailBodyHtml`에 완료/취소 버튼 추가 → `PATCH /trips/{id}/status` 연동
+- **기사 교체 실 API 연동**: `openDriverChangeModal()` 목업 배너 제거 → `PATCH /trips/{id}/reassign` 연동
+- **차량 교체 실 API 연동**: `openVehicleChangeModal()` 목업 배너 제거 → `PATCH /trips/{id}/reassign` 연동
+- **통계 일별 그래프**: `statsApply` 버튼 → `GET /stats/by-day` 호출 + SVG 막대 그래프(`renderByDayChart`) 렌더링
+- **고객 위치 지도**: `map-placeholder` → 카카오맵 마커 (`initCustomerLocMap`), 배송지 좌표 자동 표시
+- **Trip 궤적 지도**: 기사별 실적 행 클릭 → `GET /stats/route-history` + 카카오맵 폴리라인 (`showRouteOnTrajectoryMap`)
+- `DATA.orders`에 `lat`/`lon`/`pickup_lat`/`pickup_lon` 필드 추가
+- `statsSummary` 매핑 수정: `by_status.completed|in_progress|cancelled` 정확 연결
+- `driverStats`/`vehicleStats` API 응답 필드명 불일치 수정
+
+---
+
 ## v1.0.39 (2026-06-02)
 
 ### 대시보드 실 API 연동 — 높은 우선순위 5종
