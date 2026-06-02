@@ -547,31 +547,39 @@
     }
     .overlay.open { display: flex; }
     .modal {
-      background: #fff;
+      background: var(--dark-card);
+      color: var(--t-text);
       border-radius: 10px;
       width: 100%;
       max-width: 480px;
       max-height: 90vh;
       overflow: auto;
-      box-shadow: 0 20px 40px rgba(0,0,0,.2);
+      box-shadow: 0 20px 40px rgba(0,0,0,.4);
     }
     .modal-lg { max-width: 560px; }
     .modal-hd {
       padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--dark-border);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .modal-hd h3 { font-size: 16px; }
+    .modal-hd h3 { font-size: 16px; color: var(--t-text-strong); }
     .modal-bd { padding: 20px; }
     .modal-ft {
       padding: 12px 20px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--dark-border);
       display: flex;
       justify-content: flex-end;
       gap: 8px;
     }
+    .modal input, .modal select, .modal textarea {
+      background: var(--t-deep);
+      border-color: var(--dark-border);
+      color: var(--t-text);
+    }
+    .modal input::placeholder, .modal textarea::placeholder { color: var(--t-placeholder); opacity: 1; }
+    .modal label { color: var(--t-text-th); }
     .modal-close {
       border: none; background: none;
       font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1;
@@ -2178,5 +2186,19 @@
     html[data-theme="dark"] { color-scheme: dark; }
 
     /* 라이트 모드: 모달 / 드로어 보더 보정 */
-    html[data-theme="light"] .modal { box-shadow: 0 4px 24px rgba(0,0,0,.12); }
+    html[data-theme="light"] .modal {
+      background: #ffffff;
+      color: var(--t-text);
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+    }
+    html[data-theme="light"] .modal-hd { border-bottom-color: var(--border); }
+    html[data-theme="light"] .modal-ft { border-top-color: var(--border); }
+    html[data-theme="light"] .modal input,
+    html[data-theme="light"] .modal select,
+    html[data-theme="light"] .modal textarea {
+      background: #fff;
+      border-color: var(--border);
+      color: var(--t-text);
+    }
+    html[data-theme="light"] .modal label { color: var(--t-text-muted); }
     html[data-theme="light"] .topbar-icon-btn:hover { background: var(--t-deep); }

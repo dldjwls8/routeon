@@ -2015,6 +2015,7 @@
   }
 
   function renderDashboard(root) {
+    hideDashboardMap();
     const orderTabs = ['전체', '접수', '배차', '운행중', '완료'];
     const filteredOrders = DATA.orders.filter(o => dashOrderTab === '전체' || o.status === dashOrderTab);
     const completed = DATA.orders.filter(o => o.status === '완료').length;

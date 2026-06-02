@@ -6,6 +6,20 @@
 
 ---
 
+## v1.0.49 (2026-06-02)
+### 대시보드 필터 클릭 시 지도 사라짐 버그 수정
+- **원인**: `renderDashboard(root)` 내 `root.innerHTML = ...` 실행 시 `.dash-map-card` 안에 있던 `#map-container`가 같이 파괴됨 → `showDashboardMap()`에서 `getElementById('map-container')` null 반환 → 지도 미복원
+- `renderDashboard()` 시작에 `hideDashboardMap()` 호출 추가 → innerHTML 이전에 `#map-container`를 body로 이동 보장
+
+### 다크모드 모달 흰 배경 버그 수정
+- **원인**: `dashboard.css .modal { background: #fff }` 하드코딩, `.modal-hd/.modal-ft` 보더가 `var(--border)` 라이트값 고정
+- `.modal` 배경을 `var(--dark-card)`, 텍스트를 `var(--t-text)`, 박스섀도 강화
+- `.modal-hd`, `.modal-ft` 구분선을 `var(--dark-border)`로 변경
+- `.modal input/select/textarea` 다크 스타일 추가
+- 라이트모드(`html[data-theme="light"]`) 오버라이드로 흰 배경 유지
+
+---
+
 ## v1.0.48 (2026-06-02)
 ### vehicles weight_kg 필드명 불일치 버그 수정
 - **원인**: API 응답은 `weight_kg`인데 프론트가 `max_load_kg`로 접근 → 항상 `undefined` → 톤수 "0.0톤" 표시
