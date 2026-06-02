@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-02 (v1.0.47 기준 — 스키마 변경 없음)
+> 최종 검토: 2026-06-02 (v1.0.49 기준 — 스키마 변경 없음)
 
 ---
 

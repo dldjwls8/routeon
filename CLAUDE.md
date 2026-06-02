@@ -83,8 +83,8 @@ routeon/
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
-    ├── dashboard.css       대시보드 스타일 (2,173줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (4,489줄, dashboard.html에서 분리)
+    ├── dashboard.css       대시보드 스타일 (2,204줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (4,490줄, dashboard.html에서 분리)
     ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
     ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
@@ -570,6 +570,9 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 담당자(staff) 실 연동 — `GET /users?role=admin` 로드, `POST /auth/register(role=admin)` 추가 모달, `DELETE /users/{id}` 삭제 (본인 삭제 불가·"나" 배지)
 - [x] 일정 캘린더/간트/마일스톤 실 연동 — `GET /trips` + `GET /deliveries` → 현재 월 캘린더·오늘 간트·운행 이력 마일스톤
 - [x] 배차 탭 빈 페이지 버그 수정 — `plan = undefined`일 때 template literal TypeError → optional chaining 적용 (`renderDispatchAssign`, `renderBulkDispatch`)
+- [x] vehicles `weight_kg` 필드명 불일치 버그 수정 — API 응답 `weight_kg`를 프론트가 `max_load_kg`로 접근 → 톤수 항상 "0.0톤" 표시, `loadRealData`·`vehiclePreviewHtml`·`applyVehicleMetaToRow`·일괄배차 프리뷰 4개소 수정
+- [x] 대시보드 필터 클릭 시 지도 사라짐 버그 수정 — `renderDashboard()` 내 `root.innerHTML` 실행 전에 `hideDashboardMap()` 호출 추가, `#map-container` 파괴 방지
+- [x] 다크모드 모달 흰 배경 버그 수정 — `.modal { background: #fff }` 하드코딩 → `var(--dark-card)`, `.modal-hd/.modal-ft` 보더 `var(--dark-border)`, 모달 내 input/select/textarea 다크 스타일, 라이트모드 오버라이드
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
