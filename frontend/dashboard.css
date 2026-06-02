@@ -209,6 +209,14 @@
       cursor: pointer;
       font-size: 14px;
     }
+    .notif-btn-wrap { position: relative; }
+    .notif-dot {
+      position: absolute; top: 2px; right: 2px;
+      width: 8px; height: 8px;
+      background: #ef4444; border-radius: 50%;
+      border: 1px solid var(--dark-surface);
+      pointer-events: none;
+    }
     .topbar-btn-wrap { position: relative; }
     .topbar-user-btn {
       display: flex; align-items: center; gap: 6px;

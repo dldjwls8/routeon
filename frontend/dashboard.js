@@ -27,6 +27,10 @@
   let map = null;
   let _driverMarkers = {};
   let _locationWS = null;
+  let _chatWS = null;
+  let _currentUserId = null;
+  const _convDriverMap = {};  // conversation_id → driver_id
+  const _driverUnread = {};   // driver_id → unread count
   let _trajectoryPolyline = null;
   let _miniMapInstance = null;
   let _miniMapMarkers = [];
@@ -426,6 +430,7 @@
       const meRes = await fetch(`${API}/auth/me`, { headers: hdrs });
       if (meRes.ok) {
         const me = await meRes.json();
+        _currentUserId = me.id;
         const userEl = document.getElementById('topbarUserName');
         if (userEl) userEl.textContent = me.name || me.username || '관리자';
         const roleEl = document.getElementById('topbarUserRole');
@@ -2059,7 +2064,7 @@
             <thead><tr><th>이름</th><th>배정 차량</th><th>상태</th><th>연락처</th><th></th></tr></thead>
             <tbody>${rows.map(d => `
               <tr data-id="${d.id}" class="${selectedDriverId === d.id ? 'selected' : ''}">
-                <td>${d.name}</td><td>${driverVehicleLabel(d)}</td><td>${statusBadge(d.status)}</td><td>${d.phone}</td>
+                <td>${d.name}${(_driverUnread[d.id] || 0) > 0 ? `<span class="badge badge-info driver-chat-badge" style="margin-left:4px">${_driverUnread[d.id]}</span>` : ''}</td><td>${driverVehicleLabel(d)}</td><td>${statusBadge(d.status)}</td><td>${d.phone}</td>
                 <td><button type="button" class="btn btn-sm btn-danger-outline btn-del-driver" data-uid="${d.id}" data-name="${escapeHtml(d.name)}">삭제</button></td>
               </tr>`).join('')}
             </tbody>
@@ -4188,6 +4193,73 @@
     ws.onerror = () => ws.close();
   }
 
+  function updateChatNotifUI() {
+    const total = Object.values(_driverUnread).reduce((s, n) => s + n, 0);
+    const dot = document.getElementById('notifBadge');
+    if (dot) dot.style.display = total > 0 ? '' : 'none';
+
+    const drop = document.getElementById('notifDropdown');
+    if (!drop) return;
+    const entries = Object.entries(_driverUnread).filter(([, n]) => n > 0);
+    if (!entries.length) {
+      drop.innerHTML = '<div class="topbar-dropdown-header">알림</div><div class="topbar-dropdown-empty">새 알림이 없습니다</div>';
+      return;
+    }
+    const items = entries.map(([driverId, n]) => {
+      const d = DATA.drivers.find(x => x.id === driverId);
+      const name = d ? escapeHtml(d.name) : '기사';
+      return `<button type="button" class="topbar-dropdown-item" onclick="window.open('/chat.html?driver_id=${driverId}','_blank')">💬 ${name}<span class="badge badge-info" style="margin-left:auto">${n}</span></button>`;
+    }).join('');
+    drop.innerHTML = `<div class="topbar-dropdown-header">새 메시지</div>${items}`;
+
+    // 기사 목록 테이블 배지 갱신
+    document.querySelectorAll('#driverTable tbody tr[data-id]').forEach(tr => {
+      const dId = tr.dataset.id;
+      const count = _driverUnread[dId] || 0;
+      let el = tr.querySelector('.driver-chat-badge');
+      if (count > 0) {
+        if (!el) { el = document.createElement('span'); el.className = 'badge badge-info driver-chat-badge'; el.style.marginLeft = '4px'; tr.querySelector('td').appendChild(el); }
+        el.textContent = count;
+      } else if (el) { el.remove(); }
+    });
+  }
+
+  async function loadChatConversations() {
+    try {
+      const r = await fetch(`${API}/chat/conversations`, { headers: getAuthHeaders() });
+      if (!r.ok) return;
+      const convs = await r.json();
+      convs.forEach(c => {
+        const partnerId = c.partner?.id;
+        if (!partnerId) return;
+        _convDriverMap[c.id] = partnerId;
+        if ((c.unread_count || 0) > 0) _driverUnread[partnerId] = c.unread_count;
+      });
+      updateChatNotifUI();
+    } catch {}
+  }
+
+  function connectChatWebSocket() {
+    const token = getToken();
+    if (!token || _chatWS) return;
+    const ws = new WebSocket(`ws://168.138.45.63:8000/ws/chat?token=${token}`);
+    _chatWS = ws;
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'chat.message' && msg.sender_id !== _currentUserId) {
+          const driverId = _convDriverMap[msg.conversation_id];
+          if (driverId) { _driverUnread[driverId] = (_driverUnread[driverId] || 0) + 1; updateChatNotifUI(); }
+        } else if (msg.type === 'chat.read' && msg.reader_id === _currentUserId) {
+          const driverId = _convDriverMap[msg.conversation_id];
+          if (driverId) { _driverUnread[driverId] = 0; updateChatNotifUI(); }
+        }
+      } catch {}
+    };
+    ws.onclose = () => { _chatWS = null; setTimeout(connectChatWebSocket, 5000); };
+    ws.onerror = () => ws.close();
+  }
+
   // ── 배차 API 연동 ────────────────────────────────────────────
 
   async function createTripManual(vehicleId, driverId, tasks, departureName) {
@@ -4237,6 +4309,8 @@
     renderNav();
     renderPage();
     await loadRealData();
+    loadChatConversations();
+    connectChatWebSocket();
     // 카카오맵 초기화
     try {
       const cr = await fetch(`${API}/config`);
