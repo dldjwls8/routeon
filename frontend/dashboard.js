@@ -376,6 +376,67 @@
             flags: [],
           };
         });
+
+        // 일정 데이터 구성 (trips 기반)
+        DATA.scheduleEvents = [];
+        DATA.ganttRows = [];
+        DATA.milestones = [];
+        const _today = new Date().toISOString().split('T')[0];
+        const _GANTT_RANGE_MIN = (21 - 6) * 60; // 900분 (06:00–21:00)
+        const _tripColor = { in_progress: '#3b82f6', completed: '#22c55e', cancelled: '#ef4444', scheduled: '#f59e0b' };
+        const _tripLabel = { in_progress: '운행중', completed: '완료', cancelled: '취소', scheduled: '배차' };
+        trips.forEach(t => {
+          const d = DATA.drivers.find(x => x.id === t.driver_id);
+          const v = DATA.vehicles.find(x => x.id === t.vehicle_id);
+          const eventDate = (t.started_at || t.created_at || '').split('T')[0];
+          if (eventDate) {
+            DATA.scheduleEvents.push({
+              date: eventDate, type: 'trip',
+              label: `${d?.name || '기사'} · ${_tripLabel[t.status] || t.status}`,
+              orderId: t.id.slice(0, 8),
+            });
+          }
+          const tripDate = (t.started_at || t.created_at || '').split('T')[0];
+          if (tripDate === _today || t.status === 'in_progress') {
+            let startMin = 0;
+            if (t.started_at) {
+              const dt = new Date(t.started_at);
+              startMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
+            } else if (t.departure_time && t.departure_time.includes(':')) {
+              const [hh, mm] = t.departure_time.split(':');
+              startMin = parseInt(hh) * 60 + parseInt(mm || 0) - 6 * 60;
+            }
+            let endMin = startMin + 120;
+            if (t.completed_at) {
+              const dt = new Date(t.completed_at);
+              endMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
+            } else if (t.status === 'in_progress') {
+              const now = new Date();
+              endMin = now.getHours() * 60 + now.getMinutes() - 6 * 60;
+            }
+            startMin = Math.max(0, Math.min(startMin, _GANTT_RANGE_MIN - 30));
+            endMin = Math.max(startMin + 30, Math.min(endMin, _GANTT_RANGE_MIN));
+            DATA.ganttRows.push({
+              label: d?.name || '—', sub: v?.plate || '—',
+              orderId: t.id.slice(0, 8),
+              startPct: (startMin / _GANTT_RANGE_MIN) * 100,
+              widthPct: Math.max(3, ((endMin - startMin) / _GANTT_RANGE_MIN) * 100),
+              color: _tripColor[t.status] || '#64748b',
+              text: _tripLabel[t.status] || t.status,
+            });
+          }
+          if (t.status !== 'cancelled') {
+            DATA.milestones.push({
+              date: (t.completed_at || t.started_at || t.created_at || '').split('T')[0],
+              title: `${d?.name || '기사'} 운행`,
+              note: t.dest_name || '—',
+              orderId: t.id.slice(0, 8),
+              status: { in_progress: '진행중', completed: '완료', scheduled: '예정' }[t.status] || '예정',
+            });
+          }
+        });
+        DATA.milestones.sort((a, b) => b.date.localeCompare(a.date));
+        if (DATA.milestones.length > 30) DATA.milestones.length = 30;
       }
 
       // 통계 요약
@@ -466,6 +527,17 @@
           contact: d.contact_name || '',
           mixed_load: !!d.mixed_load,
         }));
+        // 캘린더에 오더 이벤트 추가
+        deliveries.forEach(d => {
+          const eventDate = (d.deadline || d.created_at || '').split('T')[0];
+          if (eventDate) {
+            DATA.scheduleEvents.push({
+              date: eventDate, type: 'order',
+              label: d.address || '배송',
+              orderId: d.id.slice(0, 8),
+            });
+          }
+        });
       }
 
       // 승인 대기 기사 목록
@@ -1573,21 +1645,20 @@
     return DATA.scheduleEvents.filter(e => e.date === ymd);
   }
 
-  function renderJune2026CalendarHtml() {
-    const year = 2026;
-    const month = 6;
+  function renderCalendarGridHtml(year, month) {
     const firstDow = new Date(year, month - 1, 1).getDay();
-    const daysInMonth = 30;
+    const daysInMonth = new Date(year, month, 0).getDate();
     const dows = ['일', '월', '화', '수', '목', '금', '토'];
     let cells = dows.map(d => `<div class="cal-dow">${d}</div>`).join('');
     for (let i = 0; i < firstDow; i++) cells += '<div class="cal-cell empty"></div>';
-    const today = 2;
+    const nowD = new Date();
+    const todayNum = (nowD.getFullYear() === year && nowD.getMonth() + 1 === month) ? nowD.getDate() : -1;
     for (let d = 1; d <= daysInMonth; d++) {
       const ymd = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const evts = eventsForCalDate(ymd);
       const hasOrder = evts.some(e => e.type === 'order');
       const hasTrip = evts.some(e => e.type === 'trip');
-      const cls = ['cal-cell', d === today ? 'today' : '', hasOrder && hasTrip ? 'has-both' : hasOrder ? 'has-order' : hasTrip ? 'has-trip' : ''].filter(Boolean).join(' ');
+      const cls = ['cal-cell', d === todayNum ? 'today' : '', hasOrder && hasTrip ? 'has-both' : hasOrder ? 'has-order' : hasTrip ? 'has-trip' : ''].filter(Boolean).join(' ');
       const dots = evts.map(e => `<span class="cal-dot ${e.type}" title="${e.orderId}"></span>`).join('');
       const hint = evts[0] ? `<div class="cal-event-hint">${evts[0].label} · ${evts[0].orderId}</div>` : '';
       cells += `<div class="${cls}"><div class="cal-day-num">${d}</div><div class="cal-dots">${dots}</div>${hint}</div>`;
@@ -1596,28 +1667,37 @@
   }
 
   function renderScheduleCalendar(root) {
+    const now = new Date();
+    const year = now.getFullYear(), month = now.getMonth() + 1;
+    const monthLabel = `${year}년 ${month}월`;
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+    const monthEvents = DATA.scheduleEvents
+      .filter(e => e.date.startsWith(monthPrefix))
+      .sort((a, b) => a.date.localeCompare(b.date));
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('schedule-calendar', { title: '일정 캘린더', desc: '2026년 6월 · 오더·운행 일정 (목업)' })}
+      ${pageChromeHtml('schedule-calendar', { title: '일정 캘린더', desc: `${monthLabel} · 오더·운행 일정` })}
       </div>
       <div class="page-scroll-main">
       <div class="cal-wrap">
         <div class="cal-hd">
-          <h3>2026년 6월</h3>
-          <span class="badge badge-muted">목업</span>
+          <h3>${monthLabel}</h3>
+          <span class="badge badge-info">${monthEvents.length}건</span>
         </div>
         <div class="cal-legend">
           <span><i class="dot-order"></i>오더·배차</span>
           <span><i class="dot-trip"></i>운행·Trip</span>
         </div>
-        <div class="cal-grid">${renderJune2026CalendarHtml()}</div>
+        <div class="cal-grid">${renderCalendarGridHtml(year, month)}</div>
       </div>
       <div class="card" style="margin-top:10px">
-        <div class="card-hd"><h2>이번 주 일정</h2></div>
+        <div class="card-hd"><h2>이번 달 일정</h2></div>
         <div class="card-bd" style="padding:0">
-          ${tableScrollWrap(`<table>
-            <thead><tr><th>날짜</th><th>오더</th><th>유형</th><th>내용</th></tr></thead>
-            <tbody>${DATA.scheduleEvents.map(e => `
+          ${monthEvents.length === 0
+            ? '<p style="padding:20px;color:var(--text-muted);text-align:center">이번 달 일정이 없습니다</p>'
+            : tableScrollWrap(`<table>
+            <thead><tr><th>날짜</th><th>ID</th><th>유형</th><th>내용</th></tr></thead>
+            <tbody>${monthEvents.map(e => `
               <tr>
                 <td>${e.date}</td>
                 <td><code style="font-size:11px">${e.orderId}</code></td>
@@ -1633,34 +1713,30 @@
 
   function renderScheduleGantt(root) {
     const hours = ['06', '09', '12', '15', '18', '21'];
+    const todayLabel = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+    const ganttBody = DATA.ganttRows.length === 0
+      ? '<p style="padding:24px;color:var(--text-muted);text-align:center">오늘 등록된 운행이 없습니다</p>'
+      : `<div class="gantt-scroll"><div class="gantt-wrap">
+          <div class="gantt-scale">${hours.map(h => `<span>${h}:00</span>`).join('')}</div>
+          ${DATA.ganttRows.map(row => `
+            <div class="gantt-row">
+              <div class="gantt-label">${row.label}<code>${row.sub} · ${row.orderId}</code></div>
+              <div class="gantt-track">
+                <div class="gantt-bar" style="left:${row.startPct}%;width:${row.widthPct}%;background:${row.color}" title="${row.orderId}">${row.text}</div>
+              </div>
+            </div>`).join('')}
+        </div></div>`;
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('schedule-gantt', { title: '간트 · 차량·기사', desc: '당일 06–21시 타임라인 (목업 · O-xxx 연동)' })}
+      ${pageChromeHtml('schedule-gantt', { title: '간트 · 차량·기사', desc: `${todayLabel} 06–21시 타임라인` })}
       </div>
-      <div class="gantt-scroll">
-      <div class="gantt-wrap">
-        <div class="gantt-scale">
-          ${hours.map(h => `<span>${h}:00</span>`).join('')}
-        </div>
-        ${DATA.ganttRows.map(row => `
-          <div class="gantt-row">
-            <div class="gantt-label">${row.label}<code>${row.sub} · ${row.orderId}</code></div>
-            <div class="gantt-track">
-              <div class="gantt-bar" style="left:${row.startPct}%;width:${row.widthPct}%;background:${row.color}" title="${row.orderId}">${row.text}</div>
-            </div>
-          </div>`).join('')}
-      </div>
-      </div>
-      <p class="mock-notice" style="margin-top:8px">실서비스: GraphHopper 구간·법정 휴게 반영 후 관제 표시</p>`;
+      ${ganttBody}`;
   }
 
   function renderScheduleMilestones(root) {
-    root.innerHTML = `
-      <div class="page-sticky-top">
-      ${pageChromeHtml('schedule-milestones', { title: '마일스톤', desc: '프로젝트·운영 일정 (목업)' })}
-      </div>
-      <div class="page-scroll-main milestone-list">
-        ${DATA.milestones.map(m => `
+    const milestoneItems = DATA.milestones.length === 0
+      ? '<p style="padding:24px;color:var(--text-muted);text-align:center">운행 기록이 없습니다</p>'
+      : DATA.milestones.map(m => `
           <article class="milestone-item">
             <div class="milestone-date">${m.date}</div>
             <div>
@@ -1668,7 +1744,13 @@
               <div class="milestone-meta">${m.note}${m.orderId ? ` · <code>${m.orderId}</code>` : ''}</div>
             </div>
             ${milestoneStatusBadge(m.status)}
-          </article>`).join('')}
+          </article>`).join('');
+    root.innerHTML = `
+      <div class="page-sticky-top">
+      ${pageChromeHtml('schedule-milestones', { title: '마일스톤', desc: `운행 이력 최근 ${DATA.milestones.length}건` })}
+      </div>
+      <div class="page-scroll-main milestone-list">
+        ${milestoneItems}
       </div>`;
   }
 

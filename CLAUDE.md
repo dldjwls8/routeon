@@ -597,4 +597,4 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **채팅 알림 (dashboard)** — `connectChatWebSocket()` WS `/ws/chat` 수신 전용 연결, `loadChatConversations()` 초기 unread 반영, `updateChatNotifUI()` 🔔 배지 + 드롭다운 + 기사 테이블 배지 갱신
 - [x] **페이지네이션** — `PAGE_SIZE=20`, 리스트별 독립 페이지 상태(`orderPage`/`vehiclePage`/`customerPage`/`driverPage`), 필터·검색 변경 시 1페이지 리셋
 - [x] **담당자(staff) 관리** — `GET /users?role=admin` 실 연동, `POST /auth/register(role=admin)` 추가, `DELETE /users/{id}` 삭제, 본인 행 "나" 배지·삭제 불가 처리
-- [ ] **일정 캘린더/간트/마일스톤** — 전부 목업 → `/trips`, `/deliveries` 데이터 기반 실제 일정 표시
+- [x] **일정 캘린더/간트/마일스톤** — `GET /trips` + `GET /deliveries` 실 연동: 캘린더는 현재 월 동적 표시·이달 이벤트 필터, 간트는 오늘 운행 06–21시 타임라인, 마일스톤은 취소 제외 최근 30건 운행 이력
