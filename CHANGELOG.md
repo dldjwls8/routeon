@@ -6,6 +6,14 @@
 
 ---
 
+## v1.0.47 (2026-06-02)
+### 배차 탭 빈 페이지 버그 수정
+- **원인**: `DATA.dispatchPlans = []`일 때 `plan = undefined` → template literal 내 `plan.visits.map()` / `plan.duration` / `plan.distance` 즉시 평가 → TypeError → `root.innerHTML` 미설정 → 단건·수동 배차·일괄 배차 탭 완전 공백
+- `renderDispatchAssign`: `plan?.visits`, `plan?.duration`, `plan?.distance`, `plan?.mixed_load` optional chaining 적용
+- `renderBulkDispatch`: 동일 패턴 수정 (`plan?.plate`, `plan?.driver` 포함)
+
+---
+
 ## v1.0.46 (2026-06-02)
 ### 일정 캘린더/간트/마일스톤 실 API 연동
 - **캘린더**: `GET /trips` + `GET /deliveries` → 현재 월 동적 표시, 이달 이벤트 수 뱃지, 날짜 셀 dot 표시

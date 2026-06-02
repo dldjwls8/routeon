@@ -2,7 +2,8 @@
 
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
-> 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지
+> 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
+> 최종 검토: 2026-06-02 (v1.0.47 기준 — 스키마 변경 없음)
 
 ---
 
@@ -302,3 +303,30 @@ in_progress → cancelled  : PATCH /trips/{id}/status?status=cancelled
 completed 처리 시:
 - trips.completed_at 자동 기록
 - 소속 deliveries 중 in_progress 건 → done_manual 일괄 처리
+
+---
+
+## 프론트엔드 연동 주의사항
+
+### vehicles — API vs 프론트 필드명
+| DB 컬럼 | API 응답 | 프론트 `DATA.vehicles` | 비고 |
+|---------|---------|----------------------|------|
+| `weight_kg` | `weight_kg` | `max_load_kg` (0으로 표시) | 프론트 변수명 불일치 — 향후 `weight_kg` 통일 필요 |
+| `vehicle_type` | `vehicle_type` | `type` | 정상 매핑 |
+| `plate_number` | `plate_number` | `plate` | 정상 매핑 |
+
+> `vehicles` API는 `response_model` 없이 ORM 직렬화 반환 → `tonnage` / `max_load_kg` 필드 없음. 현재 프론트에서 톤수를 "0.0톤"으로 표시. 차량 등록 시 `vehicle_type` 필드에 "5톤카고" 형식으로 직접 기입 중.
+
+### deliveries status 매핑
+| DB `status` | 프론트 표시 | 배차 탭 노출 조건 |
+|-------------|------------|----------------|
+| `pending` | `'접수'` | 미배차 건 목록 표시 (`unassignedForDispatch()`) |
+| `in_progress` | `'운행중'` | 미표시 |
+| `done` / `done_manual` | `'완료'` | 미표시 |
+
+### users ID 타입
+| 테이블 | PK 타입 | 프론트 비교 방식 |
+|--------|---------|----------------|
+| `users` | UUID (문자열) | 문자열 직접 비교 — `Number()` 변환 금지 |
+| `vehicles` | INTEGER | `Number(id)` 변환 후 비교 (`vehicleById`) |
+| `customers` | INTEGER | `Number(id)` 변환 후 비교 |

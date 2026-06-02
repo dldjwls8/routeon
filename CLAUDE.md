@@ -84,7 +84,7 @@ routeon/
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,173줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (4,265줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (4,489줄, dashboard.html에서 분리)
     ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
     ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
@@ -568,6 +568,8 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 채팅 알림 WS 연동 — dashboard.js `connectChatWebSocket()` + `loadChatConversations()` + `updateChatNotifUI()`, 🔔 빨간 점 배지, 알림 드롭다운 미읽 목록(클릭 시 chat.html 새 탭), 기사 테이블 행 unread 배지
 - [x] 페이지네이션 실 구현 — `PAGE_SIZE=20`, `orderPage`/`vehiclePage`/`customerPage`/`driverPage` 독립 상태, 실제 건수 기반 페이지 계산, ‹ › 이전/다음 버튼, 필터·검색 변경 시 1페이지 리셋
 - [x] 담당자(staff) 실 연동 — `GET /users?role=admin` 로드, `POST /auth/register(role=admin)` 추가 모달, `DELETE /users/{id}` 삭제 (본인 삭제 불가·"나" 배지)
+- [x] 일정 캘린더/간트/마일스톤 실 연동 — `GET /trips` + `GET /deliveries` → 현재 월 캘린더·오늘 간트·운행 이력 마일스톤
+- [x] 배차 탭 빈 페이지 버그 수정 — `plan = undefined`일 때 template literal TypeError → optional chaining 적용 (`renderDispatchAssign`, `renderBulkDispatch`)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
