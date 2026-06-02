@@ -6,6 +6,31 @@
 
 ---
 
+## v1.0.44 (2026-06-02)
+### 페이지네이션 실 구현
+
+**프론트엔드**
+- `PAGE_SIZE = 20`, 리스트별 독립 페이지 상태: `orderPage` / `vehiclePage` / `customerPage` / `driverPage`
+- `paginationHtml(totalItems, currentPage, listKey)`: 실제 필터된 건수 기반 페이지 계산, 1페이지이면 UI 미표시
+- ‹ 이전 / 번호 / 다음 › 버튼, disabled 처리, `X / Y 페이지` 표시 — "(목업)" 문구 제거
+- 필터(칩) 또는 검색어 변경 시 해당 리스트 페이지 1 자동 리셋
+- 적용 범위: 오더 목록 · 차량 목록 · 고객(거래처) 목록 · 기사 목록
+
+---
+
+## v1.0.43 (2026-06-02)
+### 채팅 알림 WS 연동
+
+**프론트엔드**
+- `connectChatWebSocket()`: WS `/ws/chat` 수신 전용 경량 연결, 5초 자동 재연결
+- `loadChatConversations()`: 대시보드 초기 로드 시 `GET /chat/conversations`로 기존 unread_count 일괄 반영
+- `updateChatNotifUI()`: 🔔 빨간 점 배지(unread > 0 시 표시) + 알림 드롭다운 미읽 기사 목록(클릭 시 chat.html 새 탭) + 기사 테이블 행 unread 배지 동시 갱신
+- `_convDriverMap` (conversation_id → driver_id): WS 이벤트와 기사 카드 매핑
+- `chat.message` 수신: `sender_id ≠ currentUserId`이면 해당 기사 unread +1
+- `chat.read` 수신: `reader_id === currentUserId`이면 해당 기사 배지 0 초기화
+
+---
+
 ## v1.0.42 (2026-06-02)
 
 ### 설정 변경 — 프론트엔드 포트 80 전환
