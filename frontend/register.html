@@ -3,23 +3,76 @@
 <head>
   <meta charset="UTF-8">
   <title>루트온 — 기업 등록</title>
+  <script>
+    (function () {
+      var s = localStorage.getItem('theme');
+      var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', s || (d ? 'dark' : 'light'));
+    })();
+  </script>
   <style>
-    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f4f7f6; font-family: 'Malgun Gothic', sans-serif; }
-    .auth-card { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 400px; }
+    :root {
+      --lime: #c6f135;
+      --t-bg: #0c0e12;
+      --t-card: #1c2029;
+      --t-border: rgba(255,255,255,.08);
+      --t-border-section: rgba(255,255,255,.06);
+      --t-text: #e8eaef;
+      --t-text-strong: #f3f4f6;
+      --t-text-muted: #8b93a7;
+      --t-text-label: #c5cad6;
+      --t-input-bg: #151820;
+      --t-info-bg: rgba(198,241,53,.06);
+      --t-info-border: rgba(198,241,53,.3);
+      --t-info-text: #c5cad6;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --t-bg: #f5f7fa;
+      --t-card: #ffffff;
+      --t-border: #e2e8f0;
+      --t-border-section: #eef0f3;
+      --t-text: #1e2230;
+      --t-text-strong: #0f1117;
+      --t-text-muted: #5c6478;
+      --t-text-label: #374151;
+      --t-input-bg: #f8fafc;
+      --t-info-bg: #fffde8;
+      --t-info-border: #FFE812;
+      --t-info-text: #555;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; background: var(--t-bg); font-family: 'Malgun Gothic', sans-serif; }
+    .auth-card { background: var(--t-card); padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.2); width: 420px; border: 1px solid var(--t-border); }
     .logo-img { height: 40px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
-    h2 { margin: 0 0 6px 0; color: #333; text-align: center; }
-    .subtitle { text-align: center; color: #888; font-size: 13px; margin-bottom: 24px; }
-    .section-label { font-size: 12px; font-weight: bold; color: #888; letter-spacing: 0.08em; text-transform: uppercase; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #eee; }
+    h2 { margin: 0 0 6px 0; color: var(--t-text-strong); text-align: center; }
+    .subtitle { text-align: center; color: var(--t-text-muted); font-size: 13px; margin-bottom: 24px; }
+    .section-label { font-size: 11px; font-weight: bold; color: var(--t-text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--t-border-section); }
     .form-group { margin-bottom: 14px; }
-    label { display: block; margin-bottom: 5px; font-size: 13px; color: #666; font-weight: bold; }
-    input { width: 100%; box-sizing: border-box; padding: 11px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
-    input:focus { border-color: #FFE812; outline: none; }
-    .btn-submit { width: 100%; padding: 14px; background: #FFE812; color: #333; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 14px; }
-    .btn-submit:hover { background: #e5cf00; }
-    .link { display: block; margin-top: 15px; font-size: 14px; color: #555; text-decoration: none; text-align: center; }
-    .link:hover { text-decoration: underline; }
-    .error-msg { color: #e74c3c; font-size: 12px; margin-top: 5px; display: none; }
-    .info-box { background: #fffde8; border: 1px solid #FFE812; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #666; margin-bottom: 20px; line-height: 1.6; }
+    label { display: block; margin-bottom: 5px; font-size: 13px; color: var(--t-text-label); font-weight: bold; }
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="password"] {
+      width: 100%; padding: 11px; border: 1px solid var(--t-border); border-radius: 6px; font-size: 14px;
+      background: var(--t-input-bg); color: var(--t-text); outline: none;
+    }
+    input[type="text"]::placeholder,
+    input[type="email"]::placeholder,
+    input[type="tel"]::placeholder,
+    input[type="password"]::placeholder { color: var(--t-text-muted); }
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="tel"]:focus,
+    input[type="password"]:focus { border-color: var(--lime); }
+    input[type="file"] { width: 100%; padding: 8px; border: 1px solid var(--t-border); border-radius: 6px; font-size: 13px; background: var(--t-input-bg); color: var(--t-text); cursor: pointer; }
+    .file-hint { font-size: 12px; color: var(--t-text-muted); display: block; margin-top: 4px; }
+    .btn-submit { width: 100%; padding: 14px; background: var(--lime); color: #111; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 14px; }
+    .btn-submit:hover { background: #a8d42e; }
+    .link { display: block; margin-top: 16px; font-size: 13px; color: var(--t-text-muted); text-decoration: none; text-align: center; }
+    .link:hover { color: var(--t-text); text-decoration: underline; }
+    .error-msg { color: #f87171; font-size: 12px; margin-top: 5px; display: none; }
+    .info-box { background: var(--t-info-bg); border: 1px solid var(--t-info-border); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--t-info-text); margin-bottom: 20px; line-height: 1.6; }
   </style>
 </head>
 <body>
@@ -74,9 +127,8 @@
 
       <div class="form-group">
         <label>첨부 파일 (사업자등록증 등)</label>
-        <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required
-          style="padding:8px; cursor:pointer;">
-        <small style="color:#888; display:block; margin-top:4px;">PDF, JPG, PNG / 최대 10MB</small>
+        <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required>
+        <small class="file-hint">PDF, JPG, PNG / 최대 10MB</small>
         <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
       </div>
 
@@ -87,7 +139,14 @@
   </div>
 
   <script>
-    const API = 'http://168.138.45.63:8000';
+    const API = (() => {
+      const h = location.hostname;
+      return (h === 'localhost' || h === '127.0.0.1') ? 'http://localhost:8000' : `${location.protocol}//${h}:8000`;
+    })();
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (!localStorage.getItem('theme')) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    });
 
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -101,6 +160,7 @@
 
       document.getElementById('pwd-error').style.display       = 'none';
       document.getElementById('pwd-match-error').style.display = 'none';
+      document.getElementById('file-error').style.display      = 'none';
 
       if (password.length < 4) {
         document.getElementById('pwd-error').style.display = 'block';
@@ -127,7 +187,7 @@
 
       const res = await fetch(`${API}/organizations`, {
         method: 'POST',
-        body: formData   // Content-Type 헤더 자동 설정 (multipart)
+        body: formData
       });
 
       const data = await res.json();
