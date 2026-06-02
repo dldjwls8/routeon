@@ -6,6 +6,20 @@
 
 ---
 
+## v1.0.33 (2026-06-02)
+
+### 리팩토링 — 백엔드 라우터 도메인별 모듈 분리
+
+**백엔드 (backend/)**
+- `main.py` 3312줄 → 59줄로 축소 (앱 생성·lifespan·CORS·라우터 등록만 유지)
+- `backend/core/` 신규: `config.py`(환경변수·상수), `managers.py`(ConnectionManager·redis·chat_manager 싱글턴), `utils.py`(_haversine, _haversine_km, _coord_to_address)
+- `backend/routers/` 신규 11개 파일: `misc`, `vehicles`, `trips`, `optimize`, `dispatch`, `organizations`, `auth`, `chat`, `deliveries`, `location`, `stats`
+- API 경로·응답 구조 변경 없음 — 프론트엔드 호환성 완전 유지
+- 싱글턴 중복 생성 없음 (`manager`, `redis`, `chat_manager` 각 1곳), 순환 임포트 없음
+- `feat/control-centric-ui` 브랜치에서 오케스트레이션 5단계 프로세스 적용
+
+---
+
 ## v1.0.32 (2026-06-02)
 
 ### 기능 개선 — 목업 전면 이식 Phase 1 (dashboard.html SPA 구조 완성)
