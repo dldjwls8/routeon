@@ -36,7 +36,7 @@
 | 서버 IP | `168.138.45.63` |
 | FastAPI | `http://168.138.45.63:8000` |
 | Swagger | `http://168.138.45.63:8000/docs` |
-| 관리자 웹 | `http://168.138.45.63:3000` |
+| 관리자 웹 | `http://168.138.45.63` (포트 80) |
 | code-server | `http://168.138.45.63:8443` |
 | 프로젝트 경로 | `/opt/routeon/` |
 
@@ -84,7 +84,7 @@ routeon/
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,173줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (3,808줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (4,265줄, dashboard.html에서 분리)
     ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
     ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
@@ -97,7 +97,7 @@ routeon/
 | routeon-db | 5432 | PostgreSQL + TimescaleDB |
 | routeon-api | 8000 | FastAPI 백엔드 |
 | routeon-redis | 6379 | Redis (GPS TTL 5분) |
-| routeon-frontend | 3000 | Nginx + 관리자 웹 |
+| routeon-frontend | 80 | Nginx + 관리자 웹 |
 | routeon-code-server | 8443 | 브라우저 VS Code |
 
 ---
@@ -561,6 +561,10 @@ Android 앱 채팅 구현 필수 사항:
 - [x] settings.html UI/UX 개편 — 대시보드 디자인 시스템 통일, 화면 설정 카드(테마 세그먼트) 추가
 - [x] 전체 공개 페이지 테마 통일 — login / index / chat / register 다크·라이트 적용, register 파일 선택 UI 커스텀 드롭존
 - [x] LoginRequest.password 필드 누락 버그 수정 (로그인 500 오류)
+- [x] 백엔드 라우터 도메인별 모듈 분리 — `main.py` 3,312줄 → 59줄, `backend/routers/` 11개 파일, `backend/core/` config·managers·utils 분리, API 호환성 유지
+- [x] dashboard.html CSS/JS 파일 분리 — 6,048줄 → HTML 65줄 + `dashboard.css` + `dashboard.js` 별도 파일
+- [x] 대시보드 실 API 연동 완성 — 오더 목록·배차 assign·기사·차량·Trip 상태·통계 그래프·고객 위치 지도·Trip 폴리라인·거래처 CRUD (`GET/POST/PATCH/DELETE /customers`)
+- [x] 프론트엔드 포트 변경 — `docker-compose.yml` `3000:80` → `80:80`, 표준 HTTP 포트로 서비스
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
@@ -590,4 +594,4 @@ Android 앱 채팅 구현 필수 사항:
 - [ ] **일정 캘린더/간트/마일스톤** — 전부 목업 → `/trips`, `/deliveries` 데이터 기반 실제 일정 표시
 - [ ] **페이지네이션** — `fakePage` 목업 → 실제 offset/limit API 쿼리
 - [ ] **담당자(staff) 관리** — toast(목업) → 별도 staff 테이블 또는 admin 역할 유저 CRUD
-- [ ] **엑셀 임포트 (오더 접수)** — toast(목업) → SheetJS 파싱 + `POST /deliveries/batch` 실 연동 (운행 생성 패널의 엑셀 불러오기는 완성)
+- [x] **엑셀 임포트 (오더 접수)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39)
