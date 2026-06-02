@@ -2820,10 +2820,10 @@
             </div>
             <div class="split" style="margin-top:12px">
               <div>
-                <h3 style="font-size:13px;margin-bottom:4px">방문 순서 · ${plan.plate} · ${bd.vehicles[tabIdx]?.tonnage || ''} · ${plan.driver}</h3>
-                <p style="font-size:12px;margin-bottom:8px">혼적 여부 ${mixedLoadBadge(!!plan.mixed_load)} · ${plan.mixed_load ? '복수 화주·화물' : '단독배차'}</p>
-                <ol class="visit-ol">${plan.visits.map(visitLi).join('')}</ol>
-                <p class="preview-meta"><strong>계획</strong> ${plan.duration} · ${plan.distance}</p>
+                <h3 style="font-size:13px;margin-bottom:4px">방문 순서 · ${plan?.plate || '—'} · ${bd.vehicles[tabIdx]?.tonnage || ''} · ${plan?.driver || '—'}</h3>
+                <p style="font-size:12px;margin-bottom:8px">혼적 여부 ${mixedLoadBadge(!!(plan?.mixed_load))} · ${plan?.mixed_load ? '복수 화주·화물' : '단독배차'}</p>
+                <ol class="visit-ol">${(plan?.visits || []).map(visitLi).join('')}</ol>
+                <p class="preview-meta"><strong>계획</strong> ${plan?.duration || '—'} · ${plan?.distance || '—'}</p>
               </div>
               <div>
                 <div class="map-placeholder map-tall" id="bulkRouteMap" aria-label="배차 경로 지도"></div>
@@ -3210,9 +3210,9 @@
             </div>
             <div class="split" style="margin-top:12px">
               <div>
-                <p class="field-label" style="display:flex;align-items:center;gap:8px">방문 순서 ${mixedLoadBadge(!!plan.mixed_load)}</p>
-                <ol class="visit-ol">${plan.visits.map(v => `<li>${v}</li>`).join('')}</ol>
-                <p class="preview-meta"><strong>계획</strong> ${plan.duration} · ${plan.distance}</p>
+                <p class="field-label" style="display:flex;align-items:center;gap:8px">방문 순서 ${mixedLoadBadge(!!(plan?.mixed_load))}</p>
+                <ol class="visit-ol">${(plan?.visits || []).map(v => `<li>${v}</li>`).join('')}</ol>
+                <p class="preview-meta"><strong>계획</strong> ${plan?.duration || '—'} · ${plan?.distance || '—'}</p>
               </div>
               <div>
                 <div class="map-placeholder map-tall" aria-label="배차 경로 지도"></div>
