@@ -6,6 +6,25 @@
 
 ---
 
+## v1.0.32 (2026-06-02)
+
+### 기능 개선 — 목업 전면 이식 Phase 1 (dashboard.html SPA 구조 완성)
+
+**프론트엔드 (dashboard.html)**
+- 목업(`control_app_mockup.html`) 기반 관제 중심 SPA 구조로 전면 교체
+- 7메인 NAV + 서브 플라이아웃: 대시보드 / 오더관리 / 배차·지정 / 일정·업무 / 고객관리 / 운행통계 / 기본정보
+- `gotoPage(main, page)` / `renderPage()` SPA 패턴, 14개 서브 페이지 라우팅
+- 목업 CSS 전체 이식 (다크 테마 변수, topbar, card, master-detail, table 등)
+- **실제 API 연동 페이지 (6개)**: 관제 대시보드, 일괄 자동 배차, 단건·수동 배차, 운행통계, 기사관리, 차량관리
+- **준비 중 페이지 (8개)**: 오더 접수·목록, 고객관리·위치, 캘린더·간트·마일스톤, 담당자·내 정보 (목업 레이아웃 + "준비 중" 배너)
+- 일괄배차 모달 → `bulk-dispatch` 페이지 전환 (adTasks 로직 재사용)
+- dispatch-assign 진입 시 카카오맵 전체화면, 이탈 시 `clearTbTaskPins()` 자동 호출
+- `#map` DOM 고정 유지, CSS 클래스 토글로만 지도 위치 변경
+- 기존 WebSocket / ETA / 채팅 알림 / 자동완성 / 엑셀 불러오기 전부 유지
+- `feat/control-centric-ui` 브랜치에서 오케스트레이션 5단계 프로세스 적용
+
+---
+
 ## v1.0.31 (2026-06-02)
 
 ### 기능 개선 — 관제 중심 UI 전환 (dashboard.html 전면 재설계)
