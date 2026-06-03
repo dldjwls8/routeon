@@ -4425,7 +4425,68 @@
 
     bindPendingIntakeActions(root);
 
-    $('#excelImport', root).onclick = () => toast('엑셀 파일을 불러왔습니다 (목업)');
+    $('#excelImport', root).onclick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = '.xlsx,.xls,.csv';
+      inp.onchange = async () => {
+        const file = inp.files[0];
+        if (!file) return;
+        let rows;
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        } catch {
+          toast('파일을 읽는 중 오류가 발생했습니다', 'error');
+          return;
+        }
+        if (!rows.length) { toast('엑셀에 데이터가 없습니다', 'error'); return; }
+
+        const norm = s => String(s).trim().toLowerCase().replace(/[\s_\-()]/g, '');
+        const FIELD_MAP = {
+          customer:   ['화주명','화주','shippername','shipper'],
+          recipient:  ['수취인','수령인','recipientname','recipient'],
+          contact:    ['연락처','contact','contactname'],
+          pickup:     ['상차지','출발지','pickup','pickupaddress'],
+          delivery:   ['하차지','도착지','주소','delivery','address'],
+          cargo:      ['화물종류','화물','cargo','cargotype'],
+          tons:       ['중량','톤','중량톤','tons','cargoweightton'],
+          latestAt:   ['희망도착','마감일','deadline','latestat','희망도착일시'],
+          mixed_load: ['혼재','혼재여부','mixedload','혼재화물'],
+        };
+
+        let added = 0;
+        rows.forEach(rawRow => {
+          const mapped = {};
+          for (const [field, aliases] of Object.entries(FIELD_MAP)) {
+            for (const [k, v] of Object.entries(rawRow)) {
+              if (aliases.includes(norm(k))) { mapped[field] = v; break; }
+            }
+          }
+          if (!mapped.delivery && !mapped.pickup) return;
+
+          if (mapped.latestAt instanceof Date) {
+            const d = mapped.latestAt;
+            mapped.latestAt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+          } else if (mapped.latestAt) {
+            const s = String(mapped.latestAt).trim();
+            mapped.latestAt = s.length === 10 ? `${s}T00:00` : s.replace(' ', 'T').slice(0, 16);
+          }
+
+          const ml = String(mapped.mixed_load || '').trim().toLowerCase();
+          mapped.mixed_load = ['y', 'yes', '1', 'true', '혼재', 'o'].includes(ml);
+
+          addPendingIntake(root, mapped);
+          added++;
+        });
+
+        if (!added) { toast('유효한 행이 없습니다 (하차지 또는 상차지 필수)', 'error'); return; }
+        toast(`엑셀 ${added}건 대기열에 추가됐습니다`);
+      };
+      inp.click();
+    };
     $('#addTaskCard', root).onclick = () => {
       root._taskCount = (root._taskCount || 1) + 1;
       renderOrderIntake(root);

@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.53 (2026-06-03)
+### 접수창 엑셀 임포트 실 구현
+- `renderOrderIntake` `#excelImport` 버튼: `toast(목업)` → SheetJS 기반 실 구현
+- 헤더 행 자동 인식: 화주명/수취인/연락처/상차지/하차지/화물종류/중량/희망도착/혼재 컬럼 매핑
+- 영문 헤더 지원: shipper, recipient, contact, pickup, delivery, cargo, tons, deadline, mixed_load
+- 파싱 결과를 `addPendingIntake` 대기열에 일괄 추가 → 기존 `접수 저장` 버튼으로 DB 등록
+- Date 객체·문자열·`YYYY-MM-DD` 형식 날짜 자동 변환 (YYYY-MM-DDTHH:mm)
+- 혼재: y/yes/1/true/혼재/o → `true` 처리
+- 하차지 또는 상차지 없는 행 자동 skip, 유효 행 0건 시 오류 toast
+
+---
+
 ## v1.0.52 (2026-06-03)
 ### 내 정보 저장 실 API 연동 + admin 비밀번호 복구
 

@@ -578,7 +578,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[배차] 단건·수동 배차 실 API 연동** — `renderDispatchAssign` 목업 배너 제거, `#runDispatch` → `POST /trips/auto-dispatch`, `#addDispatchOrder` → `POST /deliveries`, `#singleDispatch` → `PATCH /deliveries/{id}/assign`, `#btnTripCreate`·`#btnAppHandoff`·`#manualReassign` 목업 toast 정리
 - [x] **[배차] 배차 화면 지도 4곳 렌더링** — `map-placeholder` → 카카오맵 실 렌더링 (일괄 배차 센터 지도·경로 지도, 단건 배차 선택건 경로·배차 결과 경로) — `setTimeout(() => kakao.maps.Map(...), 0)` 패턴
 - [x] **[기본정보] 내 정보 저장** — `renderProfile` 저장 버튼 `PATCH /auth/me` 연동 (v1.0.52)
-- [ ] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (접수창 전용, 운행 생성 패널 엑셀과 별개)
+- [x] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (헤더 기반 컬럼 매핑, 대기열 추가) (v1.0.53)
 - [ ] **[대시보드] 홈 화물 집계 실 데이터화** — `cargoChips` 하드코딩(`일반화물 12.4t` 등) → `DATA.orders` 화물 종류별 실 집계로 교체
 - [ ] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
@@ -617,6 +617,6 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **단건·수동 배차 저장** — `renderDispatchAssign` 목업 제거, `#runDispatch` → `POST /trips/auto-dispatch`, `#singleDispatch` → `PATCH /deliveries/{id}/assign`, `#addDispatchOrder` → `POST /deliveries` (v1.0.51)
 - [x] **배차 화면 지도 4곳** — 카카오맵 `setTimeout` 패턴으로 렌더링: `bulkDepotMapPreview`(센터 위치), `bulkRouteMap`(배차 결과 경유지), `dispatchRouteMap`(선택 건 출발·도착), 배차 결과 지도 (v1.0.51)
 - [x] **내 정보 저장** — `renderProfile` 탭 분리(내 정보/비밀번호 변경), `PATCH /auth/me` 실 연동, `DATA.me` 전역 저장 (v1.0.52)
-- [ ] **접수창 엑셀 임포트** — `renderOrderIntake` `#excelImport` onclick `toast(목업)`, SheetJS + `POST /deliveries/batch` 연동 필요 (운행 생성 패널 엑셀과 별도 구현 필요)
+- [x] **접수창 엑셀 임포트** — `renderOrderIntake` `#excelImport` SheetJS 파싱, 헤더 기반 컬럼 매핑(화주명·상차지·하차지·화물종류·중량·희망도착 등), 파싱 결과를 `addPendingIntake` 대기열에 추가 (v1.0.53)
 - [ ] **대시보드 홈 화물 집계** — `cargoChips` 배열 하드코딩(`일반화물 12.4t` 등), `DATA.orders` 실 집계로 교체 필요
 - [ ] **운행 중 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 배너, 핸드오버 폼 저장·사고신고·대차 요청 모두 `toast(목업)`
