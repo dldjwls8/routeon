@@ -6,6 +6,16 @@
 
 ---
 
+## v1.0.65 (2026-06-03)
+### 프론트엔드 점검 후 수정 (5건)
+- **`intakeMixedLoadRadioHtml` 두 번째 라디오 class 누락 수정**: `value="1"` (혼적) 라디오에 `class="intake-field"` 및 `data-intake-field` 속성 없어 `getIntakeFields()` 수집에서 누락되던 문제 수정
+- **`btnFinalCheck` 첫 번째 플랜 고정 수정**: "순서·노드 최종 확인" 모달이 항상 `plans[0]`만 표시 → 현재 선택 탭 `plans[tabIdx]` 기준으로 수정
+- **`showTripRoutePolyline` 지도 중복 생성 수정**: 기존 `_tripRouteMapInstance` 미정리 상태에서 `new kakao.maps.Map()` 재호출 → `el.innerHTML = ''`로 DOM 초기화 후 재생성하여 인스턴스 중첩·메모리 누수 방지
+- **오더 수정 저장 시 `status` 미전달 수정**: 상태 드롭다운 선택값이 `PATCH /deliveries/{id}` body에 포함되지 않던 문제 → 한글→영문 역매핑(`'접수'→pending` 등) 후 전달
+- **오더 수정 저장 시 좌표 재조회 누락 수정**: 상·하차지 주소 변경 시 좌표가 이전 값 그대로 유지 → `GET /address/coord` 병렬 호출로 좌표 재조회 후 body 포함, API 응답(`lat/lon/pickup_lat/pickup_lon`)으로 `DATA.orders` 즉시 갱신
+
+---
+
 ## v1.0.64 (2026-06-03)
 ### 논리·설계 오류 점검 후 수정 (6건)
 - **`location.py` 도착 감지 500 수정**: `delivery.lat`이 null인 배송에서 `LatLng(lat=None)` Pydantic 오류 → null 체크 후 continue 처리

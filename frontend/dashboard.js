@@ -3781,7 +3781,7 @@
     $('#btnFinalCheck', root).onclick = () => {
       openModalLarge('순서·노드 최종 확인', `
         <p style="font-size:13px;margin-bottom:12px">차량별 방문 순서와 지도 노드를 확인합니다.</p>
-        <ol class="visit-ol">${(plans[0]?.visits || []).map(v => `<li>${v}</li>`).join('')}</ol>`, () => toast('최종 확인 완료'));
+        <ol class="visit-ol">${((plans[tabIdx] || plans[0])?.visits || []).map(v => `<li>${v}</li>`).join('')}</ol>`, () => toast('최종 확인 완료'));
     };
     $('#btnAppHandoff', root).onclick = () => {
       const assigned = DATA.dispatchAssigned;
@@ -4048,6 +4048,8 @@
   async function showTripRoutePolyline(el, tripId) {
     if (!el || !window.kakao?.maps) return;
     if (_tripRoutePolyline) { _tripRoutePolyline.setMap(null); _tripRoutePolyline = null; }
+    _tripRouteMapInstance = null;
+    el.innerHTML = '';
     _tripRouteMapInstance = new kakao.maps.Map(el, {
       center: new kakao.maps.LatLng(36.5, 127.5),
       level: 10,
@@ -4302,15 +4304,27 @@
         const contact = form.querySelector('[name="contact"]').value.trim();
         const customer = form.querySelector('[name="customer"]').value;
         const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
+        const statusKoMap = { '접수': 'pending', '배차': 'scheduled', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
+        const selectedStatus = form.querySelector('[name="status"]')?.value;
+        // 주소 변경 시 좌표 재조회
+        const [coordPu, coordDl] = await Promise.all([
+          pickup ? fetch(`${API}/address/coord?query=${encodeURIComponent(pickup)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+          delivery ? fetch(`${API}/address/coord?query=${encodeURIComponent(delivery)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+        ]);
         const body = {
           address: delivery || undefined,
+          lat: coordDl?.lat ?? null,
+          lon: coordDl?.lon ?? null,
           pickup_address: pickup || undefined,
+          pickup_lat: coordPu?.lat ?? null,
+          pickup_lon: coordPu?.lon ?? null,
           recipient_name: recipient || undefined,
           cargo_type: cargo || undefined,
           cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
           contact_name: contact || undefined,
           shipper_name: customer || undefined,
           deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
+          status: statusKoMap[selectedStatus] || undefined,
         };
         const res = await fetch(`${API}/deliveries/${o.id}`, {
           method: 'PATCH',
@@ -4318,9 +4332,16 @@
           body: JSON.stringify(body),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
+        const updated = await res.json();
         o.customer = customer; o.pickup = pickup; o.delivery = delivery;
         o.recipient = recipient; o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
         o.window = latest ? formatIntakeWindow(latest) : '—';
+        o.lat = updated.lat; o.lon = updated.lon;
+        o.pickup_lat = updated.pickup_lat; o.pickup_lon = updated.pickup_lon;
+        if (updated.status) {
+          const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소', scheduled: '배차' };
+          o.status = deliveryStatusMap[updated.status] || updated.status;
+        }
         toast('오더가 수정되었습니다');
       } else {
         toast('조회 완료');
@@ -4397,7 +4418,7 @@
           <span>단독</span>
         </label>
         <label class="radio-label">
-          <input type="radio" name="${groupName}" value="1"${isMixed ? ' checked' : ''}>
+          <input type="radio" class="intake-field" name="${groupName}" value="1"${isMixed ? ' checked' : ''} data-intake-field="${groupName}">
           <span>혼적</span>
         </label>
       </div>
