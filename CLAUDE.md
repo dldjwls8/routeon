@@ -84,7 +84,7 @@ routeon/
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,226줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (4,491줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (5,241줄, dashboard.html에서 분리)
     ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
     ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
@@ -183,6 +183,13 @@ await db.refresh(obj)
 {"type": "trip.replanned", "driver_id": "uuid", "trip_id": "uuid"}
 ```
 대시보드: `handleTripReplanned()` → `clearDriverRoute()` + `loadDrivers()` + `showDriverDetail()` 호출.
+
+### WS 메시지 형식 (trip.assigned)
+`POST /trips/auto-dispatch` 완료 시 → 같은 조직 기사 WS에 브로드캐스트 (`broadcast_replan_to_org`).
+```json
+{"type": "trip.assigned", "trip_id": "uuid", "driver_id": "uuid", "message": "새 배차가 배정되었습니다. 경로 최적화를 실행하세요."}
+```
+앱에서 `driver_id`로 본인 건 필터링 후 `/optimize` 호출 안내.
 
 ### WS 메시지 형식 (heartbeat)
 서버가 20초마다 클라이언트에 전송. 앱은 무시하거나 `{"type":"pong"}`으로 응답.
@@ -388,6 +395,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `GET /deliveries/{id}` | 로그인 | 배송 상세 |
 | `PATCH /deliveries/{id}/complete` | 기사 | 수동 완료 |
 | `GET /address/coord?query=` | 없음 | 주소 → 좌표 변환 |
+| `POST /route/preview` | 관리자 | 경유지 순서대로 GraphHopper 실 도로 경로·거리·시간 반환. 좌표 없는 경유지 자동 스킵. 응답: `{distance_m, duration_sec, polyline: [[lat,lon],...]}` |
 | `POST /rest-spots` | 없음 | 근처 휴식 장소 검색 (카카오 로컬) |
 | `POST /location-logs` | 로그인 | GPS 수신 + 자동 완료 + WS broadcast (5초 주기) |
 | `GET /location-logs/{user_id}` | 관리자 | 기사 현재 위치. Redis 실시간 우선, miss 시 TimescaleDB 최근 기록 폴백. `is_realtime`, `recorded_at` 응답 포함 |
@@ -581,6 +589,15 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (헤더 기반 컬럼 매핑, 대기열 추가) (v1.0.53)
 - [x] **[대시보드] 홈 화물 집계 실 데이터화** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 실 집계로 교체 (v1.0.54)
 - [x] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동 (v1.0.55)
+- [x] **[배차] 경로 계산 실 API 연동** — `bindRouteCalc` mock → `POST /route/preview` GraphHopper 실 도로 경로, 지도 폴리라인 오버레이 (v1.0.66)
+- [x] **[배차] 일괄 배차 기사 앱 WS 알림** — `POST /trips/auto-dispatch` 완료 후 `trip.assigned` 이벤트 WS 브로드캐스트 (v1.0.66)
+- [x] **[오더관리] 운행중 오더 상태 변경 저장** — `orderIsEditable` 조건 분리(`canSave`), 완료·취소 외 모든 상태에서 상태 드롭다운 저장 가능 (v1.0.67)
+- [x] **[고객관리] 위치 목록 읽기전용 전환** — `locModal` 추가·편집 버튼 제거, 오더 하차지 파생 읽기 전용 뷰로 변경 (v1.0.68)
+- [x] **[접수창] 상차지·하차지 기본값 제거** — 접수창 진입 시 sample 오더에서 pickup/delivery 미리채움 제거 (v1.0.69)
+- [x] **[접수창] 자동완성 표시 개선** — 중복 place_name 필터, 실제 장소명 우선 정렬, category_group_name 뱃지, 최대 7건 표시 (v1.0.69)
+- [x] **[접수창] 자동완성 키보드 화살표 시각 피드백** — `setActive()` 헬퍼로 ArrowDown/ArrowUp 하이라이트 추가 (v1.0.69)
+- [x] **[접수창] 자동완성 드롭다운 다크모드 대응** — 배경·테두리·텍스트·hover 전부 다크 테마 변수로 교체 (v1.0.70)
+
 ### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링

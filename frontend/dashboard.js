@@ -645,6 +645,8 @@
   let _bulkDispatchTrips = [];
   let _dispatchRunTrips = [];
   let _lastManualAssign = null;
+  let _dispatchRouteMapInstance = null;
+  let _dispatchRoutePolyline = null;
 
   function findNavPage(pageId) {
     for (const g of NAV) {
@@ -2681,7 +2683,7 @@
           <div class="card">
             <div class="card-hd">
               <h2>위치 목록</h2>
-              <button type="button" class="btn btn-primary btn-sm" id="addLoc">+ 위치 추가</button>
+              <span style="font-size:12px;color:var(--text-muted)">오더 하차지 주소 기준 자동 생성</span>
             </div>
             <div class="card-bd">
               <ul class="loc-list">${DATA.locations.map(l => {
@@ -2691,7 +2693,6 @@
                   : '';
                 return `<li>
                   <div><strong>${l.label}</strong><br><span class="coord">${custLink}${c ? ' · ' : ''}${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}</span></div>
-                  <button type="button" class="btn btn-sm edit-loc" data-id="${l.id}">편집</button>
                 </li>`;
               }).join('')}</ul>
             </div>
@@ -2705,13 +2706,6 @@
         </div>
       </div>
       </div>`;
-    $('#addLoc', root).onclick = () => locModal();
-    root.querySelectorAll('.edit-loc').forEach(btn => {
-      btn.onclick = () => {
-        const l = DATA.locations.find(x => x.id === Number(btn.dataset.id));
-        locModal(l);
-      };
-    });
     root.querySelectorAll('.cust-history-link').forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
@@ -3079,7 +3073,6 @@
           : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
         await loadRealData();
       } catch (err) {
-        console.error(err);
         toast('배차 중 오류가 발생했습니다');
       } finally {
         btn.disabled = false; btn.textContent = '일괄 배차 실행';
@@ -3142,7 +3135,7 @@
 
   function bindRouteCalc(btn, box, list) {
     if (!btn || !box || !list) return;
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const ord = dispatchPendingSelectedId
         ? DATA.orders.find(o => o.id === dispatchPendingSelectedId) : null;
       if (!ord) { toast('배송 건을 먼저 선택하세요'); return; }
@@ -3162,17 +3155,47 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="loading"></span>계산 중…';
       box.classList.remove('show');
-      setTimeout(() => {
+      try {
+        const res = await fetch(`${API}/route/preview`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stops }),
+        });
+        const routeData = res.ok ? await res.json() : null;
+        btn.disabled = false;
+        btn.textContent = '경로 계산';
+        const distKm  = routeData ? (routeData.distance_m / 1000).toFixed(1) : null;
+        const durMin  = routeData ? Math.round(routeData.duration_sec / 60)  : null;
+        list.innerHTML = stops.map((s, i) => {
+          const role  = s.role ? ` <span class="badge badge-info">${s.role}</span>` : '';
+          const coord = (s.lat && s.lon) ? ` <span class="coord">(${s.lat.toFixed(4)}, ${s.lon.toFixed(4)})</span>` : '';
+          const isLast = i === stops.length - 1;
+          const summary = (isLast && distKm != null)
+            ? ` <span style="color:var(--primary);font-weight:600">총 ${distKm}km · 약 ${durMin}분</span>` : '';
+          return `<li>${s.seq}. ${s.name}${role}${coord}${summary}</li>`;
+        }).join('');
+        // 지도에 경로선 표시
+        if (routeData?.polyline?.length > 1 && _dispatchRouteMapInstance) {
+          if (_dispatchRoutePolyline) { _dispatchRoutePolyline.setMap(null); _dispatchRoutePolyline = null; }
+          const path = routeData.polyline.map(([lat, lon]) => new kakao.maps.LatLng(lat, lon));
+          _dispatchRoutePolyline = new kakao.maps.Polyline({
+            map: _dispatchRouteMapInstance, path,
+            strokeWeight: 4, strokeColor: '#4f67f5', strokeOpacity: 0.85,
+          });
+        }
+        box.classList.add('show');
+        toast(distKm != null ? `경로 계산 완료 · ${distKm}km · ${durMin}분` : '경로 미리보기가 준비되었습니다');
+      } catch (e) {
         btn.disabled = false;
         btn.textContent = '경로 계산';
         list.innerHTML = stops.map(s => {
-          const role = s.role ? ` <span class="badge badge-info">${s.role}</span>` : '';
+          const role  = s.role ? ` <span class="badge badge-info">${s.role}</span>` : '';
           const coord = (s.lat && s.lon) ? ` <span class="coord">(${s.lat.toFixed(4)}, ${s.lon.toFixed(4)})</span>` : '';
           return `<li>${s.seq}. ${s.name}${role}${coord}</li>`;
         }).join('');
         box.classList.add('show');
-        toast('경로 미리보기가 준비되었습니다');
-      }, 300);
+        toast('경로 계산 실패 · 경유지 목록만 표시합니다', 'error');
+      }
     };
   }
 
@@ -3660,7 +3683,6 @@
           : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
         await loadRealData();
       } catch (err) {
-        console.error(err);
         toast('배차 중 오류가 발생했습니다');
       } finally {
         btn.disabled = false; btn.textContent = '배차 실행';
@@ -3699,7 +3721,9 @@
     $('#manualReassign', root).onclick = () => {
       const unassignedCount = DATA.dispatchUnassigned?.length || 0;
       if (!unassignedCount) { toast('재배정할 미배정 건이 없습니다'); return; }
-      toast(`${unassignedCount}건 미배정 — 위 「미배차 건」에서 수동으로 배정하세요`);
+      const pendingSec = document.getElementById('sec-dispatch-pending');
+      if (pendingSec) pendingSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      toast(`${unassignedCount}건 미배정 — 미배차 건 목록에서 선택 후 배정하세요`);
     };
     $('#singleDispatch', root).onclick = () => {
       const unassigned = unassignedForDispatch();
@@ -3786,8 +3810,8 @@
     $('#btnAppHandoff', root).onclick = () => {
       const assigned = DATA.dispatchAssigned;
       if (!assigned.length) { toast('배차 결과가 없습니다. 먼저 배차를 실행하세요'); return; }
-      openModal('기사 앱 전달 안내', `
-        <p style="font-size:13px;margin-bottom:12px">아래 기사에게 배차 정보를 전달하세요.<br>기사가 앱에서 <strong>경로 최적화</strong>를 실행하면 운행이 시작됩니다.</p>
+      openModal('기사 앱 전달 완료', `
+        <p style="font-size:13px;margin-bottom:12px">아래 기사의 앱으로 배차 알림이 전송되었습니다.<br>기사가 앱에서 <strong>경로 최적화</strong>를 실행하면 운행이 시작됩니다.</p>
         <ul class="route-list">
           ${assigned.map(a => `<li><strong>${a.driver}</strong> · ${a.plate} (${a.tonnage})<br><small style="color:var(--text-muted)">${a.label}</small></li>`).join('')}
         </ul>`);
@@ -3806,6 +3830,8 @@
               (ord.pickup_lon + ord.lon) / 2,
             );
             const m = new kakao.maps.Map(routeEl, { center, level: 10 });
+            _dispatchRouteMapInstance = m;
+            _dispatchRoutePolyline = null;
             new kakao.maps.Marker({ map: m, position: new kakao.maps.LatLng(ord.pickup_lat, ord.pickup_lon) });
             new kakao.maps.Marker({ map: m, position: new kakao.maps.LatLng(ord.lat, ord.lon) });
           }
@@ -4116,7 +4142,16 @@
           ps.keywordSearch(q, (data, status) => {
             removeDrop();
             if (status !== kakao.maps.services.Status.OK || !data.length) return;
-            showDrop(data.slice(0, 6));
+            // 중복 place_name 제거 후 실제 장소명(주소와 다른 것) 우선 정렬
+            const seen = new Set();
+            const filtered = data
+              .filter(p => { if (seen.has(p.place_name)) return false; seen.add(p.place_name); return true; })
+              .sort((a, b) => {
+                const aAddr = a.place_name === a.road_address_name || a.place_name === a.address_name;
+                const bAddr = b.place_name === b.road_address_name || b.place_name === b.address_name;
+                return (aAddr ? 1 : 0) - (bAddr ? 1 : 0);
+              });
+            showDrop(filtered.slice(0, 7));
           });
         }, 300);
       });
@@ -4129,11 +4164,11 @@
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           const next = current ? current.nextElementSibling : items[0];
-          if (next) { current?.classList.remove('active'); next.classList.add('active'); next.scrollIntoView({ block: 'nearest' }); }
+          if (next) setActive(next);
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
           const prev = current ? current.previousElementSibling : items[items.length - 1];
-          if (prev) { current?.classList.remove('active'); prev.classList.add('active'); prev.scrollIntoView({ block: 'nearest' }); }
+          if (prev) setActive(prev);
         } else if (e.key === 'Enter') {
           const active = dropdown.querySelector('.place-suggestion.active');
           if (active) { e.preventDefault(); active.click(); }
@@ -4142,18 +4177,30 @@
         }
       });
 
+      function setActive(item) {
+        if (!dropdown) return;
+        dropdown.querySelectorAll('.place-suggestion').forEach(x => {
+          x.classList.remove('active');
+          x.style.background = 'transparent';
+        });
+        item.classList.add('active');
+        item.style.background = 'var(--t-card-hover,#252a35)';
+        item.scrollIntoView({ block: 'nearest' });
+      }
+
       function showDrop(places) {
         dropdown = document.createElement('div');
         dropdown.className = 'place-autocomplete-drop';
-        dropdown.style.cssText = 'position:absolute;left:0;right:0;top:100%;z-index:9999;background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto';
+        dropdown.style.cssText = 'position:absolute;left:0;right:0;top:100%;z-index:9999;background:var(--dark-card,#1c2029);border:1px solid var(--dark-border,rgba(255,255,255,.08));border-radius:0 0 6px 6px;box-shadow:0 4px 16px rgba(0,0,0,.45);max-height:240px;overflow-y:auto';
         places.forEach(p => {
           const item = document.createElement('button');
           item.type = 'button';
           item.className = 'place-suggestion';
-          item.style.cssText = 'display:block;width:100%;text-align:left;padding:7px 12px;font-size:13px;border:none;border-bottom:1px solid var(--border,#f3f4f6);background:none;cursor:pointer;line-height:1.4';
-          item.innerHTML = `<strong style="font-size:13px">${escapeHtml(p.place_name)}</strong><br><span style="font-size:11px;color:var(--text-muted,#9ca3af)">${escapeHtml(p.road_address_name || p.address_name || '')}</span>`;
-          item.onmouseover = () => { dropdown.querySelectorAll('.place-suggestion').forEach(x => x.classList.remove('active')); item.classList.add('active'); item.style.background = 'var(--bg-hover,#f9fafb)'; };
-          item.onmouseout  = () => { item.classList.remove('active'); item.style.background = 'none'; };
+          item.style.cssText = 'display:block;width:100%;text-align:left;padding:7px 12px;font-size:13px;border:none;border-bottom:1px solid var(--dark-border,rgba(255,255,255,.08));background:transparent;cursor:pointer;line-height:1.4;color:var(--t-text-muted,#8b93a7)';
+          const cat = p.category_group_name ? `<span style="font-size:10px;margin-left:5px;font-weight:500;color:var(--t-text-muted,#8b93a7)">${escapeHtml(p.category_group_name)}</span>` : '';
+          item.innerHTML = `<strong style="font-size:13px;font-weight:600;color:var(--t-text-muted,#8b93a7)">${escapeHtml(p.place_name)}</strong>${cat}<br><span style="font-size:11px;color:var(--t-text-muted,#8b93a7)">${escapeHtml(p.road_address_name || p.address_name || '')}</span>`;
+          item.onmouseover = () => setActive(item);
+          item.onmouseout  = () => { item.classList.remove('active'); item.style.background = 'transparent'; };
           item.onclick = () => {
             inp.value = p.place_name;
             inp.dataset.lat = p.y;
@@ -4274,8 +4321,10 @@
     const statusOpts = ['접수', '배차', '운행중', '완료', '취소'].map(s =>
       `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
     ).join('');
+    // 완료·취소 상태는 조회 전용, 나머지는 상태 변경 가능 (접수 상태만 필드 전체 수정)
+    const canSave = o.status !== '완료' && o.status !== '취소';
     const ro = orderIsEditable(o) ? '' : ' disabled';
-    openModal(`${orderIsEditable(o) ? '오더 수정' : '오더 조회'} · ${o.id}`, `
+    openModal(`${canSave ? '오더 수정' : '오더 조회'} · ${o.id}`, `
       <form id="orderEditForm">
         <div class="form-grid" style="max-width:100%">
           <label>오더번호</label><input value="${o.id}" disabled>
@@ -4288,44 +4337,49 @@
           <label>연락처</label><input name="contact" value="${o.contact || ''}"${ro}>
           <label>희망 도착</label>
           <div>${desiredArrivalFieldsHtml({ value: o.window === '—' ? '' : (o.window || ''), dateName: 'order_latest_at_date', hourName: 'order_latest_at_hour', disabled: !!ro, hint: true })}</div>
-          <label>상태</label><select name="status">${statusOpts}</select>
+          <label>상태</label><select name="status"${canSave ? '' : ' disabled'}>${statusOpts}</select>
           <label>기사</label><input value="${o.driver || '—'}" disabled>
         </div>
-        ${orderIsEditable(o) ? '' : '<p class="text-muted-hint" style="font-size:12px;margin-top:10px">접수 건만 상·하차·화물 등을 수정할 수 있습니다. 취소·삭제는 하단 버튼을 이용하세요.</p>'}
+        ${!orderIsEditable(o) ? `<p class="text-muted-hint" style="font-size:12px;margin-top:10px">${canSave ? '상태만 변경 가능합니다. 주소·화물 수정은 접수 상태에서만 가능합니다.' : '조회 전용입니다.'}</p>` : ''}
       </form>`, async () => {
       const form = $('#orderEditForm');
       if (!form) return;
-      if (orderIsEditable(o)) {
-        const pickup = form.querySelector('[name="pickup"]').value.trim();
-        const delivery = form.querySelector('[name="delivery"]').value.trim();
-        const recipient = form.querySelector('[name="recipient"]').value.trim();
-        const cargo = form.querySelector('[name="cargo"]').value.trim();
-        const tonsStr = form.querySelector('[name="tons"]').value.trim();
-        const contact = form.querySelector('[name="contact"]').value.trim();
-        const customer = form.querySelector('[name="customer"]').value;
-        const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
+      if (canSave) {
         const statusKoMap = { '접수': 'pending', '배차': 'scheduled', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
         const selectedStatus = form.querySelector('[name="status"]')?.value;
-        // 주소 변경 시 좌표 재조회
-        const [coordPu, coordDl] = await Promise.all([
-          pickup ? fetch(`${API}/address/coord?query=${encodeURIComponent(pickup)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-          delivery ? fetch(`${API}/address/coord?query=${encodeURIComponent(delivery)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-        ]);
-        const body = {
-          address: delivery || undefined,
-          lat: coordDl?.lat ?? null,
-          lon: coordDl?.lon ?? null,
-          pickup_address: pickup || undefined,
-          pickup_lat: coordPu?.lat ?? null,
-          pickup_lon: coordPu?.lon ?? null,
-          recipient_name: recipient || undefined,
-          cargo_type: cargo || undefined,
-          cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
-          contact_name: contact || undefined,
-          shipper_name: customer || undefined,
-          deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
-          status: statusKoMap[selectedStatus] || undefined,
-        };
+        const body = { status: statusKoMap[selectedStatus] || undefined };
+        if (orderIsEditable(o)) {
+          const pickup = form.querySelector('[name="pickup"]').value.trim();
+          const delivery = form.querySelector('[name="delivery"]').value.trim();
+          const recipient = form.querySelector('[name="recipient"]').value.trim();
+          const cargo = form.querySelector('[name="cargo"]').value.trim();
+          const tonsStr = form.querySelector('[name="tons"]').value.trim();
+          const contact = form.querySelector('[name="contact"]').value.trim();
+          const customer = form.querySelector('[name="customer"]').value;
+          const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
+          // 주소 변경 시 좌표 재조회
+          const [coordPu, coordDl] = await Promise.all([
+            pickup ? fetch(`${API}/address/coord?query=${encodeURIComponent(pickup)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+            delivery ? fetch(`${API}/address/coord?query=${encodeURIComponent(delivery)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+          ]);
+          Object.assign(body, {
+            address: delivery || undefined,
+            lat: coordDl?.lat ?? null,
+            lon: coordDl?.lon ?? null,
+            pickup_address: pickup || undefined,
+            pickup_lat: coordPu?.lat ?? null,
+            pickup_lon: coordPu?.lon ?? null,
+            recipient_name: recipient || undefined,
+            cargo_type: cargo || undefined,
+            cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
+            contact_name: contact || undefined,
+            shipper_name: customer || undefined,
+            deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
+          });
+          o.customer = customer; o.pickup = pickup; o.delivery = delivery;
+          o.recipient = recipient; o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
+          o.window = latest ? formatIntakeWindow(latest) : '—';
+        }
         const res = await fetch(`${API}/deliveries/${o.id}`, {
           method: 'PATCH',
           headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
@@ -4333,9 +4387,6 @@
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
         const updated = await res.json();
-        o.customer = customer; o.pickup = pickup; o.delivery = delivery;
-        o.recipient = recipient; o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
-        o.window = latest ? formatIntakeWindow(latest) : '—';
         o.lat = updated.lat; o.lon = updated.lon;
         o.pickup_lat = updated.pickup_lat; o.pickup_lon = updated.pickup_lon;
         if (updated.status) {
@@ -4697,8 +4748,8 @@
   }
 
   function taskCardHtml(taskNum, custOpts, sample, tabBase) {
-    const pickup = sample?.pickup || '';
-    const delivery = sample?.delivery || '';
+    const pickup = '';
+    const delivery = '';
     const defaultMixed = taskNum === 1 ? isMixedLoad(sample) : false;
     const t = tabBase || (taskNum - 1) * 10;
     return `

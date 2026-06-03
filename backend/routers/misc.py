@@ -45,6 +45,14 @@ class RestSearchRequest(BaseModel):
 class AddressRequest(BaseModel):
     query: str   # 검색할 주소
 
+class RoutePreviewStop(BaseModel):
+    lat:  Optional[float] = None
+    lon:  Optional[float] = None
+    name: Optional[str]   = None
+
+class RoutePreviewRequest(BaseModel):
+    stops: list[RoutePreviewStop]
+
 
 @router.get("/health")
 async def health():
@@ -137,6 +145,26 @@ async def address_to_coord(query: str):
         "lon":     float(doc.get("x", 0)),
         "road_address": doc.get("road_address", {}).get("address_name") if doc.get("road_address") else None,
     }
+
+
+# ────────────────────────────────────────────────
+# 경로 미리보기 (GraphHopper)
+# ────────────────────────────────────────────────
+
+@router.post("/route/preview")
+async def route_preview(
+    req: RoutePreviewRequest,
+    current_user: User = Depends(require_admin),
+):
+    """경유지 순서대로 GraphHopper 실 도로 경로·거리·시간 반환."""
+    valid = [{"lat": s.lat, "lon": s.lon} for s in req.stops if s.lat and s.lon]
+    if len(valid) < 2:
+        raise HTTPException(400, "좌표가 있는 경유지 2개 이상 필요합니다.")
+    try:
+        polyline, time_sec, dist_m = await gh_svc.get_route_with_stats(valid)
+    except Exception as e:
+        raise HTTPException(503, f"경로 계산 실패: {e}")
+    return {"distance_m": dist_m, "duration_sec": time_sec, "polyline": polyline}
 
 
 # ────────────────────────────────────────────────

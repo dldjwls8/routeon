@@ -232,6 +232,19 @@ async def auto_dispatch_trips(
         created_trips.append(_trip_schema(t))
 
     await db.commit()
+
+    # 각 기사에게 배차 알림 WS 전송
+    for trip_data in created_trips:
+        await manager.broadcast_replan_to_org(
+            current_user.organization_id,
+            {
+                "type":      "trip.assigned",
+                "trip_id":   trip_data["id"],
+                "driver_id": trip_data["driver_id"],
+                "message":   "새 배차가 배정되었습니다. 경로 최적화를 실행하세요.",
+            }
+        )
+
     return {
         "created": len(created_trips),
         "trips":   created_trips,

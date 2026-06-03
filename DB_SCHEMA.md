@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-03 (v1.0.63 기준)
+> 최종 검토: 2026-06-03 (v1.0.70 기준)
 
 ---
 
@@ -305,7 +305,8 @@ in_progress → done_manual : PATCH /deliveries/{id}/complete (수동 완료)
 ```
 
 수정 가능 조건:
-- `pending` 상태일 때만 필드 수정 가능 (`PATCH /deliveries/{id}`)
+- `pending` 상태일 때만 **주소·화물 필드** 수정 가능 (`PATCH /deliveries/{id}`)
+- `pending` / `in_progress` / `scheduled(배차)` 상태는 **상태(status) 변경** 가능 — 관리자 웹 오더 수정 모달의 `canSave` 로직 적용
 - `done` / `done_manual` 상태는 수정·취소·삭제 불가
 - `cancelled` 상태는 삭제만 가능 (`DELETE /deliveries/{id}`)
 
