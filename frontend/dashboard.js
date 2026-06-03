@@ -580,6 +580,17 @@
         available: v.status === '가용',
       }));
 
+      if (_pendingSelectDriverId) {
+        const target = DATA.drivers.find(d => d.id === _pendingSelectDriverId);
+        if (target) {
+          selectedDriverId = target.id;
+          currentMain = 'basic';
+          currentPage = 'drivers';
+          driverPage = Math.floor(DATA.drivers.findIndex(d => d.id === target.id) / PAGE_SIZE) + 1;
+          _pendingSelectDriverId = null;
+        }
+      }
+
       // 페이지 재렌더링
       renderPage();
       if (currentPage === 'dashboard') showDashboardMap();
@@ -660,6 +671,8 @@
   let _lastManualAssign = null;
   let _dispatchRouteMapInstance = null;
   let _dispatchRoutePolyline = null;
+  let _kakaoReady = false;
+  let _pendingSelectDriverId = null;
 
   function findNavPage(pageId) {
     for (const g of NAV) {
@@ -690,6 +703,27 @@
     renderNav();
     renderPage();
     if (currentPage === 'dashboard') setTimeout(showDashboardMap, 50);
+  }
+
+  function applyInitialQueryState() {
+    const params = new URLSearchParams(location.search);
+    const requestedMain = params.get('main');
+    const requestedPage = params.get('page');
+    if (requestedMain) {
+      const group = NAV.find(g => g.id === requestedMain);
+      if (group) {
+        const page = requestedPage && group.pages.some(p => p.id === requestedPage)
+          ? requestedPage
+          : group.pages[0].id;
+        currentMain = group.id;
+        currentPage = page;
+      }
+    }
+    const driverId = params.get('select_driver');
+    if (!driverId) return;
+    _pendingSelectDriverId = driverId;
+    currentMain = 'basic';
+    currentPage = 'drivers';
   }
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -3027,30 +3061,26 @@
       const skipped = [];
       bd.stops.forEach(stop => {
         const ord = DATA.orders.find(o => o.id === stop.id);
-        if (!ord?.pickup_lat || !ord?.lat) { skipped.push(stop.id); return; }
-        tasks.push({
-          loadings: [{ name: stop.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
-          unloadings: [{ name: stop.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id,
-            recipient_name: ord.recipient_name || null,
-            cargo_type: ord.cargo_type || null,
-            cargo_weight_ton: ord.cargo_weight_ton ?? null }],
-        });
+        const task = dispatchTaskFromOrder(ord);
+        if (!task) { skipped.push(stop.id); return; }
+        tasks.push(task);
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
 
-      const driver_ids = [];
+      const selectedRows = [];
       checked.forEach(chk => {
         const rowId = Number(chk.closest('li')?.dataset.bulkRow);
         const row = bd.vehicles.find(v => v.id === rowId);
-        if (row?.driverId) driver_ids.push(row.driverId);
+        if (row?.driverId) selectedRows.push(row);
       });
+      const { driver_ids, vehicle_assignments } = dispatchVehicleAssignmentsFromRows(selectedRows);
       if (!driver_ids.length) { toast('선택된 차량에 기사가 없습니다. 기사를 먼저 지정하세요.'); return; }
 
       const btn = $('#runBulkDispatch', root);
       btn.disabled = true;
       btn.innerHTML = '<span class="loading"></span>배차 중…';
       try {
-        const body = { tasks, driver_ids, departure_time: new Date().toISOString() };
+        const body = { tasks, driver_ids, vehicle_assignments, departure_time: new Date().toISOString() };
         const res = await fetch(`${API}/trips/auto-dispatch`, {
           method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
         });
@@ -3092,7 +3122,7 @@
         toast('배차 중 오류가 발생했습니다');
       } finally {
         btn.disabled = false; btn.textContent = '일괄 배차 실행';
-        renderBulkDispatch(root);
+        if (document.body.contains(root)) renderBulkDispatch(root);
       }
     };
     root.querySelectorAll('#bulkVehicleTabs .tab').forEach(tab => {
@@ -3147,6 +3177,58 @@
         mixed_load: o.mixed_load,
       }));
     return fromOrders;
+  }
+
+  function dispatchTaskFromOrder(ord) {
+    if (!ord?.pickup_lat || !ord?.pickup_lon || !ord?.lat || !ord?.lon) return null;
+    return {
+      loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
+      unloadings: [{
+        name: ord.delivery || '하차지',
+        lat: ord.lat,
+        lon: ord.lon,
+        delivery_id: ord.id,
+        recipient_name: ord.recipient || null,
+        cargo_type: ord.cargo || null,
+        cargo_weight_ton: parseFloat(String(ord.tons || '').replace(/[^0-9.]/g, '')) || null,
+      }],
+    };
+  }
+
+  function dispatchVehicleAssignmentsFromRows(rows) {
+    const assignments = {};
+    const driverIds = [];
+    rows.forEach(row => {
+      if (!row?.driverId) return;
+      driverIds.push(row.driverId);
+      if (row.vehicleId) assignments[row.driverId] = Number(row.vehicleId);
+    });
+    return { driver_ids: driverIds, vehicle_assignments: assignments };
+  }
+
+  function applyDispatchTripsResult(trips, skipped = []) {
+    _dispatchRunTrips = trips;
+    DATA.dispatchPlans = trips.map(t => {
+      const dv = driverById(t.driver_id);
+      const vv = vehicleById(t.vehicle_id);
+      return {
+        plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
+        mixed_load: false,
+        visits: (t.waypoints || []).map(w => `${w.name} (${w.type === 'loading' ? '상차' : '하차'})`),
+        duration: '—', distance: '—',
+      };
+    });
+    DATA.dispatchAssigned = trips.map(t => {
+      const dv = driverById(t.driver_id);
+      const vv = vehicleById(t.vehicle_id);
+      return {
+        id: t.id.slice(0, 8), label: `${(t.waypoints || []).length}개 경유지`,
+        plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
+      };
+    });
+    DATA.dispatchUnassigned = skipped.map(id => ({ id, label: '좌표 미확인', reason: '좌표 정보 없음' }));
+    dispatchRan = true;
+    dispatchPreviewTab = 0;
   }
 
   function bindRouteCalc(btn, box, list) {
@@ -3548,34 +3630,40 @@
         const v = vehicleById(dispatchManualVehicleId);
         const d = driverById(dispatchManualDriverId);
         const ordId = dispatchPendingSelectedId;
-        if (ordId) {
-          const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
-          const res = await fetch(`${API}/deliveries/${ordId}/assign`, {
-            method: 'PATCH',
-            headers: hdrs,
-            body: JSON.stringify({ driver_id: dispatchManualDriverId }),
-          });
-          if (!res.ok) {
-            const e = await res.json().catch(() => ({}));
-            toast(e.detail || '배정 실패');
-            return;
-          }
-          const ord = DATA.orders.find(o => o.id === ordId);
-          if (ord) {
-            ord.status = '배차'; ord.driver = d?.name || '—';
-            _lastManualAssign = {
-              driverId: dispatchManualDriverId,
-              vehicleId: dispatchManualVehicleId,
-              order: { ...ord },
-            };
-          }
-          const idx = pendingIntakes.findIndex(p => p.id === ordId);
-          if (idx >= 0) pendingIntakes.splice(idx, 1);
+        const ord = DATA.orders.find(o => o.id === ordId);
+        const task = dispatchTaskFromOrder(ord);
+        if (!task) {
+          toast('상차지·하차지 좌표가 필요합니다. 오더를 수정해 좌표를 저장하세요');
+          return;
         }
-        toast(`배정 완료 · ${v?.plate || ''} ${d ? '· ' + d.name : ''}`);
+        const res = await fetch(`${API}/trips/auto-dispatch`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tasks: [task],
+            driver_ids: [dispatchManualDriverId],
+            vehicle_assignments: { [dispatchManualDriverId]: Number(dispatchManualVehicleId) },
+            departure_time: new Date().toISOString(),
+          }),
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(e.detail || '배차 실패');
+          return;
+        }
+        const result = await res.json();
+        const trips = result.trips || [];
+        applyDispatchTripsResult(trips);
+        if (ord) {
+          ord.status = '운행중';
+          ord.driver = d?.name || '—';
+        }
+        const idx = pendingIntakes.findIndex(p => p.id === ordId);
+        if (idx >= 0) pendingIntakes.splice(idx, 1);
+        toast(`Trip 생성 완료 · ${v?.plate || ''} ${d ? '· ' + d.name : ''}`);
         dispatchPendingSelectedId = null;
-        dispatchRan = true;
-        renderDispatchAssign(root);
+        _lastManualAssign = null;
+        await loadRealData();
       };
     }
 
@@ -3640,31 +3728,27 @@
       const _siteForRun = dispatchSiteSel !== '전체' ? ROUTEON_SITES.find(s => s.place_name === dispatchSiteSel) : null;
       checkedOrderIds.forEach(ordId => {
         const ord = DATA.orders.find(o => o.id === ordId);
-        if (!ord?.pickup_lat || !ord?.lat) { skipped.push(ordId); return; }
         if (dispatchRegionSel !== '전체' && addressToRegion(ord.pickup || '') !== dispatchRegionSel) return;
         if (_siteForRun && addressToRegion(ord.pickup || '') !== _siteForRun.region) return;
-        tasks.push({
-          loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
-          unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id,
-            recipient_name: ord.recipient_name || null,
-            cargo_type: ord.cargo_type || null,
-            cargo_weight_ton: ord.cargo_weight_ton ?? null }],
-        });
+        const task = dispatchTaskFromOrder(ord);
+        if (!task) { skipped.push(ordId); return; }
+        tasks.push(task);
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
 
-      const driver_ids = [];
+      const selectedRows = [];
       checked.forEach(chk => {
         const li = chk.closest('li[data-fleet-id]');
         const row = DATA.dispatchFleet.find(f => f.id === Number(li?.dataset.fleetId));
-        if (row?.driverId) driver_ids.push(row.driverId);
+        if (row?.driverId) selectedRows.push(row);
       });
+      const { driver_ids, vehicle_assignments } = dispatchVehicleAssignmentsFromRows(selectedRows);
       if (!driver_ids.length) { toast('선택된 차량에 기사가 없습니다.'); return; }
 
       const btn = $('#runDispatch', root);
       btn.disabled = true; btn.innerHTML = '<span class="loading"></span>배차 중…';
       try {
-        const body = { tasks, driver_ids, departure_time: new Date().toISOString() };
+        const body = { tasks, driver_ids, vehicle_assignments, departure_time: new Date().toISOString() };
         const res = await fetch(`${API}/trips/auto-dispatch`, {
           method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
         });
@@ -3676,27 +3760,7 @@
         }
         const result = await res.json();
         const trips = result.trips || [];
-        _dispatchRunTrips = trips;
-        DATA.dispatchPlans = trips.map(t => {
-          const dv = driverById(t.driver_id);
-          const vv = vehicleById(t.vehicle_id);
-          return {
-            plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
-            mixed_load: false,
-            visits: (t.waypoints || []).map(w => `${w.name} (${w.type === 'loading' ? '상차' : '하차'})`),
-            duration: '—', distance: '—',
-          };
-        });
-        DATA.dispatchAssigned = trips.map(t => {
-          const dv = driverById(t.driver_id);
-          const vv = vehicleById(t.vehicle_id);
-          return {
-            id: t.id.slice(0, 8), label: `${(t.waypoints || []).length}개 경유지`,
-            plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
-          };
-        });
-        DATA.dispatchUnassigned = skipped.map(id => ({ id, label: '좌표 미확인', reason: '좌표 정보 없음' }));
-        dispatchRan = true;
+        applyDispatchTripsResult(trips, skipped);
         toast(skipped.length
           ? `배차 완료 · ${trips.length}대 (${skipped.length}건 제외)`
           : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
@@ -3705,7 +3769,7 @@
         toast('배차 중 오류가 발생했습니다');
       } finally {
         btn.disabled = false; btn.textContent = '배차 실행';
-        renderDispatchAssign(root);
+        if (document.body.contains(root)) renderDispatchAssign(root);
       }
     };
     root.querySelectorAll('.fleet-vehicle-select').forEach(sel => {
@@ -3759,17 +3823,30 @@
         <div class="vehicle-preview" id="singleVehiclePreview" style="margin-top:12px"></div>
       `, async () => {
         const ordId = document.getElementById('singleOrder')?.value;
+        const vehicleId = document.getElementById('singleVehicle')?.value;
         const driverId = document.getElementById('singleDriver')?.value;
         if (!ordId) { toast('배송 건을 선택하세요'); return false; }
+        if (!vehicleId) { toast('차량을 선택하세요'); return false; }
         if (!driverId) { toast('기사를 선택하세요'); return false; }
-        const res = await fetch(`${API}/deliveries/${ordId}/assign`, {
-          method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({ driver_id: driverId }),
+        const ord = DATA.orders.find(o => o.id === ordId);
+        const task = dispatchTaskFromOrder(ord);
+        if (!task) { toast('상차지·하차지 좌표가 필요합니다', 'error'); return false; }
+        const res = await fetch(`${API}/trips/auto-dispatch`, {
+          method: 'POST',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tasks: [task],
+            driver_ids: [driverId],
+            vehicle_assignments: { [driverId]: Number(vehicleId) },
+            departure_time: new Date().toISOString(),
+          }),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '배정 실패'); return false; }
+        const result = await res.json();
+        applyDispatchTripsResult(result.trips || []);
         const dv = driverById(driverId);
-        toast(`단건 배차 완료 · ${dv?.name || ''}`);
+        toast(`Trip 생성 완료 · ${dv?.name || ''}`);
         await loadRealData();
-        renderDispatchAssign(root);
       });
       const vSel = document.getElementById('singleVehicle');
       const prev = document.getElementById('singleVehiclePreview');
@@ -5073,9 +5150,20 @@
 
   function initMap() {
     const container = document.getElementById('map');
-    if (!container || map) return;
+    if (!window.kakao?.maps || !container || map) return;
     const opts = { center: new kakao.maps.LatLng(37.5665, 126.978), level: 10 };
     map = new kakao.maps.Map(container, opts);
+  }
+
+  function onKakaoReady() {
+    _kakaoReady = true;
+    initMap();
+    connectLocationWebSocket();
+    if (currentPage === 'dashboard') showDashboardMap();
+    else if (currentPage === 'customer-loc') initCustomerLocMap(document.getElementById('mainContent'));
+    else if (currentPage === 'order-intake') bindPlaceSearch(document.getElementById('mainContent'));
+    else if (currentPage === 'dispatch-assign') renderPage();
+    else if (currentPage === 'bulk-dispatch') renderPage();
   }
 
   function showDashboardMap() {
@@ -5227,6 +5315,7 @@
     $('#ddLogout').onclick = () => logout();
     document.addEventListener('click', () => _closeAllDropdowns());
     bindIntakeStopShortcuts();
+    applyInitialQueryState();
     renderNav();
     renderPage();
     await loadRealData();
@@ -5242,11 +5331,7 @@
           const s = document.createElement('script');
           s.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&libraries=services&autoload=false`;
           s.onload = () => {
-            kakao.maps.load(() => {
-              initMap();
-              connectLocationWebSocket();
-              if (currentPage === 'dashboard') showDashboardMap();
-            });
+            kakao.maps.load(onKakaoReady);
           };
           document.head.appendChild(s);
         }

@@ -159,6 +159,34 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
             waypoints_json.append(_dest_waypoint(req.dest_name, req.dest_lat, req.dest_lon))
     if not waypoints_json:
         raise HTTPException(400, "상차지 또는 하차지를 1개 이상 입력해주세요.")
+
+    delivery_ids: list[uuid_lib.UUID] = []
+    for w in waypoints_json:
+        raw_delivery_id = w.get("delivery_id")
+        if raw_delivery_id:
+            try:
+                delivery_ids.append(uuid_lib.UUID(str(raw_delivery_id)))
+            except ValueError:
+                raise HTTPException(400, "유효하지 않은 delivery_id 형식입니다.")
+            continue
+        if w.get("type") != "unloading" or w.get("lat") is None or w.get("lon") is None:
+            continue
+        matched_delivery = (await db.execute(
+            select(Delivery).where(
+                Delivery.assigned_to == driver_uuid,
+                Delivery.trip_id == None,
+                Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+                Delivery.lat.between(float(w["lat"]) - 0.0001, float(w["lat"]) + 0.0001),
+                Delivery.lon.between(float(w["lon"]) - 0.0001, float(w["lon"]) + 0.0001),
+            ).order_by(Delivery.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        if matched_delivery:
+            w["delivery_id"] = str(matched_delivery.id)
+            w["recipient_name"] = w.get("recipient_name") or matched_delivery.recipient_name
+            w["cargo_type"] = w.get("cargo_type") or matched_delivery.cargo_type
+            w["cargo_weight_ton"] = w.get("cargo_weight_ton") if w.get("cargo_weight_ton") is not None else matched_delivery.cargo_weight_ton
+            delivery_ids.append(matched_delivery.id)
+
     t = Trip(
         driver_id=driver_uuid, vehicle_id=req.vehicle_id,
         dest_name=req.dest_name, dest_lat=req.dest_lat, dest_lon=req.dest_lon,
@@ -168,7 +196,20 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
         vehicle_length_cm=req.vehicle_length_cm if req.vehicle_length_cm is not None else (vehicle.length_cm if vehicle else None),
         vehicle_width_cm=req.vehicle_width_cm   if req.vehicle_width_cm  is not None else (vehicle.width_cm  if vehicle else None),
     )
-    db.add(t); await db.commit(); await db.refresh(t)
+    db.add(t)
+    await db.flush()
+    if delivery_ids:
+        await db.execute(
+            update(Delivery)
+            .where(Delivery.id.in_(delivery_ids))
+            .values(
+                trip_id=t.id,
+                assigned_to=driver_uuid,
+                status=DeliveryStatus.in_progress,
+            )
+        )
+    await db.commit()
+    await db.refresh(t)
     return _trip_schema(t)
 
 @router.get("/trips/{trip_id}")

@@ -6,6 +6,14 @@
 
 ---
 
+## v1.0.74 (2026-06-03)
+### 프론트엔드 통합 진입점 정리
+- **독립 관리 페이지 레거시화**: `stats.html`, `drivers.html`, `vehicles.html`의 중복 구현을 제거하고 각각 통합 대시보드의 운행 통계·기사 관리·차량 관리 탭으로 리다이렉트하도록 변경
+- **대시보드 직접 탭 진입 지원**: `/dashboard.html?main=stats&page=trip-stats`, `/dashboard.html?main=basic&page=drivers`, `/dashboard.html?main=basic&page=vehicles` 쿼리 파라미터로 원하는 탭을 바로 열 수 있도록 `dashboard.js` 초기 라우팅 보강
+- **문서 정합성 갱신**: `CLAUDE.md`의 프론트엔드 구조와 기사/차량/통계 진입점 설명을 통합 대시보드 기준으로 갱신
+
+---
+
 ## v1.0.73 (2026-06-03)
 ### 정합성 정리
 - **FastAPI 버전 표기 갱신**: `/docs` 메타 버전 `0.3.0` → `1.0.73`으로 변경해 CHANGELOG 기준 버전과 일치시킴

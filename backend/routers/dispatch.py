@@ -46,6 +46,7 @@ class AutoDispatchRequest(BaseModel):
     tasks:          list[AutoDispatchTask]
     driver_ids:     Optional[list[str]] = None  # 없으면 전체 가용 기사
     vehicle_id:     Optional[int]        = None
+    vehicle_assignments: Optional[dict[str, int]] = None  # driver_id → vehicle_id
     departure_time: Optional[str]        = None
 
 @router.get("/drivers/available")
@@ -119,6 +120,33 @@ async def auto_dispatch_trips(
         raise HTTPException(409, "현재 가용 기사가 없습니다. 운행 중이 아닌 기사를 확인하세요.")
 
     # 차량 검증
+    vehicle_by_driver: dict[uuid_lib.UUID, int] = {}
+    if req.vehicle_assignments:
+        try:
+            vehicle_by_driver = {
+                uuid_lib.UUID(driver_id): vehicle_id
+                for driver_id, vehicle_id in req.vehicle_assignments.items()
+                if vehicle_id is not None
+            }
+        except ValueError:
+            raise HTTPException(400, "vehicle_assignments의 driver_id 형식이 올바르지 않습니다.")
+        allowed_driver_ids = {d.id for d in drivers}
+        invalid_driver_ids = [str(did) for did in vehicle_by_driver if did not in allowed_driver_ids]
+        if invalid_driver_ids:
+            raise HTTPException(403, "다른 조직 또는 미선택 기사에게 차량을 배정할 수 없습니다.")
+        assigned_vehicle_ids = set(vehicle_by_driver.values())
+        if assigned_vehicle_ids:
+            vehicle_rows = (await db.execute(
+                select(Vehicle).where(Vehicle.id.in_(assigned_vehicle_ids))
+            )).scalars().all()
+            vehicles = {v.id: v for v in vehicle_rows}
+            missing = assigned_vehicle_ids - set(vehicles)
+            if missing:
+                raise HTTPException(404, f"차량을 찾을 수 없습니다: {sorted(missing)}")
+            inactive = [v.id for v in vehicles.values() if not v.is_active]
+            if inactive:
+                raise HTTPException(400, f"비활성화된 차량입니다: {inactive}")
+
     if req.vehicle_id is not None:
         vehicle = (await db.execute(
             select(Vehicle).where(Vehicle.id == req.vehicle_id)
@@ -218,7 +246,7 @@ async def auto_dispatch_trips(
 
         t = Trip(
             driver_id=driver.id,
-            vehicle_id=req.vehicle_id,
+            vehicle_id=vehicle_by_driver.get(driver.id, req.vehicle_id),
             waypoints=waypoints,
             departure_time=departure_iso,
         )

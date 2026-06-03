@@ -86,8 +86,9 @@ routeon/
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,226줄, dashboard.html에서 분리)
     ├── dashboard.js        대시보드 JS 로직 (5,241줄, dashboard.html에서 분리)
-    ├── drivers.html        관리자 기사 관리 (승인 대기·소속 기사)
-    ├── vehicles.html       관리자 차량 관리 (등록·목록·삭제)
+    ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
+    ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
+    ├── stats.html          레거시 진입점 → dashboard.html?main=stats&page=trip-stats
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
     └── superadmin.html     슈퍼 관리자 (기업 심사)
 ```
@@ -461,17 +462,11 @@ settings.html 구조 (관리자 전용):
 - 섹션 ④: 운영 설정 — 기사 자동승인 토글 (`PATCH /organizations/me/settings` 호출, DB 반영, 초기값 OFF)
 - 탑바 ⚙ 버튼 또는 관리자 드롭다운 → `/settings.html` 이동
 
-drivers.html 구조 (관리자 전용):
-- 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
-- 승인 대기: `GET /users?role=pending`, 승인 `POST /auth/approve/{id}`, 거절 `DELETE /users/{id}`
-- 소속 기사: `GET /users?role=driver`, 탈퇴 `DELETE /users/{id}`
-- dashboard.html 좌측 하단 👥 기사 관리 버튼 → `/drivers.html` 이동
-
-vehicles.html 구조 (관리자 전용):
-- 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
-- 차량 등록: `POST /vehicles` (번호판·차종·총중량·높이 필수, 길이·폭 선택)
-- 차량 목록: `GET /vehicles`, 삭제 `DELETE /vehicles/{id}`
-- dashboard.html 좌측 하단 🚗 차량 관리 버튼 → `/vehicles.html` 이동
+통합 대시보드 진입점:
+- 기사 관리: `/dashboard.html?main=basic&page=drivers`
+- 차량 관리: `/dashboard.html?main=basic&page=vehicles`
+- 운행 통계: `/dashboard.html?main=stats&page=trip-stats`
+- `drivers.html`, `vehicles.html`, `stats.html`은 북마크/기존 링크 호환용 리다이렉트 파일만 유지한다.
 
 chat.html 구조:
 - 좌측: 채팅 가능 상대 목록 (GET /chat/partners) + unread 배지 + 이름 검색
@@ -546,7 +541,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 지도 POI 팝업 (장소명·전화·카테고리·링크) + 호버 커서
 - [x] 운행 생성 플로우 재설계 — 상차지/하차지 분리, 기사 출발지 GPS 폴백, 태스크 단위 입력(상차지 1개+하차지 N개 묶음)
 - [x] 전체 기사 폴리라인 동시 표시 + 실시간 관제 (기사별 색상 팔레트, dim/highlight)
-- [x] 통계/애널리틱스 대시보드 (stats.html, /stats/* API 3개)
+- [x] 통계/애널리틱스 대시보드 (dashboard.html `trip-stats`, /stats/* API)
 - [x] WS 버그 수정 — driver 403, 20초 끊김 (heartbeat + uvicorn ping + nginx timeout)
 - [x] 상차지 인근 기사 확인 — GET /nearby-drivers (Redis 위치 기준, 반경 필터, 거리순 정렬)
 - [x] 관리자 프리셋 — GET/POST/DELETE /presets, 대시보드 불러오기·저장·삭제 UI
@@ -555,7 +550,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 채팅 새 메시지 배지 실시간 갱신 — dashboard WS /ws/chat 경량 연결, chat.read 수신 시 즉시 배지 초기화
 - [x] 대시보드 실시간 반영 — trip.started/trip.replanned WS 브로드캐스트, 운행 완료·취소 후 폴리라인 즉시 제거, 기사 강퇴·배송 삭제 즉시 반영
 - [x] 설정 페이지 (settings.html) — 조직코드 관리, 계정 정보 변경, 기사 자동승인 토글 UI (관리자 전용 인증 가드)
-- [x] 기사·차량 관리 페이지 분리 — drivers.html, vehicles.html 신규 생성 및 대시보드 모달 제거
+- [x] 기사·차량 관리 통합 — dashboard.html `drivers`/`vehicles` 탭에서 처리, 기존 drivers.html/vehicles.html은 리다이렉트 진입점으로 유지
 - [x] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
 - [x] 긴급 배차 개선 — 긴급 경유지 추가 버튼을 상차지/하차지로 분리, `addEmergencyWaypoint(type)` type 파라미터 전달, 백엔드는 WaypointSchema가 이미 type 지원
 - [x] 긴급 배차 태스크 단위 묶음 — 상차지 클릭 시 임시 저장(`_emergencyTask`), 하차지 N개 지도 클릭으로 순차 추가, 배지에 구성 목록 표시, ✅ 전송 버튼으로 한 번에 서버 전송(같은 task_group 부여). 상차지 없이 하차지만 추가 시 즉시 전송(task_group=null) 유지
@@ -623,8 +618,8 @@ Android 앱 채팅 구현 필수 사항:
 #### 높은 우선순위 (핵심 업무 흐름)
 - [x] **오더 목록 실 API 연동** — `DATA.orders` 인메모리 → `GET /deliveries` 조회, 오더 접수 `POST /deliveries/batch` 저장
 - [x] **배차 assign 저장** — toast(목업) → `PATCH /deliveries/{id}/assign` 실제 연동
-- [x] **dashboard 내 기사 등록/수정/삭제** — toast(목업) → `POST /auth/register`, `DELETE /users/{id}`, `POST /auth/approve/{id}` (drivers.html과 동기화)
-- [x] **dashboard 내 차량 등록/삭제** — toast(목업) → `POST /vehicles`, `DELETE /vehicles/{id}` (vehicles.html과 동기화)
+- [x] **dashboard 내 기사 등록/수정/삭제** — toast(목업) → `POST /auth/register`, `DELETE /users/{id}`, `POST /auth/approve/{id}` (통합 대시보드에서 처리)
+- [x] **dashboard 내 차량 등록/삭제** — toast(목업) → `POST /vehicles`, `DELETE /vehicles/{id}` (통합 대시보드에서 처리)
 - [x] **pending 기사 승인** — dashboard에서 승인 대기 목록 표시 + `POST /auth/approve/{user_id}` 연동
 
 #### 중간 우선순위
