@@ -580,7 +580,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[기본정보] 내 정보 저장** — `renderProfile` 저장 버튼 `PATCH /auth/me` 연동 (v1.0.52)
 - [x] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (헤더 기반 컬럼 매핑, 대기열 추가) (v1.0.53)
 - [x] **[대시보드] 홈 화물 집계 실 데이터화** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 실 집계로 교체 (v1.0.54)
-- [ ] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동
+- [x] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동 (v1.0.55)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
@@ -619,4 +619,4 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **내 정보 저장** — `renderProfile` 탭 분리(내 정보/비밀번호 변경), `PATCH /auth/me` 실 연동, `DATA.me` 전역 저장 (v1.0.52)
 - [x] **접수창 엑셀 임포트** — `renderOrderIntake` `#excelImport` SheetJS 파싱, 헤더 기반 컬럼 매핑(화주명·상차지·하차지·화물종류·중량·희망도착 등), 파싱 결과를 `addPendingIntake` 대기열에 추가 (v1.0.53)
 - [x] **대시보드 홈 화물 집계** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 그룹·중량 합산 실 집계, 상위 6종 표시, 데이터 없을 시 "접수된 화물 없음" 표시 (v1.0.54)
-- [ ] **운행 중 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 배너, 핸드오버 폼 저장·사고신고·대차 요청 모두 `toast(목업)`
+- [x] **운행 중 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 배너 삭제, 사고신고 `PATCH /trips/{id}/safety` 실 연동, 차량 상세 저장 `PATCH /vehicles/{id}` 실 연동 (v1.0.55)

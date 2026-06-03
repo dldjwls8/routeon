@@ -57,6 +57,29 @@ async def create_vehicle(req: VehicleCreate, db: AsyncSession = Depends(get_db),
     db.add(v); await db.commit(); await db.refresh(v)
     return v
 
+class VehicleUpdate(BaseModel):
+    vehicle_type: Optional[str] = None
+    weight_kg:    Optional[float] = None
+    height_m:     Optional[float] = None
+
+@router.patch("/vehicles/{vehicle_id}")
+async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
+                         db: AsyncSession = Depends(get_db),
+                         current_user: User = Depends(require_admin)):
+    _r = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    v = _r.scalar_one_or_none()
+    if not v:
+        raise HTTPException(404, "차량을 찾을 수 없습니다.")
+    if req.vehicle_type is not None:
+        v.vehicle_type = req.vehicle_type
+    if req.weight_kg is not None:
+        v.weight_kg = req.weight_kg
+    if req.height_m is not None:
+        v.height_m = req.height_m
+    await db.commit()
+    await db.refresh(v)
+    return v
+
 @router.delete("/vehicles/{vehicle_id}", status_code=204)
 async def delete_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db),
                    current_user: User = Depends(require_admin)):

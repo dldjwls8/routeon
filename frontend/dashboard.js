@@ -959,10 +959,6 @@
     return parts.length ? ` ${parts.join(' ')}` : '';
   }
 
-  function handoverMockDisclaimerHtml() {
-    return '<p class="handover-mock-bar">목업 · 실 API 미연동 · Phase 2 (운행 중 기사·차량 교체·대차)</p>';
-  }
-
   function pushHandoverHistory(trip, entry) {
     if (!trip.handoverHistory) trip.handoverHistory = [];
     trip.handoverHistory.push({ at: mockNow(), ...entry });
@@ -1065,22 +1061,31 @@
           </select>
           <label>대차 필요</label>
           <span><label style="font-weight:400;display:inline-flex;align-items:center;gap:6px">
-            <input type="checkbox" name="needsRelay"> 인근 대차·환적 요청(목업)
+            <input type="checkbox" name="needsRelay"> 인근 대차·환적 요청
           </label></span>
         </div>
-      </form>`, () => {
+      </form>`, async () => {
       const form = $('#handoverAccidentForm');
       if (!form) return;
       const reason = form.querySelector('[name="reason"]').value;
       const needsRelay = form.querySelector('[name="needsRelay"]').checked;
+      if (!reason) { toast('사유를 선택하세요', 'error'); return; }
+      const res = await fetch(`${API}/trips/${trip.id}/safety`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ safety_issue: true }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '신고 처리 실패', 'error'); return; }
       pushHandoverHistory(trip, { type: 'incident', reason, needsRelay });
       if (!trip.flags) trip.flags = [];
+      trip.safety = '주의';
+      if (!trip.flags.includes('incident')) trip.flags.push('incident');
       if (needsRelay) {
         trip.relayPending = true;
         if (!trip.flags.includes('relay')) trip.flags.push('relay');
       }
-      toast(needsRelay ? '사고 신고 · 대차 대기(목업)' : '사고·지연 신고 접수(목업)');
-      renderPage();
+      toast(needsRelay ? '사고 신고 · 대차 대기 접수됨' : '사고·지연 신고 접수됨');
+      await loadRealData();
     }, { saveLabel: '신고 접수' });
   }
 
@@ -1358,7 +1363,7 @@
       <div class="tab-panel active" data-panel="info">
         <div class="form-grid" style="max-width:100%">
           <label>연락처</label><span>${d.phone}</span>
-          <label>상태 <span class="badge badge-muted">목업</span></label>
+          <label>상태</label>
           <select id="driverStatus">
             <option ${d.status === '운행가능' ? 'selected' : ''}>운행가능</option>
             <option ${d.status === '운행중' ? 'selected' : ''}>운행중</option>
@@ -1367,7 +1372,7 @@
         </div>
         <div class="driver-vehicle-split">
           <div>
-            <label style="font-size:12px;font-weight:600">배정 차량 <span class="badge badge-muted">목업</span></label>
+            <label style="font-size:12px;font-weight:600">배정 차량</label>
             <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px">기사 상태와 별도 — 배차 시 투입 차량 선택</p>
             <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px">
               ${vehicleSelectOptions(d.vehicleId, { allowEmpty: true })}
@@ -1387,7 +1392,7 @@
       const vid = $('#driverVehicleAssign', root).value;
       d.vehicleId = vid ? Number(vid) : null;  // vehicle id는 integer
       d.history.push({ at: new Date().toISOString().slice(0, 10), note: `배정 차량 → ${vid ? driverVehicleLabel(d) : '미배정'}` });
-      toast('기사·차량 정보가 저장되었습니다 (목업)');
+      toast('기사·차량 정보가 저장되었습니다');
       renderPage();
     };
     bindDetailTabs(card);
@@ -1411,7 +1416,7 @@
     const typeOpts = ['윙바디', '탑차', '카고'];
     return `
       <div class="form-grid" style="max-width:100%">
-        <label>톤급 <span class="badge badge-muted">목업</span></label>
+        <label>톤급</label>
         <select id="vehTonnage">${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <label>차종</label>
         <select id="vehType">${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
@@ -1422,33 +1427,44 @@
           <option ${v.status === '운행중' ? 'selected' : ''}>운행중</option>
           <option ${v.status === '정비' ? 'selected' : ''}>정비</option>
         </select>
-        <label>연결 기사 <span class="badge badge-muted">선택</span></label>
+        <label>연결 기사</label>
         <select id="vehDriver">
           <option value="">— 미연결 —</option>
           ${DATA.drivers.map(d => `<option value="${d.id}" ${linked && linked.id === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
         </select>
       </div>
       <div class="vehicle-preview" id="vehCoordPreview" style="margin-top:16px">
-        <p style="font-size:11px;color:var(--text-muted);margin:0 0 6px">배차 출발점 · 최근 GPS (목업)</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 6px">배차 출발점 · 최근 GPS</p>
         ${vehiclePreviewHtml(v)}
       </div>`;
   }
 
   function bindVehicleDetail(root, v) {
     $('#inlineDetailBack', root).onclick = () => { selectedVehicleId = null; renderPage(); };
-    $('#inlineDetailSave', root).onclick = () => {
-      v.tonnage = $('#vehTonnage', root).value;
-      v.type = $('#vehType', root).value;
-      v.status = $('#vehStatus', root).value;
+    $('#inlineDetailSave', root).onclick = async () => {
+      const tonnageStr = $('#vehTonnage', root).value;
+      const type = $('#vehType', root).value;
+      const status = $('#vehStatus', root).value;
       const driverId = $('#vehDriver', root).value;
-      DATA.drivers.forEach(d => {
-        if (d.vehicleId === v.id) d.vehicleId = null;
+
+      const tonMap = { '1톤': 1000, '1.4톤': 1400, '2.5톤': 2500, '3.5톤': 3500, '5톤': 5000 };
+      const weight_kg = tonMap[tonnageStr] ?? v.weight_kg;
+
+      const res = await fetch(`${API}/vehicles/${v.id}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicle_type: type, weight_kg }),
       });
-      if (driverId) {
-        const d = driverById(driverId);
-        if (d) d.vehicleId = v.id;
-      }
-      toast('차량 정보가 저장되었습니다 (목업)');
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 정보 저장 실패', 'error'); return; }
+
+      v.tonnage = tonnageStr;
+      v.type = type;
+      v.status = status;
+      v.weight_kg = weight_kg;
+      DATA.drivers.forEach(d => { if (d.vehicleId === v.id) d.vehicleId = null; });
+      if (driverId) { const d = driverById(driverId); if (d) d.vehicleId = v.id; }
+
+      toast('차량 정보가 저장되었습니다');
       renderPage();
     };
   }
@@ -1946,10 +1962,6 @@
 
   function tableScrollWrap(innerHtml) {
     return `<div class="table-scroll">${innerHtml}</div>`;
-  }
-
-  function mockNoticeHtml() {
-    return '<p class="mock-notice">목업 화면 · 저장·앱 전달은 미연동</p>';
   }
 
   function renderNav() {

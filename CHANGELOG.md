@@ -6,6 +6,20 @@
 
 ---
 
+## v1.0.55 (2026-06-03)
+### 운행 중 교체·대차 Phase 2 — 목업 제거 및 실 API 연동
+- `handoverMockDisclaimerHtml` / `mockNoticeHtml` 미사용 목업 함수 삭제
+- 사고·지연 신고(`openAccidentReportModal`): `toast(목업)` → `PATCH /trips/{id}/safety` 실 호출 (safety_issue=true 저장)
+  - 사유 필수 검증 추가, "인근 대차·환적 요청(목업)" → "(목업)" 제거
+  - 성공 시 `loadRealData()` 후 카드 배지 즉시 갱신
+- 차량 상세 저장(`bindVehicleDetail`): `toast(목업)` → `PATCH /vehicles/{id}` 실 호출
+  - `vehicle_type`, `weight_kg` 업데이트 (톤급 → kg 변환 맵 적용)
+- 백엔드 `PATCH /vehicles/{vehicle_id}` 엔드포인트 신규 추가 (`vehicle_type`, `weight_kg`, `height_m` 부분 업데이트)
+- 기사 상세 저장 토스트에서 "(목업)" 문구 제거
+- 기사·차량 상세 UI 레이블에서 "목업" 배지 제거
+
+---
+
 ## v1.0.54 (2026-06-03)
 ### 대시보드 홈 화물 집계 실 데이터화
 - `cargoChips` 하드코딩 배열 제거
