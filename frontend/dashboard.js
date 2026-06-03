@@ -529,6 +529,21 @@
           lastOrderDate:   null,
           shipmentHistory: [],
         }));
+        // 고유 하차지 좌표 → 위치 목록 파생 (customers 로드 후)
+        {
+          const seen = new Set();
+          DATA.locations = DATA.orders
+            .filter(o => o.lat && o.lon)
+            .reduce((acc, o) => {
+              const key = `${o.lat.toFixed(4)},${o.lon.toFixed(4)}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                const c = DATA.customers.find(x => x.name === o.customer || x.name === o.recipient);
+                acc.push({ id: acc.length + 1, label: o.delivery || '배송지', lat: o.lat, lon: o.lon, customerId: c?.id || null });
+              }
+              return acc;
+            }, []);
+        }
       }
 
       // 담당자(관리자) 목록
@@ -627,6 +642,7 @@
   let dispatchSiteSel = '전체';
   let _bulkDispatchTrips = [];
   let _dispatchRunTrips = [];
+  let _lastManualAssign = null;
 
   function findNavPage(pageId) {
     for (const g of NAV) {
@@ -1351,9 +1367,9 @@
     $('#inlineDetailSave', root).onclick = () => {
       d.status = $('#driverStatus', root).value;
       const vid = $('#driverVehicleAssign', root).value;
-      d.vehicleId = vid ? Number(vid) : null;  // vehicle id는 integer
+      d.vehicleId = vid ? Number(vid) : null;
       d.history.push({ at: new Date().toISOString().slice(0, 10), note: `배정 차량 → ${vid ? driverVehicleLabel(d) : '미배정'}` });
-      toast('기사·차량 정보가 저장되었습니다');
+      toast('저장되었습니다 · Trip 생성 시 배정 차량이 반영됩니다');
       renderPage();
     };
     bindDetailTabs(card);
@@ -2698,18 +2714,30 @@
   }
 
   function locModal(l) {
-    const custOpts = DATA.customers.map(c =>
+    const custOpts = `<option value="">— 없음 —</option>` + DATA.customers.map(c =>
       `<option value="${c.id}" ${l && l.customerId === c.id ? 'selected' : ''}>${c.name}</option>`
     ).join('');
     openModal(l ? '위치 편집' : '위치 추가', `
-      <form>
+      <form id="locForm">
         <div class="form-grid" style="max-width:100%">
-          <label>고객</label><select required>${custOpts}</select>
-          <label>라벨 *</label><input required value="${l?.label || ''}">
-          <label>위도</label><input type="number" step="0.0001" value="${l?.lat ?? ''}" placeholder="37.4979">
-          <label>경도</label><input type="number" step="0.0001" value="${l?.lon ?? ''}" placeholder="127.0276">
+          <label>고객</label><select id="locCust">${custOpts}</select>
+          <label>라벨 *</label><input id="locLabel" required value="${l?.label || ''}">
+          <label>위도</label><input id="locLat" type="number" step="0.0001" value="${l?.lat ?? ''}" placeholder="37.4979">
+          <label>경도</label><input id="locLon" type="number" step="0.0001" value="${l?.lon ?? ''}" placeholder="127.0276">
         </div>
-      </form>`);
+      </form>`, () => {
+      const label = document.getElementById('locLabel')?.value?.trim();
+      if (!label) { toast('라벨을 입력하세요'); return false; }
+      const lat = parseFloat(document.getElementById('locLat')?.value) || null;
+      const lon = parseFloat(document.getElementById('locLon')?.value) || null;
+      const custId = Number(document.getElementById('locCust')?.value) || null;
+      if (l) {
+        l.label = label; l.lat = lat; l.lon = lon; l.customerId = custId;
+      } else {
+        DATA.locations.push({ id: Date.now(), label, lat, lon, customerId: custId });
+      }
+      renderPage();
+    });
   }
 
   function bulkEndPolicyBadge(policy) {
@@ -3077,19 +3105,36 @@
   function bindRouteCalc(btn, box, list) {
     if (!btn || !box || !list) return;
     btn.onclick = () => {
+      const ord = dispatchPendingSelectedId
+        ? DATA.orders.find(o => o.id === dispatchPendingSelectedId) : null;
+      if (!ord) { toast('배송 건을 먼저 선택하세요'); return; }
+      const v = vehicleById(dispatchManualVehicleId);
+      const stops = [];
+      if (v) stops.push({ seq: 1, name: `출발 (${v.plate})`, lat: v.start_lat, lon: v.start_lon, role: '출발' });
+      if (ord.pickup_lat && ord.pickup_lon) {
+        stops.push({ seq: stops.length + 1, name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon, role: '상차' });
+      } else if (ord.pickup && ord.pickup !== '—') {
+        stops.push({ seq: stops.length + 1, name: ord.pickup, lat: null, lon: null, role: '상차' });
+      }
+      if (ord.lat && ord.lon) {
+        stops.push({ seq: stops.length + 1, name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon, role: '하차' });
+      } else {
+        stops.push({ seq: stops.length + 1, name: ord.delivery || '하차지', lat: null, lon: null, role: '하차' });
+      }
       btn.disabled = true;
       btn.innerHTML = '<span class="loading"></span>계산 중…';
       box.classList.remove('show');
       setTimeout(() => {
         btn.disabled = false;
         btn.textContent = '경로 계산';
-        list.innerHTML = DATA.routePreview.map(s => {
+        list.innerHTML = stops.map(s => {
           const role = s.role ? ` <span class="badge badge-info">${s.role}</span>` : '';
-          return `<li>${s.seq}. ${s.name}${role} <span class="coord">(${s.lat}, ${s.lon})</span></li>`;
+          const coord = (s.lat && s.lon) ? ` <span class="coord">(${s.lat.toFixed(4)}, ${s.lon.toFixed(4)})</span>` : '';
+          return `<li>${s.seq}. ${s.name}${role}${coord}</li>`;
         }).join('');
         box.classList.add('show');
         toast('경로 미리보기가 준비되었습니다');
-      }, 1000);
+      }, 300);
     };
   }
 
@@ -3439,7 +3484,14 @@
             return;
           }
           const ord = DATA.orders.find(o => o.id === ordId);
-          if (ord) { ord.status = '배차'; ord.driver = d?.name || '—'; }
+          if (ord) {
+            ord.status = '배차'; ord.driver = d?.name || '—';
+            _lastManualAssign = {
+              driverId: dispatchManualDriverId,
+              vehicleId: dispatchManualVehicleId,
+              order: { ...ord },
+            };
+          }
           const idx = pendingIntakes.findIndex(p => p.id === ordId);
           if (idx >= 0) pendingIntakes.splice(idx, 1);
         }
@@ -3643,13 +3695,65 @@
       const refresh = () => { if (prev) prev.innerHTML = vehiclePreviewHtml(vehicleById(vSel?.value)); };
       if (vSel) { vSel.onchange = refresh; refresh(); }
     };
-    $('#btnTripCreate', root).onclick = () => toast('배차 실행 시 Trip이 자동 생성됩니다. 운행 현황에서 확인하세요.');
+    $('#btnTripCreate', root).onclick = async () => {
+      if (_dispatchRunTrips.length > 0) {
+        toast(`Trip ${_dispatchRunTrips.length}건 생성 완료 · 운행 현황에서 확인하세요`);
+        return;
+      }
+      if (!_lastManualAssign) {
+        toast('먼저 배차를 실행하세요');
+        return;
+      }
+      const { driverId, vehicleId, order } = _lastManualAssign;
+      if (!driverId || !vehicleId) { toast('차량·기사 정보가 없습니다. 다시 배차해주세요', 'error'); return; }
+      const waypoints = [];
+      if (order?.pickup_lat && order?.pickup_lon) {
+        waypoints.push({ name: order.pickup || '상차지', lat: order.pickup_lat, lon: order.pickup_lon, type: 'loading' });
+      }
+      let destName = null, destLat = null, destLon = null;
+      if (order?.lat && order?.lon) {
+        if (waypoints.length) {
+          destName = order.delivery || null; destLat = order.lat; destLon = order.lon;
+        } else {
+          waypoints.push({ name: order.delivery || '하차지', lat: order.lat, lon: order.lon, type: 'unloading' });
+        }
+      }
+      if (!waypoints.length) { toast('경유지 좌표가 없습니다. 오더에 좌표를 입력하세요', 'error'); return; }
+      const body = {
+        driver_id: driverId, vehicle_id: vehicleId,
+        dest_name: destName, dest_lat: destLat, dest_lon: destLon,
+        waypoints,
+        departure_time: new Date().toISOString(),
+      };
+      const btn = $('#btnTripCreate', root);
+      btn.disabled = true; btn.textContent = '생성 중…';
+      const res = await fetch(`${API}/trips`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      btn.disabled = false; btn.textContent = 'Trip 생성';
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || 'Trip 생성 실패', 'error'); return; }
+      const trip = await res.json();
+      _lastManualAssign = null;
+      toast(`Trip 생성 완료 · ${trip.id.slice(0, 8)}`);
+      await loadRealData();
+      renderPage();
+    };
     $('#btnFinalCheck', root).onclick = () => {
       openModalLarge('순서·노드 최종 확인', `
         <p style="font-size:13px;margin-bottom:12px">차량별 방문 순서와 지도 노드를 확인합니다.</p>
         <ol class="visit-ol">${(plans[0]?.visits || []).map(v => `<li>${v}</li>`).join('')}</ol>`, () => toast('최종 확인 완료'));
     };
-    $('#btnAppHandoff', root).onclick = () => toast('기사 앱에서 경로 최적화 실행 시 운행이 시작됩니다.');
+    $('#btnAppHandoff', root).onclick = () => {
+      const assigned = DATA.dispatchAssigned;
+      if (!assigned.length) { toast('배차 결과가 없습니다. 먼저 배차를 실행하세요'); return; }
+      openModal('기사 앱 전달 안내', `
+        <p style="font-size:13px;margin-bottom:12px">아래 기사에게 배차 정보를 전달하세요.<br>기사가 앱에서 <strong>경로 최적화</strong>를 실행하면 운행이 시작됩니다.</p>
+        <ul class="route-list">
+          ${assigned.map(a => `<li><strong>${a.driver}</strong> · ${a.plate} (${a.tonnage})<br><small style="color:var(--text-muted)">${a.label}</small></li>`).join('')}
+        </ul>`);
+    };
 
     // 지도 초기화
     setTimeout(() => {

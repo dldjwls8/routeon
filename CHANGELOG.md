@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.61 (2026-06-03)
+### 미완성 기능 구현
+- **`bindRouteCalc` 경로 계산**: `DATA.routePreview` 빈 배열 표시 → 선택된 오더의 픽업지·하차지 + 차량 출발점을 실시간 경유지 목록으로 표시 (좌표 포함)
+- **고객 위치 탭 `DATA.locations` 채우기**: 항상 비어있던 위치 목록 → `DATA.orders`의 고유 하차지 좌표(lat/lon)를 파생하여 표시 (고객 목록 로드 후 customerId 매핑)
+- **`locModal` 저장 구현**: 위치 추가·편집 모달에 저장 콜백 추가 — `DATA.locations`에 메모리 저장 후 페이지 재렌더링
+- **`btnTripCreate` Trip 생성**: 일괄 배차 후는 생성 완료 안내, 단건 배차 후는 `POST /trips` 호출로 실제 Trip 생성 (`driver_id`, `vehicle_id`, `waypoints` 전달)
+- **`btnAppHandoff` 기사 앱 전달 안내**: 단순 토스트 → 배차 결과 기사·차량 목록을 모달로 표시
+- **`bindDriverDetail` 토스트 개선**: "저장되었습니다" → "저장되었습니다 · Trip 생성 시 배정 차량이 반영됩니다" (메모리 전용 동작 명확화)
+- **`_lastManualAssign` 변수 추가**: 단건 배차 확정 시 마지막 배정 정보(driverId, vehicleId, order) 저장 → Trip 생성 버튼에서 활용
+
+---
+
 ## v1.0.60 (2026-06-03)
 ### 버그 수정 · 코드 정리
 - **`toast` 에러 타입 지원**: `toast(msg, 'error')` 시 `.toast-error` 클래스 적용 → 에러 토스트 빨간색 구분 (CSS 추가)
