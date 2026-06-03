@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.58 (2026-06-03)
+### 배차 권역·거점 필터 연동
+- **`dispatchRegionSel` / `dispatchSiteSel` 상태 변수 추가**: 필터 선택 값 유지 (페이지 재렌더 시에도 선택 유지)
+- **`renderDispatchAssign` 필터 적용**: `_passRegion` / `_passSite` 함수로 `DATA.dispatchOrders` 및 미배차 건 테이블 실시간 필터링
+  - **권역**: `addressToRegion(ord.pickup)` ↔ 선택 권역 일치 여부 (상차지 권역 기준), "전체" 시 필터 없음
+  - **거점**: 선택 거점의 `region` ↔ 상차지 권역 일치 여부, "전체" 시 필터 없음
+- **거점 select `전체` 옵션 추가**: 기존 하드코딩된 초기값 제거, "전체" 기본값으로 변경
+- **선택값 HTML 동기화**: 재렌더 시 `dispatchRegionSel` / `dispatchSiteSel` 상태를 select에 반영
+- **이벤트 리스너 바인딩**: 필터 변경 시 `renderDispatchAssign` 즉시 재호출
+- **`runDispatch` 이중 필터**: 테이블 필터 외 실행 시에도 동일 조건 재적용 (안전망)
+
+---
+
 ## v1.0.57 (2026-06-03)
 ### 접수창 복수 상·하차지 추가 기능 구현
 - **`addIntakePickupStop`**: 태스크 카드 상차지 `stop-block`에 입력 행 동적 삽입, `data-extra-pickup` 속성으로 순번 추적, ✕ 제거 버튼 바인딩

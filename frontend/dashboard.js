@@ -664,6 +664,8 @@
   let dispatchPendingSelectedId = null;
   let dispatchManualVehicleId = null;
   let dispatchManualDriverId = null;
+  let dispatchRegionSel = '전체';
+  let dispatchSiteSel = '전체';
   let _bulkDispatchTrips = [];
   let _dispatchRunTrips = [];
 
@@ -3199,11 +3201,18 @@
   }
 
   function renderDispatchAssign(root) {
-    DATA.dispatchOrders = unassignedForDispatch();
+    const _allUnassigned = unassignedForDispatch();
+    const _passRegion = o => dispatchRegionSel === '전체' || addressToRegion(o.pickup || '') === dispatchRegionSel;
+    const _passSite = (() => {
+      if (dispatchSiteSel === '전체') return () => true;
+      const site = ROUTEON_SITES.find(s => s.place_name === dispatchSiteSel);
+      return site ? o => addressToRegion(o.pickup || '') === site.region : () => true;
+    })();
+    DATA.dispatchOrders = _allUnassigned.filter(_passRegion).filter(_passSite);
     const plans = DATA.dispatchPlans;
     const tabIdx = Math.min(dispatchPreviewTab, plans.length - 1);
     const plan = plans[tabIdx] || plans[0];
-    let unassigned = unassignedForDispatch();
+    let unassigned = _allUnassigned.filter(_passRegion).filter(_passSite);
     if (dispatchPendingMixedOnly) unassigned = unassigned.filter(o => isMixedLoad(o));
     const selectedPending = unassigned.find(o => o.id === dispatchPendingSelectedId)
       || (dispatchPendingSelectedId ? unassignedForDispatch().find(o => o.id === dispatchPendingSelectedId) : null);
@@ -3316,9 +3325,9 @@
           <div class="toolbar" style="margin-bottom:16px">
             <label>배차 일자</label><input type="date" id="dispatchDate" value="${new Date().toISOString().slice(0, 10)}">
             <label>권역</label>
-            <select id="dispatchRegionFilter">${odRegionSelectHtml('전체')}</select>
+            <select id="dispatchRegionFilter">${odRegionSelectHtml(dispatchRegionSel)}</select>
             <label>거점</label>
-            <select id="dispatchSiteFilter">${siteSelectHtml('엔와이국제물류주식회사')}</select>
+            <select id="dispatchSiteFilter"><option value="전체"${dispatchSiteSel === '전체' ? ' selected' : ''}>전체</option>${ROUTEON_SITES.map(s => `<option value="${s.place_name}"${s.place_name === dispatchSiteSel ? ' selected' : ''}>${s.place_name} (${s.region})</option>`).join('')}</select>
           </div>
           <ul class="checklist" id="fleetChecklist">
             ${DATA.dispatchFleet.map(f => {
@@ -3424,6 +3433,14 @@
     });
     $('#dispatchMixedOnlyFilter', root)?.addEventListener('change', (e) => {
       dispatchPendingMixedOnly = e.target.checked;
+      renderDispatchAssign(root);
+    });
+    $('#dispatchRegionFilter', root)?.addEventListener('change', e => {
+      dispatchRegionSel = e.target.value;
+      renderDispatchAssign(root);
+    });
+    $('#dispatchSiteFilter', root)?.addEventListener('change', e => {
+      dispatchSiteSel = e.target.value;
       renderDispatchAssign(root);
     });
 
@@ -3533,9 +3550,12 @@
 
       const tasks = [];
       const skipped = [];
+      const _siteForRun = dispatchSiteSel !== '전체' ? ROUTEON_SITES.find(s => s.place_name === dispatchSiteSel) : null;
       checkedOrderIds.forEach(ordId => {
         const ord = DATA.orders.find(o => o.id === ordId);
         if (!ord?.pickup_lat || !ord?.lat) { skipped.push(ordId); return; }
+        if (dispatchRegionSel !== '전체' && addressToRegion(ord.pickup || '') !== dispatchRegionSel) return;
+        if (_siteForRun && addressToRegion(ord.pickup || '') !== _siteForRun.region) return;
         tasks.push({
           loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
           unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon }],

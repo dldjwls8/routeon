@@ -632,7 +632,7 @@ Android 앱 채팅 구현 필수 사항:
 
 ##### 단기
 - [x] **[오더관리] 접수창 복수 상·하차지 추가** — `addIntakePickupStop` / `addIntakeDeliveryStop` DOM 동적 추가, `collectIntakeRows` pair-wise 배송 건 생성, `commitIntakeRow` 제출 후 extra row 정리 (v1.0.57)
-- [ ] **[배차] 권역·거점 필터 연동** — `dispatchRegionFilter` · `dispatchSiteFilter` 선택 값을 배차 실행(`runDispatch`) 시 오더 필터링에 반영
+- [x] **[배차] 권역·거점 필터 연동** — `dispatchRegionSel` · `dispatchSiteSel` 상태 변수, `_passRegion` / `_passSite` 필터 함수, 테이블·`runDispatch` 양쪽 적용 (v1.0.58)
 
 ##### 낮음 (정리)
 - [ ] **목업 텍스트 잔존 제거** — `dashboard.js:928` 차량 패널 `(목업)` 문구, `dashboard.js:2562` 임시화주 필터 설명 `(목업)` 제거
