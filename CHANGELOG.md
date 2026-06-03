@@ -6,6 +6,12 @@
 
 ---
 
+## v1.0.72 (2026-06-03)
+### 버그 수정
+- **기사 앱 운행 목록 하차지 누락 수정**: 수동 `POST /trips` 생성 시 하차지가 `dest_name/dest_lat/dest_lon`에만 저장되고 `waypoints`에는 상차지만 남아 기사 앱에서 `unloading_count=0`으로 표시되던 문제 수정. 신규 Trip 생성 시 `dest_*` 목적지를 `type=unloading` waypoint로 자동 보강하고, 기존 Trip도 `/trips` 조회 응답에서 동일 좌표 중복 없이 하차 waypoint를 보강하도록 변경
+
+---
+
 ## v1.0.71 (2026-06-03)
 ### 버그 수정
 - **배차 waypoints cargo 필드 누락 수정**: `POST /trips/auto-dispatch` 호출 시 waypoints에 `cargo_type`, `cargo_weight_ton`, `recipient_name`이 null로 전달되던 문제 수정. 프론트엔드 일괄 배차(`renderBulkDispatch`)·수동 배차(`renderDispatchAssign`) tasks 구성 2곳 + 백엔드 `dispatch.py` waypoints dict 빌드 1곳, 총 3곳 누락 필드 추가
@@ -1435,4 +1441,3 @@
 
 ### 마무리
 - [ ] 발표 준비
-

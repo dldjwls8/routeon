@@ -137,6 +137,8 @@ await db.refresh(obj)
 ```
 1. 관리자: POST /trips → 상차지(type:loading) + 하차지(type:unloading) 경유지 등록
            (dest_* 미입력 가능 — 기사가 /optimize 시 마지막 하차지 자동 도착지 지정)
+           └─ 앱 호환성: dest_*가 별도 목적지로 전달된 경우에도 신규 생성/조회 응답에서
+              동일 좌표 중복 없이 type=unloading waypoint로 보강해 unloading_count가 유지됨
 2. 기사:   POST /optimize → trip_id (출발지 선택 입력, 이름 미입력 가능)
            └─ origin 우선순위: req.origin_lat/lon → Redis location:{user_id} → HTTP 400
            └─ origin_name 미입력 시 카카오 역지오코딩으로 주소 자동 조회 (_coord_to_address)
@@ -605,6 +607,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[접수창] 자동완성 키보드 화살표 시각 피드백** — `setActive()` 헬퍼로 ArrowDown/ArrowUp 하이라이트 추가 (v1.0.69)
 - [x] **[접수창] 자동완성 드롭다운 다크모드 대응** — 배경·테두리·텍스트·hover 전부 다크 테마 변수로 교체 (v1.0.70)
 - [x] **[배차] cargo_type·cargo_weight_ton·recipient_name waypoints 누락 버그 수정** — 일괄 배차·수동 배차 tasks 구성(프론트 2곳) + `dispatch.py` waypoints dict(백엔드 1곳) 총 3곳 수정 (v1.0.71)
+- [x] **[기사 앱] Trip 하차지 카운트 누락 수정** — `POST /trips`의 `dest_*` 목적지를 신규 생성/조회 응답에서 `type=unloading` waypoint로 보강해 앱 `unloading_count=0` 표시 문제 해결 (v1.0.72)
 
 ### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

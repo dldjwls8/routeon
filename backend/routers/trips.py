@@ -60,6 +60,32 @@ class TripCreate(BaseModel):
     vehicle_length_cm: Optional[float] = None
     vehicle_width_cm:  Optional[float] = None
 
+
+def _same_unloading_point(w: dict, lat: float, lon: float) -> bool:
+    if w.get("type") == "loading":
+        return False
+    try:
+        w_lat = float(w.get("lat"))
+        w_lon = float(w.get("lon"))
+    except (TypeError, ValueError):
+        return False
+    return abs(w_lat - lat) < 1e-6 and abs(w_lon - lon) < 1e-6
+
+
+def _dest_waypoint(name: str, lat: float, lon: float) -> dict:
+    return {
+        "name": name,
+        "lat": lat,
+        "lon": lon,
+        "type": "unloading",
+        "task_group": None,
+        "recipient_name": None,
+        "cargo_type": None,
+        "cargo_weight_ton": None,
+        "delivery_id": None,
+    }
+
+
 @router.get("/trips")
 async def get_trips(
     db: AsyncSession = Depends(get_db),
@@ -127,6 +153,10 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
         if not vehicle.is_active:
             raise HTTPException(400, "비활성화된 차량입니다.")
     waypoints_json = [w.model_dump() for w in req.waypoints] if req.waypoints else []
+    if req.dest_name and req.dest_lat is not None and req.dest_lon is not None:
+        has_dest_waypoint = any(_same_unloading_point(w, req.dest_lat, req.dest_lon) for w in waypoints_json)
+        if not has_dest_waypoint:
+            waypoints_json.append(_dest_waypoint(req.dest_name, req.dest_lat, req.dest_lon))
     if not waypoints_json:
         raise HTTPException(400, "상차지 또는 하차지를 1개 이상 입력해주세요.")
     t = Trip(
@@ -477,8 +507,18 @@ async def reassign_trip(
     }
 
 
-def _trip_schema(t: Trip) -> dict:
+def _trip_waypoints_for_response(t: Trip) -> list[dict]:
     wp = t.waypoints or []
+    response_wp = [dict(w) for w in wp]
+    if t.dest_name and t.dest_lat is not None and t.dest_lon is not None:
+        has_dest_waypoint = any(_same_unloading_point(w, t.dest_lat, t.dest_lon) for w in response_wp)
+        if not has_dest_waypoint:
+            response_wp.append(_dest_waypoint(t.dest_name, t.dest_lat, t.dest_lon))
+    return response_wp
+
+
+def _trip_schema(t: Trip) -> dict:
+    wp = _trip_waypoints_for_response(t)
     loadings   = sum(1 for w in wp if w.get("type") == "loading")
     unloadings = sum(1 for w in wp if w.get("type") != "loading")
     return {
