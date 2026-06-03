@@ -36,6 +36,7 @@ class DeliveryStatus(str, enum.Enum):
     in_progress = "in_progress"
     done        = "done"
     done_manual = "done_manual"
+    cancelled   = "cancelled"
 
 
 class TripStatus(str, enum.Enum):

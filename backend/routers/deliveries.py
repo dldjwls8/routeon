@@ -54,6 +54,17 @@ class DeliveryCreate(BaseModel):
 class DeliveryAssign(BaseModel):
     driver_id: str   # UUID 문자열
 
+class DeliveryUpdate(BaseModel):
+    status:           Optional[str]   = None   # "cancelled" 등
+    address:          Optional[str]   = None
+    pickup_address:   Optional[str]   = None
+    recipient_name:   Optional[str]   = None
+    cargo_type:       Optional[str]   = None
+    cargo_weight_ton: Optional[float] = None
+    contact_name:     Optional[str]   = None
+    shipper_name:     Optional[str]   = None
+    deadline:         Optional[str]   = None
+
 
 @router.post("/deliveries", status_code=201)
 async def create_delivery(
@@ -144,6 +155,50 @@ async def assign_delivery(
 
     delivery.assigned_to = driver.id
     delivery.status      = DeliveryStatus.in_progress
+    await db.commit()
+    await db.refresh(delivery)
+    return _delivery_schema(delivery)
+
+
+@router.patch("/deliveries/{delivery_id}")
+async def update_delivery(
+    delivery_id: str,
+    req: DeliveryUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """관리자: 오더 수정 (상태 변경·필드 업데이트)"""
+    from datetime import datetime
+    _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
+    delivery = _r.scalar_one_or_none()
+    if not delivery:
+        raise HTTPException(404, "배송을 찾을 수 없습니다.")
+    if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual):
+        raise HTTPException(400, "완료된 배송은 수정할 수 없습니다.")
+    if req.status is not None:
+        try:
+            delivery.status = DeliveryStatus(req.status)
+        except ValueError:
+            raise HTTPException(400, f"올바르지 않은 상태: {req.status}")
+    if req.address is not None:
+        delivery.address = req.address
+    if req.pickup_address is not None:
+        delivery.pickup_address = req.pickup_address
+    if req.recipient_name is not None:
+        delivery.recipient_name = req.recipient_name
+    if req.cargo_type is not None:
+        delivery.cargo_type = req.cargo_type
+    if req.cargo_weight_ton is not None:
+        delivery.cargo_weight_ton = req.cargo_weight_ton
+    if req.contact_name is not None:
+        delivery.contact_name = req.contact_name
+    if req.shipper_name is not None:
+        delivery.shipper_name = req.shipper_name
+    if req.deadline is not None:
+        try:
+            delivery.deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
+        except ValueError:
+            raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
     await db.commit()
     await db.refresh(delivery)
     return _delivery_schema(delivery)

@@ -509,7 +509,7 @@
       const dvr = await fetch(`${API}/deliveries`, { headers: hdrs });
       if (dvr.ok) {
         const deliveries = await dvr.json();
-        const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료' };
+        const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
         DATA.orders = deliveries.map(d => ({
           id: d.id,
           customer: d.shipper_name || '—',
@@ -3314,7 +3314,7 @@
         </div>
         <div class="card-bd">
           <div class="toolbar" style="margin-bottom:16px">
-            <label>배차 일자</label><input type="date" value="2026-06-01">
+            <label>배차 일자</label><input type="date" id="dispatchDate" value="${new Date().toISOString().slice(0, 10)}">
             <label>권역</label>
             <select id="dispatchRegionFilter">${odRegionSelectHtml('전체')}</select>
             <label>거점</label>
@@ -4090,24 +4090,41 @@
           <label>기사</label><input value="${o.driver || '—'}" disabled>
         </div>
         ${orderIsEditable(o) ? '' : '<p class="text-muted-hint" style="font-size:12px;margin-top:10px">접수 건만 상·하차·화물 등을 수정할 수 있습니다. 취소·삭제는 하단 버튼을 이용하세요.</p>'}
-      </form>`, () => {
+      </form>`, async () => {
       const form = $('#orderEditForm');
       if (!form) return;
       if (orderIsEditable(o)) {
-        o.customer = form.querySelector('[name="customer"]').value;
-        o.pickup = form.querySelector('[name="pickup"]').value.trim();
-        o.delivery = form.querySelector('[name="delivery"]').value.trim();
-        o.recipient = form.querySelector('[name="recipient"]').value.trim();
-        o.cargo = form.querySelector('[name="cargo"]').value.trim();
-        o.tons = form.querySelector('[name="tons"]').value.trim();
-        o.contact = form.querySelector('[name="contact"]').value.trim();
+        const pickup = form.querySelector('[name="pickup"]').value.trim();
+        const delivery = form.querySelector('[name="delivery"]').value.trim();
+        const recipient = form.querySelector('[name="recipient"]').value.trim();
+        const cargo = form.querySelector('[name="cargo"]').value.trim();
+        const tonsStr = form.querySelector('[name="tons"]').value.trim();
+        const contact = form.querySelector('[name="contact"]').value.trim();
+        const customer = form.querySelector('[name="customer"]').value;
         const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
+        const body = {
+          address: delivery || undefined,
+          pickup_address: pickup || undefined,
+          recipient_name: recipient || undefined,
+          cargo_type: cargo || undefined,
+          cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
+          contact_name: contact || undefined,
+          shipper_name: customer || undefined,
+          deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
+        };
+        const res = await fetch(`${API}/deliveries/${o.id}`, {
+          method: 'PATCH',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
+        o.customer = customer; o.pickup = pickup; o.delivery = delivery;
+        o.recipient = recipient; o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
         o.window = latest ? formatIntakeWindow(latest) : '—';
         toast('오더가 수정되었습니다');
       } else {
-        toast('상태가 변경되었습니다');
+        toast('조회 완료');
       }
-      o.status = form.querySelector('[name="status"]').value;
       renderOrderList(listRoot);
     });
     const ft = $('#modalBox').querySelector('.modal-ft');
@@ -4116,7 +4133,13 @@
       cancelBtn.type = 'button';
       cancelBtn.textContent = '접수 취소';
       cancelBtn.style.marginRight = 'auto';
-      cancelBtn.onclick = () => {
+      cancelBtn.onclick = async () => {
+        const res = await fetch(`${API}/deliveries/${o.id}`, {
+          method: 'PATCH',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'cancelled' }),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '취소 처리 실패', 'error'); return; }
         o.status = '취소';
         closeModal();
         toast('오더가 취소 처리되었습니다');
@@ -4128,7 +4151,12 @@
       const delBtn = el('button', 'btn btn-danger-outline');
       delBtn.type = 'button';
       delBtn.textContent = '삭제';
-      delBtn.onclick = () => {
+      delBtn.onclick = async () => {
+        const res = await fetch(`${API}/deliveries/${o.id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패', 'error'); return; }
         const i = DATA.orders.findIndex(x => x.id === o.id);
         if (i >= 0) DATA.orders.splice(i, 1);
         closeModal();

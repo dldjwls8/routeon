@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.56 (2026-06-03)
+### 오더관리 API 실 연동 완성 및 배차 일자 수정
+- **오더 수정 저장 실 연동**: `openOrderEditModal` 저장 콜백 async 변환, `PATCH /deliveries/{id}` 실 호출 (address, pickup_address, cargo_type, cargo_weight_ton, recipient_name, contact_name, shipper_name, deadline 업데이트)
+- **오더 취소 실 연동**: 취소 버튼 onclick async, `PATCH /deliveries/{id}` status=cancelled 실 호출
+- **오더 삭제 실 연동**: 삭제 버튼 onclick async, `DELETE /deliveries/{id}` 실 호출
+- **백엔드 `PATCH /deliveries/{delivery_id}` 신규 추가**: 상태(cancelled 포함) + 필드 부분 업데이트
+- **PostgreSQL Enum 확장**: `deliverystatus` 타입에 `cancelled` 값 추가 (`ALTER TYPE`)
+- **models.py `DeliveryStatus.cancelled`** 추가
+- **deliveryStatusMap에 `cancelled: '취소'` 추가** — API 응답에서 취소 상태 오더 올바르게 표시
+- **배차 일자 하드코딩 제거**: `value="2026-06-01"` → `new Date().toISOString().slice(0,10)` 오늘 날짜 동적 설정
+
+---
+
 ## v1.0.55 (2026-06-03)
 ### 운행 중 교체·대차 Phase 2 — 목업 제거 및 실 API 연동
 - `handoverMockDisclaimerHtml` / `mockNoticeHtml` 미사용 목업 함수 삭제

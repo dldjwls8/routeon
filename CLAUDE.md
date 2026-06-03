@@ -581,6 +581,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (헤더 기반 컬럼 매핑, 대기열 추가) (v1.0.53)
 - [x] **[대시보드] 홈 화물 집계 실 데이터화** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 실 집계로 교체 (v1.0.54)
 - [x] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동 (v1.0.55)
+### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
@@ -620,3 +621,20 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **접수창 엑셀 임포트** — `renderOrderIntake` `#excelImport` SheetJS 파싱, 헤더 기반 컬럼 매핑(화주명·상차지·하차지·화물종류·중량·희망도착 등), 파싱 결과를 `addPendingIntake` 대기열에 추가 (v1.0.53)
 - [x] **대시보드 홈 화물 집계** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 그룹·중량 합산 실 집계, 상위 6종 표시, 데이터 없을 시 "접수된 화물 없음" 표시 (v1.0.54)
 - [x] **운행 중 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 배너 삭제, 사고신고 `PATCH /trips/{id}/safety` 실 연동, 차량 상세 저장 `PATCH /vehicles/{id}` 실 연동 (v1.0.55)
+
+#### 신규 파악 항목 (2026-06-03)
+
+##### 즉시 수정
+- [x] **[오더관리] 오더 취소 API 연동** — 취소 버튼 async onclick: `PATCH /deliveries/{id}` status=cancelled 실 연동, DB Enum cancelled 추가 (v1.0.56)
+- [x] **[오더관리] 오더 삭제 API 연동** — 삭제 버튼 async onclick: `DELETE /deliveries/{id}` 실 연동 (v1.0.56)
+- [x] **[오더관리] 오더 수정 저장 API 연동** — 저장 콜백 async: `PATCH /deliveries/{id}` 실 연동 (address, pickup_address, cargo_type, cargo_weight_ton, deadline 등) (v1.0.56)
+- [x] **[배차] 배차 일자 하드코딩 수정** — `value="2026-06-01"` → `new Date().toISOString().slice(0,10)` 오늘 날짜 동적 설정 (v1.0.56)
+
+##### 단기
+- [ ] **[오더관리] 접수창 복수 상·하차지 추가** — `addIntakePickupStop` / `addIntakeDeliveryStop` 빈 함수 구현: 태스크 카드 내 상차지·하차지 입력 행을 동적으로 추가하는 실제 로직
+- [ ] **[배차] 권역·거점 필터 연동** — `dispatchRegionFilter` · `dispatchSiteFilter` 선택 값을 배차 실행(`runDispatch`) 시 오더 필터링에 반영
+
+##### 낮음 (정리)
+- [ ] **목업 텍스트 잔존 제거** — `dashboard.js:928` 차량 패널 `(목업)` 문구, `dashboard.js:2562` 임시화주 필터 설명 `(목업)` 제거
+- [ ] **데드 코드 삭제** — `ROUTEON_GEN_TASKS` (line 133), `BULK_NODE_ROWS` (line 148) 미사용 상수 삭제
+- [ ] **`mockNow` / `mockToday` 함수명 변경** — 실제 현재 시각 반환 정상 함수임에도 `mock` 접두사로 혼란 유발 → `nowStr` / `todayStr` 등으로 리네임
