@@ -130,45 +130,6 @@
       `<option value="${s.place_name}"${s.place_name === selectedName ? ' selected' : ''}>${s.place_name} (${s.region})</option>`).join('');
   }
 
-  const ROUTEON_GEN_TASKS = [
-    { id: 1, pickup: { place: '상지빌딩', address: '서울특별시 성동구 마장로35길 66, 지하1층 (마장동)' },
-      delivery: { place: '주식회사 쿱로지스틱스', address: '충청북도 괴산군 괴산읍 자연식품2길 51, 괴산아이쿱 상온창고' },
-      shipper: '상지빌딩', cargo: '일반화물 18.1t', contact: '장수빈', latestAt: '2026-06-01 14:00', cargo_id: 'T1-C1', mixed_load: true },
-    { id: 2, pickup: { place: '경동물류(주)', address: '경상남도 양산시 물금읍 제방로 27-9, 1동' },
-      delivery: { place: '주식회사 태명산업', address: '전북특별자치도 군산시 외항로 885, 주식회사 태명산업 (오식도동)' },
-      shipper: '경동물류(주)', cargo: '하역 22.2t', contact: '이서연', latestAt: '2026-06-01 16:30', cargo_id: 'T2-C1', mixed_load: false },
-    { id: 3, pickup: { place: '(주)에스피씨지에프에스', address: '경기도 용인시 처인구 백암면 한택로88번길 260' },
-      delivery: { place: '쿠팡풀필먼트서비스(유)', address: '경기도 이천시 마장면 이장로 329-38, CBRE GI 서이천 물류센터' },
-      shipper: '(주)에스피씨지에프에스', cargo: '일반화물 6.7t', contact: '장예진', latestAt: '2026-06-01 12:00', cargo_id: 'T3-C1', mixed_load: false },
-    { id: 4, pickup: { place: '대전농업협동조합', address: '전라남도 담양군 대전면 추성1로 208' },
-      delivery: { place: '(주)개미창고', address: '경기도 이천시 마장면 이장로311번길 5-30, 신관 2층' },
-      shipper: '대전농업협동조합', cargo: '양곡·영농자재 9.8t', contact: '윤수빈', latestAt: '2026-06-01 17:00', cargo_id: 'T4-C1', mixed_load: true },
-  ];
-
-  const BULK_NODE_ROWS = [
-    { name: '(주)유상냉장 보세창고', address: '경기도 용인시 기흥구 동탄기흥로 741 (고매동, 유상냉장)', tons: 2.5, tw: '2026-06-01T11:00', cargo_id: 'T5-C1', mixed_load: true },
-    { name: '위킵 인천저온센터', address: '인천광역시 미추홀구 염전로143번길 45, 지하1층 101,102호 (도화동)', tons: 2.4, tw: '2026-06-01T11:30', cargo_id: 'T5-C2', mixed_load: true },
-    { name: '쿠팡로지스틱스서비스 유한회사', address: '경상남도 김해시 장유로55번길 30-15(부곡동)', tons: 8.0, tw: '2026-06-01T15:00', cargo_id: 'T6-C1', mixed_load: true },
-    { name: '삼양사', address: '대구광역시 북구 유통단지로13길 8 (산격동)', tons: 7.9, tw: '2026-06-01T16:00', cargo_id: 'T6-C2', mixed_load: true },
-    { name: '대봉유통', address: '경상남도 김해시 진례면 고모로341번길 5', tons: 3.0, tw: '2026-06-01T13:00', cargo_id: 'T7-C1', mixed_load: true },
-    { name: '(주)아시안타이거즈 트랜스팩', address: '경기도 김포시 월곶면 고정로 79-34', tons: 3.0, tw: '2026-06-01T14:30', cargo_id: 'T7-C2', mixed_load: true },
-  ].map((r, idx) => {
-    const ll = addressToFakeLatLon(r.address);
-    const kg = Math.round(r.tons * 1000);
-    const tripPrefix = (r.cargo_id || '').split('-')[0];
-    const pickupByTrip = { T5: '인천', T6: '경남', T7: '경기' };
-    const twTime = r.tw && r.tw.includes('T') ? r.tw.split('T')[1]?.slice(0, 5) : '—';
-    return { ...r, lat: ll.lat, lon: ll.lon, region: ll.region, cargo_weight_kg: kg,
-      latest_at: r.tw + ':00+09:00',
-      order_id: `B-260601-${String(idx + 1).padStart(2, '0')}`,
-      shipper: r.name.replace(/\(주\)/g, '').trim(),
-      pickup: pickupByTrip[tripPrefix] || ll.region,
-      delivery: ll.region,
-      status: '배차대기',
-      window: twTime,
-    };
-  });
-
   function formatTwClose(tw) {
     if (!tw) return '—';
     const [d, t] = tw.split('T');
@@ -927,7 +888,7 @@
     return `
       <label>마지막 GPS <span class="badge badge-muted">읽기 전용</span></label>
       <p style="margin:0;font-size:13px">${v.start_lat}, ${v.start_lon} · 갱신 ${vehicleLastGpsAt(v)}</p>
-      <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">관리자 입력 없음 · 앱 위치 로그 기준(목업)</p>`;
+      <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">관리자 입력 없음 · 앱 위치 로그 기준</p>`;
   }
 
   function driverById(id) {
@@ -963,7 +924,7 @@
 
   function pushHandoverHistory(trip, entry) {
     if (!trip.handoverHistory) trip.handoverHistory = [];
-    trip.handoverHistory.push({ at: mockNow(), ...entry });
+    trip.handoverHistory.push({ at: nowStr(), ...entry });
   }
 
   function openDriverChangeModal(trip) {
@@ -1132,12 +1093,12 @@
     return DATA.customers.find(c => c.id === Number(id)) || null;
   }
 
-  function mockNow() {
+  function nowStr() {
     const d = new Date();
-    return `${mockToday()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `${todayStr()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
-  function mockToday() {
+  function todayStr() {
     return new Date().toISOString().split('T')[0];
   }
 
@@ -1146,7 +1107,7 @@
   }
 
   function isTempCustomerActiveToday(c) {
-    return isTemporaryCustomer(c) && (c.valid_date || mockToday()) === mockToday();
+    return isTemporaryCustomer(c) && (c.valid_date || todayStr()) === todayStr();
   }
 
   function customerTempBadgeHtml(c) {
@@ -1186,7 +1147,7 @@
   function openTempCustomerModal(onSaved) {
     openModal('임시 화주 추가', `
       <form id="tempCustForm">
-        <p class="cust-temp-banner" style="margin-top:0">당일 의뢰용 · 고객 마스터 미등록 · 유효일 ${mockToday()}</p>
+        <p class="cust-temp-banner" style="margin-top:0">당일 의뢰용 · 고객 마스터 미등록 · 유효일 ${todayStr()}</p>
         <div class="form-grid" style="max-width:100%">
           <label>화주명 *</label><input name="name" required placeholder="업체명">
           <label>연락처</label><input name="phone" placeholder="010-0000-0000">
@@ -1198,7 +1159,7 @@
       const name  = form.querySelector('[name="name"]').value.trim();
       const phone = form.querySelector('[name="phone"]').value.trim();
       const memo  = form.querySelector('[name="memo"]').value.trim() || '당일 의뢰';
-      const today = mockToday();
+      const today = todayStr();
       const res = await fetch(`${API}/customers`, {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
@@ -2561,7 +2522,7 @@
             <input type="search" class="search" id="custSearch" placeholder="고객명·담당자" value="${q}">
             <button type="button" class="btn btn-primary" id="addCust">+ 추가</button>
           </div>
-          <p class="cust-filter-hint">임시(당일): 접수 시 등록한 당일 화주만 · 일자 종료 후 목록에서 숨김(목업)</p>
+          <p class="cust-filter-hint">임시(당일): 접수 시 등록한 당일 화주만 · 일자 종료 후 목록에서 숨김</p>
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>

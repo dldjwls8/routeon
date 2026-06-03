@@ -635,6 +635,6 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[배차] 권역·거점 필터 연동** — `dispatchRegionSel` · `dispatchSiteSel` 상태 변수, `_passRegion` / `_passSite` 필터 함수, 테이블·`runDispatch` 양쪽 적용 (v1.0.58)
 
 ##### 낮음 (정리)
-- [ ] **목업 텍스트 잔존 제거** — `dashboard.js:928` 차량 패널 `(목업)` 문구, `dashboard.js:2562` 임시화주 필터 설명 `(목업)` 제거
-- [ ] **데드 코드 삭제** — `ROUTEON_GEN_TASKS` (line 133), `BULK_NODE_ROWS` (line 148) 미사용 상수 삭제
-- [ ] **`mockNow` / `mockToday` 함수명 변경** — 실제 현재 시각 반환 정상 함수임에도 `mock` 접두사로 혼란 유발 → `nowStr` / `todayStr` 등으로 리네임
+- [x] **목업 텍스트 잔존 제거** — 차량 패널 · 임시화주 필터 `(목업)` 문구 제거 (v1.0.59)
+- [x] **데드 코드 삭제** — `ROUTEON_GEN_TASKS` · `BULK_NODE_ROWS` 미사용 상수 삭제 (v1.0.59)
+- [x] **`mockNow` / `mockToday` 함수명 변경** → `nowStr` / `todayStr` 리네임 (v1.0.59)
