@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-03 (v1.0.70 기준)
+> 최종 검토: 2026-06-03 (v1.0.71 기준)
 
 ---
 
@@ -111,7 +111,7 @@
 | `dest_name` | VARCHAR(200) | | 도착지 이름 (nullable — 기사가 /optimize 시 자동 결정 가능) |
 | `dest_lat` | FLOAT | | 도착지 위도 |
 | `dest_lon` | FLOAT | | 도착지 경도 |
-| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]` |
+| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"recipient_name":str\|null,"cargo_type":str\|null,"cargo_weight_ton":float\|null,"delivery_id":uuid\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]` |
 | `vehicle_height_m` | FLOAT | | 차량 높이 오버라이드 |
 | `vehicle_weight_kg` | FLOAT | | 총중량 오버라이드 |
 | `vehicle_length_cm` | FLOAT | | 차량 길이 오버라이드 |

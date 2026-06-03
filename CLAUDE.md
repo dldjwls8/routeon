@@ -111,11 +111,18 @@ routeon/
 
 ### WaypointSchema 구조
 ```json
-{"name": "강남역", "lat": 37.4979, "lon": 127.0276, "type": "loading", "task_group": 0}
+{
+  "name": "강남역", "lat": 37.4979, "lon": 127.0276,
+  "type": "loading", "task_group": 0,
+  "recipient_name": "고객사명", "cargo_type": "파렛트",
+  "cargo_weight_ton": 2.0, "delivery_id": "uuid"
+}
 ```
 - `type`: `"loading"` (상차지) | `"unloading"` (하차지)
 - `task_group`: 같은 그룹의 loading-unloading 쌍을 OR-Tools pickup_deliveries 제약으로 묶음.
   `null`이면 자유 최적화 (긴급 배차 등). 운행 생성 패널과 자동 배차 모두 자동 부여.
+- `recipient_name` / `cargo_type` / `cargo_weight_ton`: 수신자·화물 종류·톤수. unloading 전용. 배차 시 Delivery 원본에서 복사.
+- `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 
 ### 비동기 패턴
 ```python
@@ -597,6 +604,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[접수창] 자동완성 표시 개선** — 중복 place_name 필터, 실제 장소명 우선 정렬, category_group_name 뱃지, 최대 7건 표시 (v1.0.69)
 - [x] **[접수창] 자동완성 키보드 화살표 시각 피드백** — `setActive()` 헬퍼로 ArrowDown/ArrowUp 하이라이트 추가 (v1.0.69)
 - [x] **[접수창] 자동완성 드롭다운 다크모드 대응** — 배경·테두리·텍스트·hover 전부 다크 테마 변수로 교체 (v1.0.70)
+- [x] **[배차] cargo_type·cargo_weight_ton·recipient_name waypoints 누락 버그 수정** — 일괄 배차·수동 배차 tasks 구성(프론트 2곳) + `dispatch.py` waypoints dict(백엔드 1곳) 총 3곳 수정 (v1.0.71)
 
 ### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

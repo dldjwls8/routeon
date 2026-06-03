@@ -6,6 +6,12 @@
 
 ---
 
+## v1.0.71 (2026-06-03)
+### 버그 수정
+- **배차 waypoints cargo 필드 누락 수정**: `POST /trips/auto-dispatch` 호출 시 waypoints에 `cargo_type`, `cargo_weight_ton`, `recipient_name`이 null로 전달되던 문제 수정. 프론트엔드 일괄 배차(`renderBulkDispatch`)·수동 배차(`renderDispatchAssign`) tasks 구성 2곳 + 백엔드 `dispatch.py` waypoints dict 빌드 1곳, 총 3곳 누락 필드 추가
+
+---
+
 ## v1.0.70 (2026-06-03)
 ### 자동완성 드롭다운 다크모드 대응
 - **배경 다크모드 대응**: 드롭다운이 `background:#fff` 고정으로 다크모드에서도 흰 배경 표시되던 문제 수정. `var(--dark-card, #1c2029)`로 교체
