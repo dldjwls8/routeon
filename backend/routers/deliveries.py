@@ -57,7 +57,11 @@ class DeliveryAssign(BaseModel):
 class DeliveryUpdate(BaseModel):
     status:           Optional[str]   = None   # "cancelled" 등
     address:          Optional[str]   = None
+    lat:              Optional[float] = None
+    lon:              Optional[float] = None
     pickup_address:   Optional[str]   = None
+    pickup_lat:       Optional[float] = None
+    pickup_lon:       Optional[float] = None
     recipient_name:   Optional[str]   = None
     cargo_type:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
@@ -182,8 +186,16 @@ async def update_delivery(
             raise HTTPException(400, f"올바르지 않은 상태: {req.status}")
     if req.address is not None:
         delivery.address = req.address
+    if req.lat is not None:
+        delivery.lat = req.lat
+    if req.lon is not None:
+        delivery.lon = req.lon
     if req.pickup_address is not None:
         delivery.pickup_address = req.pickup_address
+    if req.pickup_lat is not None:
+        delivery.pickup_lat = req.pickup_lat
+    if req.pickup_lon is not None:
+        delivery.pickup_lon = req.pickup_lon
     if req.recipient_name is not None:
         delivery.recipient_name = req.recipient_name
     if req.cargo_type is not None:

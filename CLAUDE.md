@@ -648,3 +648,26 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **`normalizeDispatchListRow` 하드코딩 지역 매핑** — 가짜 데이터 잔재 `{ T5: '인천', ... }` 삭제
 - [x] **`runAutoDispatch` 데드 코드 삭제** — 미호출 + `vehicle_ids` 오파라미터 함수 제거
 - [x] **`pendingIntakes` 접수 후 중복 push** — 제거 후 `unassignedForDispatch`를 `DATA.orders`만 참조하도록 단순화
+
+#### 미완성·개선 항목 (2026-06-03 프론트엔드 코드 점검) — 2026-06-03 전체 완료
+
+##### 🔴 버그/불일치
+- [x] **WebSocket URL 하드코딩** → `API.replace(/^http/, 'ws')` 패턴으로 수정
+- [x] **차량 상세 저장 — 상태·연결기사 DB 미반영** → `vehicles.status` 컬럼 추가, `VehicleUpdate`에 `status`/`driver_id` 추가, PATCH에서 User.vehicle_id 동기화
+- [x] **기사 상세 저장 — 상태·배정차량 DB 미반영** → `users.vehicle_id`/`users.driver_status` 컬럼 추가, `PATCH /users/{id}` 엔드포인트 신설, 프론트 async PATCH 호출
+
+##### 🟡 미구현
+- [x] **캘린더 이전/다음 달 이동 없음** → `calendarYear`/`calendarMonth` 상태 변수 추가, `‹ ›` 네비게이션 버튼 + "오늘" 버튼 구현
+- [x] **통계 기사별 거리 평균 항상 '—'** → `by-driver` API에 `avg_distance_km` 필드 추가, 프론트 바인딩
+- [x] **통계 차트 자동 로드 없음** → `renderTripStats` 진입 시 `setTimeout(() => statsApply.click(), 0)` 자동 호출
+- [x] **접수창 장소 검색 자동완성 미구현** → `bindPlaceSearch` 함수 추가 (카카오 Places `keywordSearch` + 키보드 네비게이션 드롭다운)
+
+##### 🔵 UX 개선
+- [x] **오더 목록에서 접수창 이동 버튼 없음** → `card-hd`에 `+ 접수 창` 버튼 추가
+
+#### 배차 불가 버그 수정 (2026-06-03, v1.0.63)
+- [x] **접수창 좌표 미수집** — `collectIntakeRow()`에서 `input.dataset.lat/lon`을 읽지 않아 모든 접수 건 좌표 null 저장 → `puEl.dataset.lat/lon`, `delEl.dataset.lat/lon` 읽도록 수정
+- [x] **`commitPendingRowsToOrders` null 하드코딩** — `lat/lon/pickup_lat/pickup_lon: null` 고정 → `r.lat ?? null` 실값 전달
+- [x] **`DeliveryUpdate` 좌표 필드 누락** — `PATCH /deliveries/{id}`에 `lat/lon/pickup_lat/pickup_lon` 필드 없어 좌표 업데이트 불가 → 4개 필드 추가 + 엔드포인트 처리 추가
+- [x] **`/location-logs` 500 오류** — 기사 앱이 null 좌표 전송 시 Pydantic `float` validation 실패 → `lat/lon` Optional 처리, null이면 저장 스킵 후 `{"ok": true}` 반환
+- [x] **기존 pending 배송 좌표 없음** — 좌표 없던 pending 6건을 카카오 geocoding API로 일괄 복구

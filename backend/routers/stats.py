@@ -169,6 +169,7 @@ async def stats_by_driver(
             func.count().label("total"),
             func.count().filter(Trip.status == TripStatus.completed).label("completed"),
             func.coalesce(func.sum(dist_col), 0.0).label("total_dist"),
+            func.coalesce(func.avg(dist_col), 0.0).label("avg_dist"),
             func.coalesce(func.avg(dur_col),  0.0).label("avg_dur"),
             func.coalesce(func.sum(dur_col),  0.0).label("total_dur"),
             func.count(func.distinct(func.date_trunc("day", Trip.created_at))).label("work_days"),
@@ -193,7 +194,8 @@ async def stats_by_driver(
             "total_trips":        int(r.total),
             "completed_trips":    int(r.completed or 0),
             "total_distance_km":  round(float(r.total_dist or 0), 1),
-            "avg_duration_min":   round(float(r.avg_dur  or 0), 1),
+            "avg_distance_km":    round(float(r.avg_dist  or 0), 1),
+            "avg_duration_min":   round(float(r.avg_dur   or 0), 1),
             "total_duration_min": round(float(r.total_dur or 0), 0),
             "work_days":          int(r.work_days or 0),
         }

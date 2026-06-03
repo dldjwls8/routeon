@@ -6,6 +6,30 @@
 
 ---
 
+## v1.0.63 (2026-06-03)
+### 배차 불가 버그 수정
+- **접수창 좌표 미수집 수정**: `collectIntakeRow()`에서 `input.dataset.lat/lon`을 읽지 않아 모든 접수 건의 좌표가 null로 저장되던 문제 수정 — 카카오 Places 자동완성 선택 시 `pickup_lat/lon`, `lat/lon` 정상 수집
+- **`commitPendingRowsToOrders` null 하드코딩 제거**: `lat/lon/pickup_lat/pickup_lon`을 null로 고정하던 코드 → `r.lat ?? null` 패턴으로 실값 전달
+- **`DeliveryUpdate` 좌표 필드 추가**: `PATCH /deliveries/{id}`에 `lat/lon/pickup_lat/pickup_lon` 필드 없어서 좌표 업데이트 불가하던 문제 수정
+- **`/location-logs` 500 오류 수정**: 기사 앱이 null 좌표 전송 시 Pydantic `float` 타입 validation 실패 → `lat/lon` Optional 처리, null이면 저장 스킵
+- **기존 pending 배송 좌표 복구**: 좌표 없던 6건을 카카오 geocoding API로 일괄 복구
+
+---
+
+## v1.0.62 (2026-06-03)
+### 프론트엔드 미완성·개선 항목 전체 구현
+- **WebSocket URL 하드코딩 제거**: `connectLocationWebSocket`/`connectChatWebSocket` 내 `ws://168.138.45.63:8000` 하드코딩 → `API.replace(/^http/, 'ws')` 패턴으로 통일
+- **차량 상태·연결기사 DB 저장**: `vehicles.status` 컬럼 추가 (DEFAULT '가용'), `VehicleUpdate` 모델에 `status`/`driver_id` 필드 추가, PATCH 저장 시 `User.vehicle_id` 동기화
+- **기사 상태·배정차량 DB 저장**: `users.vehicle_id`(FK→vehicles), `users.driver_status` 컬럼 추가, `PATCH /users/{id}` 엔드포인트 신설, 프론트 `bindDriverDetail` async PATCH 호출
+- **기사/차량 데이터 로딩 개선**: `loadRealData`에서 `u.vehicle_id`, `u.driver_status`, `v.status` 반영 (기존 하드코딩 제거)
+- **캘린더 이전/다음 달 이동**: `calendarYear`/`calendarMonth` 상태 변수 추가, `renderScheduleCalendar`에 `‹ ›` 버튼 + "오늘" 버튼 구현
+- **통계 기사별 거리 평균**: `GET /stats/by-driver` 응답에 `avg_distance_km` 추가 (`func.avg(dist_col)`) — 프론트 `distAvg` 바인딩
+- **통계 탭 자동 차트 로드**: 탭 진입 시 `setTimeout(() => statsApply.click(), 0)` 자동 호출
+- **접수창 카카오 Places 자동완성**: `bindPlaceSearch` 함수 추가 — `keywordSearch` 결과 드롭다운 (키보드 ↑↓ 네비게이션, Enter 선택, Esc 닫기), 선택 시 `dataset.lat/lon/address` 저장
+- **오더 목록 접수창 이동 버튼**: `renderOrderList` card-hd에 `+ 접수 창` 버튼 추가
+
+---
+
 ## v1.0.61 (2026-06-03)
 ### 미완성 기능 구현
 - **`bindRouteCalc` 경로 계산**: `DATA.routePreview` 빈 배열 표시 → 선택된 오더의 픽업지·하차지 + 차량 출발점을 실시간 경유지 목록으로 표시 (좌표 포함)

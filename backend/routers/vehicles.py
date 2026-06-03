@@ -61,6 +61,8 @@ class VehicleUpdate(BaseModel):
     vehicle_type: Optional[str] = None
     weight_kg:    Optional[float] = None
     height_m:     Optional[float] = None
+    status:       Optional[str] = None
+    driver_id:    Optional[str] = None
 
 @router.patch("/vehicles/{vehicle_id}")
 async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
@@ -76,6 +78,19 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
         v.weight_kg = req.weight_kg
     if req.height_m is not None:
         v.height_m = req.height_m
+    if req.status is not None:
+        v.status = req.status
+    if 'driver_id' in req.model_fields_set:
+        # 기존 연결 기사의 vehicle_id 해제
+        _old = await db.execute(select(User).where(User.vehicle_id == vehicle_id))
+        for old_d in _old.scalars().all():
+            old_d.vehicle_id = None
+        # 새 기사 연결
+        if req.driver_id:
+            _new = await db.execute(select(User).where(User.id == uuid_lib.UUID(req.driver_id)))
+            new_d = _new.scalar_one_or_none()
+            if new_d:
+                new_d.vehicle_id = vehicle_id
     await db.commit()
     await db.refresh(v)
     return v

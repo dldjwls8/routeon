@@ -91,6 +91,8 @@ class User(Base):
     phone           = Column(String(20))
     license_number  = Column(String(50))
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    vehicle_id      = Column(Integer, ForeignKey("vehicles.id"), nullable=True)
+    driver_status   = Column(String(20), nullable=True, default='운행가능')
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     organization = relationship("Organization", back_populates="users")
@@ -176,6 +178,7 @@ class Vehicle(Base):
     weight_kg    = Column(Float, nullable=False)
     length_cm    = Column(Float)
     width_cm     = Column(Float)
+    status       = Column(String(20), nullable=False, server_default='가용')
     is_active    = Column(Boolean, nullable=False, default=True)
     created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
 

@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-03 (v1.0.56 기준)
+> 최종 검토: 2026-06-03 (v1.0.63 기준)
 
 ---
 
@@ -53,6 +53,8 @@
 | `phone` | VARCHAR(20) | | 연락처 |
 | `license_number` | VARCHAR(50) | | 운전면허번호 |
 | `organization_id` | INTEGER | FK → organizations.id | 소속 기업 |
+| `vehicle_id` | INTEGER | FK → vehicles.id NULLABLE | 배정 차량 ID (기사 상세에서 수동 배정) |
+| `driver_status` | VARCHAR(20) | NULLABLE | 기사 운행 상태 — `운행가능` / `운행중` / `휴무` 등 |
 | `created_at` | DATETIME | NOT NULL | |
 
 ---
@@ -68,6 +70,7 @@
 | `weight_kg` | FLOAT | NOT NULL | 총중량 (kg) |
 | `length_cm` | FLOAT | | 차량 길이 (cm) |
 | `width_cm` | FLOAT | | 차량 폭 (cm) |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT '가용' | 차량 운행 상태 — `가용` / `운행중` / `정비` |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | |
 | `created_at` | DATETIME | NOT NULL | |
 

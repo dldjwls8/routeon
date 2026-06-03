@@ -257,16 +257,67 @@ async def get_users(
     users = _r.scalars().all()
     return [
         {
-            "id":         str(u.id),
-            "username":   u.username,
-            "name":       u.name,
-            "role":       u.role,
-            "phone":      u.phone,
-            "org_code":   None,
-            "created_at": u.created_at.isoformat(),
+            "id":            str(u.id),
+            "username":      u.username,
+            "name":          u.name,
+            "role":          u.role,
+            "phone":         u.phone,
+            "org_code":      None,
+            "vehicle_id":    u.vehicle_id,
+            "driver_status": u.driver_status,
+            "created_at":    u.created_at.isoformat(),
         }
         for u in users
     ]
+
+
+class UserUpdate(BaseModel):
+    name:          Optional[str] = None
+    phone:         Optional[str] = None
+    driver_status: Optional[str] = None
+    vehicle_id:    Optional[int] = None
+
+
+@router.patch("/users/{user_id}")
+async def update_user(
+    user_id: str,
+    req: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """관리자: 기사 정보 수정 (상태, 배정 차량 등)"""
+    import uuid as uuid_lib
+    _r = await db.execute(select(User).where(User.id == uuid_lib.UUID(user_id)))
+    user = _r.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "유저를 찾을 수 없습니다.")
+    if req.name is not None:
+        user.name = req.name
+    if req.phone is not None:
+        user.phone = req.phone
+    if req.driver_status is not None:
+        user.driver_status = req.driver_status
+    if 'vehicle_id' in req.model_fields_set:
+        if req.vehicle_id is not None:
+            _vc = await db.execute(select(Vehicle).where(Vehicle.id == req.vehicle_id))
+            if not _vc.scalar_one_or_none():
+                raise HTTPException(404, "차량을 찾을 수 없습니다.")
+        # 기존 동일 vehicle_id 보유 기사 해제
+        if req.vehicle_id is not None:
+            _dup = await db.execute(
+                select(User).where(User.vehicle_id == req.vehicle_id, User.id != user.id)
+            )
+            for dup in _dup.scalars().all():
+                dup.vehicle_id = None
+        user.vehicle_id = req.vehicle_id
+    await db.commit()
+    await db.refresh(user)
+    return {
+        "id":            str(user.id),
+        "name":          user.name,
+        "driver_status": user.driver_status,
+        "vehicle_id":    user.vehicle_id,
+    }
 
 
 @router.delete("/users/{user_id}", status_code=204)

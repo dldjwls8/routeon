@@ -284,8 +284,8 @@
         DATA.drivers = users.map(u => ({
           id: u.id,
           name: u.name || u.username,
-          vehicleId: null,
-          status: '운행가능',
+          vehicleId: u.vehicle_id || null,
+          status: u.driver_status || '운행가능',
           phone: u.phone || '',
           history: [],
         }));
@@ -306,7 +306,7 @@
           start_lon: 126.7052,
           last_gps_label: '',
           last_gps_at: '',
-          status: '가용',
+          status: v.status || '가용',
         }));
       }
 
@@ -424,7 +424,7 @@
           hoursSum: r.total_duration_min != null ? `${Math.floor(r.total_duration_min/60)}h ${Math.round(r.total_duration_min%60)}m` : '—',
           hoursAvg: r.avg_duration_min != null ? `${Math.floor(r.avg_duration_min/60)}h ${Math.round(r.avg_duration_min%60)}m` : '—',
           distSum: r.total_distance_km != null ? `${Math.round(r.total_distance_km)} km` : '—',
-          distAvg: '—',
+          distAvg: r.avg_distance_km != null ? `${Math.round(r.avg_distance_km)} km` : '—',
           days: r.work_days || 0,
         }));
       }
@@ -625,6 +625,8 @@
   let customerPage = 1;
   let driverPage = 1;
   let statsPeriod = '주';
+  let calendarYear  = new Date().getFullYear();
+  let calendarMonth = new Date().getMonth() + 1;
   let dispatchPreviewTab = 0;
   let dispatchRan = false;
   let bulkDispatchRan = false;
@@ -824,15 +826,15 @@
     const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
     const batch = rows.map(r => ({
       address: r.delivery || '주소 미입력',
-      lat: null,
-      lon: null,
+      lat: r.lat ?? null,
+      lon: r.lon ?? null,
       deadline: r.latestAt ? r.latestAt.replace('T', ' ').slice(0, 16) : null,
       recipient_name: r.recipient || null,
       cargo_type: r.cargo || null,
       cargo_weight_ton: r.tons ? parseFloat(r.tons) || null : null,
       pickup_address: r.pickup || null,
-      pickup_lat: null,
-      pickup_lon: null,
+      pickup_lat: r.pickup_lat ?? null,
+      pickup_lon: r.pickup_lon ?? null,
       shipper_name: r.customer || null,
       contact_name: r.contact || null,
       mixed_load: !!r.mixed_load,
@@ -1364,12 +1366,23 @@
   function bindDriverDetail(root, d) {
     const card = $('#inlineDetail', root);
     $('#inlineDetailBack', root).onclick = () => { selectedDriverId = null; renderPage(); };
-    $('#inlineDetailSave', root).onclick = () => {
-      d.status = $('#driverStatus', root).value;
+    $('#inlineDetailSave', root).onclick = async () => {
+      const newStatus = $('#driverStatus', root).value;
       const vid = $('#driverVehicleAssign', root).value;
-      d.vehicleId = vid ? Number(vid) : null;
+      const newVehicleId = vid ? Number(vid) : null;
+
+      const res = await fetch(`${API}/users/${d.id}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driver_status: newStatus, vehicle_id: newVehicleId }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '기사 정보 저장 실패', 'error'); return; }
+
+      d.status = newStatus;
+      DATA.drivers.forEach(x => { if (x.vehicleId === d.vehicleId && x.id !== d.id) x.vehicleId = null; });
+      d.vehicleId = newVehicleId;
       d.history.push({ at: new Date().toISOString().slice(0, 10), note: `배정 차량 → ${vid ? driverVehicleLabel(d) : '미배정'}` });
-      toast('저장되었습니다 · Trip 생성 시 배정 차량이 반영됩니다');
+      toast('기사 정보가 저장되었습니다');
       renderPage();
     };
     bindDetailTabs(card);
@@ -1430,7 +1443,7 @@
       const res = await fetch(`${API}/vehicles/${v.id}`, {
         method: 'PATCH',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vehicle_type: type, weight_kg }),
+        body: JSON.stringify({ vehicle_type: type, weight_kg, status, driver_id: driverId || null }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 정보 저장 실패', 'error'); return; }
 
@@ -1663,22 +1676,26 @@
   }
 
   function renderScheduleCalendar(root) {
-    const now = new Date();
-    const year = now.getFullYear(), month = now.getMonth() + 1;
+    const year = calendarYear, month = calendarMonth;
     const monthLabel = `${year}년 ${month}월`;
     const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
     const monthEvents = DATA.scheduleEvents
       .filter(e => e.date.startsWith(monthPrefix))
       .sort((a, b) => a.date.localeCompare(b.date));
+    const todayY = new Date().getFullYear(), todayM = new Date().getMonth() + 1;
+    const isCurrentMonth = year === todayY && month === todayM;
     root.innerHTML = `
       <div class="page-sticky-top">
       ${pageChromeHtml('schedule-calendar', { title: '일정 캘린더', desc: `${monthLabel} · 오더·운행 일정` })}
       </div>
       <div class="page-scroll-main">
       <div class="cal-wrap">
-        <div class="cal-hd">
-          <h3>${monthLabel}</h3>
-          <span class="badge badge-info">${monthEvents.length}건</span>
+        <div class="cal-hd" style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn btn-sm" id="calPrev">&#8249;</button>
+          <h3 style="margin:0">${monthLabel}</h3>
+          <button type="button" class="btn btn-sm" id="calNext">&#8250;</button>
+          ${isCurrentMonth ? '' : `<button type="button" class="btn btn-sm" id="calToday" style="margin-left:4px">오늘</button>`}
+          <span class="badge badge-info" style="margin-left:4px">${monthEvents.length}건</span>
         </div>
         <div class="cal-legend">
           <span><i class="dot-order"></i>오더·배차</span>
@@ -1687,7 +1704,7 @@
         <div class="cal-grid">${renderCalendarGridHtml(year, month)}</div>
       </div>
       <div class="card" style="margin-top:10px">
-        <div class="card-hd"><h2>이번 달 일정</h2></div>
+        <div class="card-hd"><h2>${monthLabel} 일정</h2></div>
         <div class="card-bd" style="padding:0">
           ${monthEvents.length === 0
             ? '<p style="padding:20px;color:var(--text-muted);text-align:center">이번 달 일정이 없습니다</p>'
@@ -1705,6 +1722,23 @@
         </div>
       </div>
       </div>`;
+
+    $('#calPrev', root).onclick = () => {
+      if (calendarMonth === 1) { calendarYear--; calendarMonth = 12; }
+      else { calendarMonth--; }
+      renderScheduleCalendar(root);
+    };
+    $('#calNext', root).onclick = () => {
+      if (calendarMonth === 12) { calendarYear++; calendarMonth = 1; }
+      else { calendarMonth++; }
+      renderScheduleCalendar(root);
+    };
+    const todayBtn = $('#calToday', root);
+    if (todayBtn) todayBtn.onclick = () => {
+      calendarYear = new Date().getFullYear();
+      calendarMonth = new Date().getMonth() + 1;
+      renderScheduleCalendar(root);
+    };
   }
 
   function renderScheduleGantt(root) {
@@ -3945,6 +3979,9 @@
       const tripMapEl = root.querySelector('#tripRouteMapCanvas');
       if (tripMapEl) showTripRoutePolyline(tripMapEl, tripSelected.id);
     }
+
+    // 탭 진입 시 기본 기간(주)으로 차트 자동 로드
+    setTimeout(() => $('#statsApply', root)?.click(), 0);
   }
 
   function renderByDayChart(el, rows, title) {
@@ -4056,6 +4093,78 @@
         <input type="text" class="place-search intake-field" name="${name}" ${required ? 'required' : ''} placeholder="장소 검색…" value="${value}" tabindex="${tabindex}" data-intake-field="${name}">
         <button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button>
       </div>`;
+  }
+
+  function bindPlaceSearch(root) {
+    if (!window.kakao?.maps?.services) return;
+    const ps = new kakao.maps.services.Places();
+    root.querySelectorAll('input.place-search').forEach(inp => {
+      let dropdown = null;
+      let debounce = null;
+
+      inp.addEventListener('input', () => {
+        clearTimeout(debounce);
+        const q = inp.value.trim();
+        if (!q || q.length < 2) { removeDrop(); return; }
+        debounce = setTimeout(() => {
+          ps.keywordSearch(q, (data, status) => {
+            removeDrop();
+            if (status !== kakao.maps.services.Status.OK || !data.length) return;
+            showDrop(data.slice(0, 6));
+          });
+        }, 300);
+      });
+
+      inp.addEventListener('blur', () => setTimeout(removeDrop, 200));
+      inp.addEventListener('keydown', (e) => {
+        if (!dropdown) return;
+        const items = dropdown.querySelectorAll('.place-suggestion');
+        const current = dropdown.querySelector('.place-suggestion.active');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const next = current ? current.nextElementSibling : items[0];
+          if (next) { current?.classList.remove('active'); next.classList.add('active'); next.scrollIntoView({ block: 'nearest' }); }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prev = current ? current.previousElementSibling : items[items.length - 1];
+          if (prev) { current?.classList.remove('active'); prev.classList.add('active'); prev.scrollIntoView({ block: 'nearest' }); }
+        } else if (e.key === 'Enter') {
+          const active = dropdown.querySelector('.place-suggestion.active');
+          if (active) { e.preventDefault(); active.click(); }
+        } else if (e.key === 'Escape') {
+          removeDrop();
+        }
+      });
+
+      function showDrop(places) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'place-autocomplete-drop';
+        dropdown.style.cssText = 'position:absolute;left:0;right:0;top:100%;z-index:9999;background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto';
+        places.forEach(p => {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'place-suggestion';
+          item.style.cssText = 'display:block;width:100%;text-align:left;padding:7px 12px;font-size:13px;border:none;border-bottom:1px solid var(--border,#f3f4f6);background:none;cursor:pointer;line-height:1.4';
+          item.innerHTML = `<strong style="font-size:13px">${escapeHtml(p.place_name)}</strong><br><span style="font-size:11px;color:var(--text-muted,#9ca3af)">${escapeHtml(p.road_address_name || p.address_name || '')}</span>`;
+          item.onmouseover = () => { dropdown.querySelectorAll('.place-suggestion').forEach(x => x.classList.remove('active')); item.classList.add('active'); item.style.background = 'var(--bg-hover,#f9fafb)'; };
+          item.onmouseout  = () => { item.classList.remove('active'); item.style.background = 'none'; };
+          item.onclick = () => {
+            inp.value = p.place_name;
+            inp.dataset.lat = p.y;
+            inp.dataset.lon = p.x;
+            inp.dataset.address = p.road_address_name || p.address_name || '';
+            removeDrop();
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          dropdown.appendChild(item);
+        });
+        const wrap = inp.closest('.place-search-wrap') || inp.parentElement;
+        wrap.style.position = 'relative';
+        wrap.appendChild(dropdown);
+      }
+
+      function removeDrop() { dropdown?.remove(); dropdown = null; }
+    });
   }
 
   function pendingIntakeCustomerCell(name) {
@@ -4315,16 +4424,22 @@
 
   function collectIntakeRow(form, taskNum) {
     const custVal = taskNum === 1 ? readIntakeField(form, 'customer') : '';
+    const puEl  = form.querySelector(`[name="pickup_${taskNum}"]`);
+    const delEl = form.querySelector(`[name="delivery_${taskNum}"]`);
     return {
-      pickup: readIntakeField(form, `pickup_${taskNum}`),
-      delivery: readIntakeField(form, `delivery_${taskNum}`),
-      recipient: readIntakeField(form, `recipient_${taskNum}`),
-      cargo: readIntakeField(form, `cargo_${taskNum}`),
-      tons: readIntakeField(form, `tons_${taskNum}`),
-      customer: taskNum === 1 ? customerNameFromIntakeValue(custVal) : '',
-      latestAt: taskNum === 1 ? readDesiredArrival(form) : '',
-      contact: taskNum === 1 ? readIntakeField(form, 'contact') : '',
-      mixed_load: readIntakeMixedLoad(form, taskNum),
+      pickup:      puEl  ? puEl.value.trim()  : '',
+      pickup_lat:  puEl?.dataset.lat  ? parseFloat(puEl.dataset.lat)  : null,
+      pickup_lon:  puEl?.dataset.lon  ? parseFloat(puEl.dataset.lon)  : null,
+      delivery:    delEl ? delEl.value.trim() : '',
+      lat:         delEl?.dataset.lat ? parseFloat(delEl.dataset.lat) : null,
+      lon:         delEl?.dataset.lon ? parseFloat(delEl.dataset.lon) : null,
+      recipient:   readIntakeField(form, `recipient_${taskNum}`),
+      cargo:       readIntakeField(form, `cargo_${taskNum}`),
+      tons:        readIntakeField(form, `tons_${taskNum}`),
+      customer:    taskNum === 1 ? customerNameFromIntakeValue(custVal) : '',
+      latestAt:    taskNum === 1 ? readDesiredArrival(form) : '',
+      contact:     taskNum === 1 ? readIntakeField(form, 'contact') : '',
+      mixed_load:  readIntakeMixedLoad(form, taskNum),
     };
   }
 
@@ -4714,6 +4829,7 @@
     });
 
     bindIntakeKeyboard(root);
+    bindPlaceSearch(root);
     root.querySelectorAll('[data-intake-field^="recipient_"]').forEach(inp => {
       inp.addEventListener('blur', () => suggestIntakeMixedLoadFromRecipients(root));
     });
@@ -4770,6 +4886,7 @@
           <div class="chips" id="orderChips">
             ${statuses.map(s => `<button type="button" class="chip ${orderFilter === s ? 'active' : ''}" data-f="${s}">${s}</button>`).join('')}
           </div>
+          <button type="button" class="btn btn-sm btn-primary" id="goOrderIntake" style="margin-left:auto">+ 접수 창</button>
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>
@@ -4803,6 +4920,11 @@
       listCard,
       selected ? inlineDetailCardHtml(`${selected.id} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), { saveLabel: '수정' }) : ''
     );
+    const goIntakeBtn = $('#goOrderIntake', root);
+    if (goIntakeBtn) goIntakeBtn.onclick = () => {
+      currentPage = 'order-intake';
+      renderPage();
+    };
     root.querySelectorAll('#orderChips .chip').forEach(chip => {
       chip.onclick = () => { orderPage = 1; orderFilter = chip.dataset.f; selectedOrderId = null; renderOrderList(root); };
     });
@@ -4869,7 +4991,7 @@
   function connectLocationWebSocket() {
     const token = getToken();
     if (!token || _locationWS) return;
-    const ws = new WebSocket(`ws://168.138.45.63:8000/ws/location?token=${token}`);
+    const ws = new WebSocket(`${API.replace(/^http/, 'ws')}/ws/location?token=${token}`);
     _locationWS = ws;
     ws.onmessage = (e) => {
       try {
@@ -4933,7 +5055,7 @@
   function connectChatWebSocket() {
     const token = getToken();
     if (!token || _chatWS) return;
-    const ws = new WebSocket(`ws://168.138.45.63:8000/ws/chat?token=${token}`);
+    const ws = new WebSocket(`${API.replace(/^http/, 'ws')}/ws/chat?token=${token}`);
     _chatWS = ws;
     ws.onmessage = (e) => {
       try {

@@ -96,3 +96,16 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE trips ALTER COLUMN dest_lon DROP NOT NULL;"
         ))
+
+        # vehicles.status 컬럼 추가
+        await conn.execute(text(
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT '가용';"
+        ))
+
+        # users.vehicle_id / users.driver_status 컬럼 추가
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS driver_status VARCHAR(20);"
+        ))

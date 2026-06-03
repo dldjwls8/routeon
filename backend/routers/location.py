@@ -43,8 +43,8 @@ class LatLng(BaseModel):
 
 class LocationUpdate(BaseModel):
     user_id: str
-    lat: float
-    lon: float
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     speed: Optional[float] = None
 
 @router.post("/location-logs", status_code=201)
@@ -61,6 +61,10 @@ async def create_location_log(
     """
     import uuid as uuid_lib
     from datetime import datetime
+
+    if req.lat is None or req.lon is None:
+        await db.commit()
+        return {"ok": True}
 
     # 1. Redis — 현재 위치 갱신 (TTL 5분)
     redis.setex(
