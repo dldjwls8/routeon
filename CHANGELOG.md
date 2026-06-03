@@ -6,6 +6,48 @@
 
 ---
 
+## v1.0.52 (2026-06-03)
+### 내 정보 저장 실 API 연동 + admin 비밀번호 복구
+
+#### `renderProfile` 재작성 (`frontend/dashboard.js`)
+- **탭 구조 변경**: 기존 "화주 기본정보(목업)" → "내 정보" / "비밀번호 변경" 탭으로 분리
+- **탭 1 "내 정보"**: `DATA.me`(`GET /auth/me`)로 아이디·이름·역할 읽기전용 표시, 전화번호 수정 → `PATCH /auth/me { phone }` 저장
+- **탭 2 "비밀번호 변경"**: 현재·새·확인 비밀번호 입력 → 불일치·4자 미만 클라이언트 검증 후 `PATCH /auth/me { current_password, new_password }` 저장
+- `DATA.me` 전역 저장: `loadRealData`에서 `GET /auth/me` 결과를 `DATA.me`에 보관 (탭 초기값·저장 후 즉시 반영)
+- `DATA.shipper` 제거 (미사용 목업 필드)
+
+#### 기타
+- admin 계정 비밀번호 `admin123` 으로 재설정 (기존 해시 불일치 → `401` 로그인 실패 수정)
+
+---
+
+## v1.0.51 (2026-06-02)
+### 배차 화면 실 API 연동
+
+#### 일괄 자동 배차 (`renderBulkDispatch`)
+- 목업 배너(`mockNoticeHtml`) 제거
+- `stops` — `DATA.bulkDispatch.stops`를 `unassignedForDispatch()` 실 데이터로 갱신 (렌더링마다 동적 초기화)
+- `vehicles` — `DATA.dispatchFleet` 기반으로 차량·기사 정보 매핑
+- `#runBulkDispatch` 버튼: 체크된 기사의 `driver_ids` 수집 → `stops`를 `AutoDispatchTask[]`로 변환 (좌표 없는 건 자동 제외) → `POST /trips/auto-dispatch` 호출 → 결과 Trip을 `plans` 형태로 변환·표시
+- `#bulkDepotMap` 버튼: 센터 이름/주소 입력 → `GET /address/coord` 좌표 변환 → depot 좌표 갱신
+- `bulk-vehicle-select`·`bulk-driver-select` 변경 시 `DATA.dispatchFleet`도 동기화
+- 배차 완료 후 카카오맵 렌더링: 센터 위치(`bulkDepotMapPreview`) 및 결과 경로(`bulkRouteMap`)
+- `혼적 허용` 체크박스 목업 toast 제거
+- 미배정 건 수동 재배정 버튼: 목업 toast → 단건·수동 배차 탭으로 이동
+
+#### 단건·수동 배차 (`renderDispatchAssign`)
+- 목업 배너(`mockNoticeHtml`) 제거
+- `DATA.dispatchOrders` — 렌더링마다 `unassignedForDispatch()`로 동적 초기화
+- `#runDispatch` 버튼: 체크된 `#fleetChecklist` 기사 + `.dispatch-chk:checked` 오더 수집 → `POST /trips/auto-dispatch` → `DATA.dispatchPlans`·`DATA.dispatchAssigned`·`DATA.dispatchUnassigned` 갱신
+- `#addDispatchOrder` 버튼: 상차지·하차지 주소 입력 → `GET /address/coord` 좌표 변환 → `POST /deliveries` 단건 등록
+- `#singleDispatch` 버튼: 배송 건 드롭다운 선택 + 기사 지정 → `PATCH /deliveries/{id}/assign`
+- `#manualReassign`: 미배정 건 수 안내 toast
+- `#btnTripCreate`: "배차 실행 시 Trip 자동 생성" 안내
+- `#btnAppHandoff`: "기사 앱에서 /optimize 실행 시 운행 시작" 안내
+- 배차 완료 후 카카오맵: 선택 건 출발-도착 마커(`dispatchRouteMap`), 배차 결과 경유지 마커
+
+---
+
 ## v1.0.50 (2026-06-02)
 ### UI 레이아웃 버그 4건 수정
 - **접수 버튼 벗어남**: `.intake-actions`에 `position:sticky;bottom:0` 적용, `.intake-viewport` 레이아웃을 `height:100%` 기반 → flex 기반으로 교체

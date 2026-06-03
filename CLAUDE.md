@@ -574,6 +574,13 @@ Android 앱 채팅 구현 필수 사항:
 - [x] 대시보드 필터 클릭 시 지도 사라짐 버그 수정 — `renderDashboard()` 내 `root.innerHTML` 실행 전에 `hideDashboardMap()` 호출 추가, `#map-container` 파괴 방지
 - [x] 다크모드 모달 흰 배경 버그 수정 — `.modal { background: #fff }` 하드코딩 → `var(--dark-card)`, `.modal-hd/.modal-ft` 보더 `var(--dark-border)`, 모달 내 input/select/textarea 다크 스타일, 라이트모드 오버라이드
 - [x] UI 레이아웃 버그 4건 수정 — 접수 버튼 sticky 고정, 좌우 패널 `grid-template-rows:1fr`로 높이 일치, 고객위치 맵 재로드 시 `_miniMapInstance` 초기화, 자기사·차량 좌측 패널 높이 채움
+- [x] **[배차] 일괄 자동 배차 실 API 연동** — `renderBulkDispatch` 목업 배너 제거, 실 데이터 초기화(`stops`·`vehicles`), `POST /trips/auto-dispatch` 연동, 결과 Trip→plans 변환
+- [x] **[배차] 단건·수동 배차 실 API 연동** — `renderDispatchAssign` 목업 배너 제거, `#runDispatch` → `POST /trips/auto-dispatch`, `#addDispatchOrder` → `POST /deliveries`, `#singleDispatch` → `PATCH /deliveries/{id}/assign`, `#btnTripCreate`·`#btnAppHandoff`·`#manualReassign` 목업 toast 정리
+- [x] **[배차] 배차 화면 지도 4곳 렌더링** — `map-placeholder` → 카카오맵 실 렌더링 (일괄 배차 센터 지도·경로 지도, 단건 배차 선택건 경로·배차 결과 경로) — `setTimeout(() => kakao.maps.Map(...), 0)` 패턴
+- [x] **[기본정보] 내 정보 저장** — `renderProfile` 저장 버튼 `PATCH /auth/me` 연동 (v1.0.52)
+- [ ] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (접수창 전용, 운행 생성 패널 엑셀과 별개)
+- [ ] **[대시보드] 홈 화물 집계 실 데이터화** — `cargoChips` 하드코딩(`일반화물 12.4t` 등) → `DATA.orders` 화물 종류별 실 집계로 교체
+- [ ] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
 - [ ] UI/UX 리팩토링
 - [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
@@ -599,8 +606,17 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **고객(거래처) 저장** — `GET/POST/PATCH/DELETE /customers` 신규 구현, `customerModal` · `bindCustomerDetail` · `openTempCustomerModal` 연동
 
 #### 낮은 우선순위 (Phase 2)
-- [x] **엑셀 임포트 (오더 접수)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39)
+- [x] **엑셀 임포트 (운행 생성 패널)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39) ※ 오더 접수창(`#excelImport`) 별도 미구현
 - [x] **채팅 알림 (dashboard)** — `connectChatWebSocket()` WS `/ws/chat` 수신 전용 연결, `loadChatConversations()` 초기 unread 반영, `updateChatNotifUI()` 🔔 배지 + 드롭다운 + 기사 테이블 배지 갱신
 - [x] **페이지네이션** — `PAGE_SIZE=20`, 리스트별 독립 페이지 상태(`orderPage`/`vehiclePage`/`customerPage`/`driverPage`), 필터·검색 변경 시 1페이지 리셋
 - [x] **담당자(staff) 관리** — `GET /users?role=admin` 실 연동, `POST /auth/register(role=admin)` 추가, `DELETE /users/{id}` 삭제, 본인 행 "나" 배지·삭제 불가 처리
 - [x] **일정 캘린더/간트/마일스톤** — `GET /trips` + `GET /deliveries` 실 연동: 캘린더는 현재 월 동적 표시·이달 이벤트 필터, 간트는 오늘 운행 06–21시 타임라인, 마일스톤은 취소 제외 최근 30건 운행 이력
+
+#### 미완성·목업 잔존 항목 (2026-06-02 파악)
+- [x] **일괄 자동 배차 저장** — `renderBulkDispatch` 목업 제거, `POST /trips/auto-dispatch` 실 연결, 결과 Trip→plans 변환, 지도 렌더링 (v1.0.51)
+- [x] **단건·수동 배차 저장** — `renderDispatchAssign` 목업 제거, `#runDispatch` → `POST /trips/auto-dispatch`, `#singleDispatch` → `PATCH /deliveries/{id}/assign`, `#addDispatchOrder` → `POST /deliveries` (v1.0.51)
+- [x] **배차 화면 지도 4곳** — 카카오맵 `setTimeout` 패턴으로 렌더링: `bulkDepotMapPreview`(센터 위치), `bulkRouteMap`(배차 결과 경유지), `dispatchRouteMap`(선택 건 출발·도착), 배차 결과 지도 (v1.0.51)
+- [x] **내 정보 저장** — `renderProfile` 탭 분리(내 정보/비밀번호 변경), `PATCH /auth/me` 실 연동, `DATA.me` 전역 저장 (v1.0.52)
+- [ ] **접수창 엑셀 임포트** — `renderOrderIntake` `#excelImport` onclick `toast(목업)`, SheetJS + `POST /deliveries/batch` 연동 필요 (운행 생성 패널 엑셀과 별도 구현 필요)
+- [ ] **대시보드 홈 화물 집계** — `cargoChips` 배열 하드코딩(`일반화물 12.4t` 등), `DATA.orders` 실 집계로 교체 필요
+- [ ] **운행 중 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 배너, 핸드오버 폼 저장·사고신고·대차 요청 모두 `toast(목업)`

@@ -311,7 +311,7 @@
       results: { summary: { vehicles: 0, stops: 0, unassigned: 0 }, plans: [], unassigned: [] },
     },
     statsTrips: [],
-    shipper: { email: '', company: '' },
+    me: null,
   };
 
   async function loadRealData() {
@@ -491,6 +491,7 @@
       const meRes = await fetch(`${API}/auth/me`, { headers: hdrs });
       if (meRes.ok) {
         const me = await meRes.json();
+        DATA.me = me;
         _currentUserId = me.id;
         const userEl = document.getElementById('topbarUserName');
         if (userEl) userEl.textContent = me.name || me.username || '관리자';
@@ -663,6 +664,8 @@
   let dispatchPendingSelectedId = null;
   let dispatchManualVehicleId = null;
   let dispatchManualDriverId = null;
+  let _bulkDispatchTrips = [];
+  let _dispatchRunTrips = [];
 
   function findNavPage(pageId) {
     for (const g of NAV) {
@@ -2440,30 +2443,31 @@
   }
 
   function renderProfile(root) {
-    const s = DATA.shipper;
+    const me = DATA.me || {};
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('profile', { desc: '화주 기본정보 (요금·출금 메뉴 없음)' })}
+      ${pageChromeHtml('profile', { desc: '계정 정보 및 비밀번호 변경' })}
       </div>
       <div class="page-scroll-main">
       <div class="card">
         <div class="card-bd">
           <div class="tabs" id="profileTabs">
-            <button type="button" class="tab active" data-tab="shipper">화주 기본정보</button>
+            <button type="button" class="tab active" data-tab="info">내 정보</button>
             <button type="button" class="tab" data-tab="pw">비밀번호 변경</button>
           </div>
-          <div class="tab-panel active" data-panel="shipper">
-            <form id="shipperForm" class="form-grid">
-              <label>이메일</label><input type="email" value="${s.email}" required>
-              <label>사업자명</label><input value="${s.company}" required>
+          <div class="tab-panel active" data-panel="info">
+            <form id="infoForm" class="form-grid">
+              <label>아이디</label><input value="${me.username || ''}" disabled style="opacity:.6">
+              <label>이름</label><input value="${me.name || ''}" disabled style="opacity:.6">
+              <label>역할</label><input value="${me.role === 'admin' ? '관리자' : me.role || ''}" disabled style="opacity:.6">
+              <label>전화번호</label><input type="tel" name="phone" value="${me.phone || ''}" placeholder="010-0000-0000">
             </form>
-            <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">예치금·가상계좌·요금 정책은 이 목업에 포함하지 않습니다.</p>
           </div>
           <div class="tab-panel" data-panel="pw">
             <form id="pwForm" class="form-grid">
-              <label>현재 비밀번호</label><input type="password" required>
-              <label>새 비밀번호</label><input type="password" required>
-              <label>확인</label><input type="password" required>
+              <label>현재 비밀번호 *</label><input type="password" name="current_password" required minlength="1">
+              <label>새 비밀번호 *</label><input type="password" name="new_password" required minlength="4" placeholder="4자 이상">
+              <label>새 비밀번호 확인 *</label><input type="password" name="new_password_confirm" required>
             </form>
           </div>
           <div style="margin-top:16px">
@@ -2480,10 +2484,40 @@
         root.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
       };
     });
-    $('#saveProfile', root).onclick = () => {
-      const active = root.querySelector('.tab-panel.active form');
-      if (active && !validateForm(active)) return;
-      toast();
+    $('#saveProfile', root).onclick = async () => {
+      const activePanel = root.querySelector('.tab-panel.active');
+      const tab = activePanel?.dataset.panel;
+
+      if (tab === 'info') {
+        const phone = activePanel.querySelector('[name="phone"]').value.trim();
+        if (!phone) { toast('전화번호를 입력하세요', 'error'); return; }
+        const res = await fetch(`${API}/auth/me`, {
+          method: 'PATCH',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone }),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
+        const updated = await res.json();
+        if (DATA.me) DATA.me.phone = updated.phone;
+        toast('전화번호가 저장됐습니다');
+
+      } else if (tab === 'pw') {
+        const form = activePanel.querySelector('#pwForm');
+        const current_password = form.querySelector('[name="current_password"]').value;
+        const new_password     = form.querySelector('[name="new_password"]').value;
+        const confirm          = form.querySelector('[name="new_password_confirm"]').value;
+        if (!current_password || !new_password) { toast('모든 항목을 입력하세요', 'error'); return; }
+        if (new_password.length < 4) { toast('새 비밀번호는 4자 이상이어야 합니다', 'error'); return; }
+        if (new_password !== confirm) { toast('새 비밀번호가 일치하지 않습니다', 'error'); return; }
+        const res = await fetch(`${API}/auth/me`, {
+          method: 'PATCH',
+          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password, new_password }),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '비밀번호 변경 실패', 'error'); return; }
+        toast('비밀번호가 변경됐습니다');
+        form.reset();
+      }
     };
   }
 
@@ -2706,6 +2740,20 @@
   }
 
   function renderBulkDispatch(root) {
+    DATA.bulkDispatch.stops = unassignedForDispatch();
+    DATA.bulkDispatch.vehicles = DATA.dispatchFleet.map(f => {
+      const v = vehicleById(f.vehicleId);
+      const d = driverById(f.driverId);
+      return {
+        id: f.id, vehicleId: f.vehicleId, driverId: f.driverId,
+        available: f.available !== false,
+        label: v?.plate || `차량${f.id}`,
+        plate: v?.plate || '—', tonnage: v?.tonnage || '—',
+        type: v?.type || '—', weight_kg: v?.weight_kg || 0,
+        start_lat: v?.start_lat || 37.4563, start_lon: v?.start_lon || 126.7052,
+        start_city: '', end_policy: 'open_end', driver: d?.name || '—',
+      };
+    });
     const bd = DATA.bulkDispatch;
     const res = bd.results;
     const plans = res.plans;
@@ -2720,7 +2768,6 @@
     root.innerHTML = `
       <div class="page-sticky-top">
       ${pageChromeHtml('bulk-dispatch', { desc: '다차량·다배송지 자동 배정 · 경로 미리보기' })}
-      ${mockNoticeHtml()}
       </div>
       <div class="page-scroll-main">
       <details class="dispatch-collapse" open>
@@ -2753,7 +2800,7 @@
 
           <p class="field-label" style="margin-top:16px">배송지 목록</p>
           ${bulkStopsTableHtml(bd.stops)}
-          <p class="empty-hint" style="margin-top:8px;font-size:12px">${bd.stops.length}건 · 일괄 배차 대상 (목업)</p>
+          <p class="empty-hint" style="margin-top:8px;font-size:12px">${bd.stops.length}건 · 일괄 배차 대상</p>
 
           <label class="toolbar" style="margin-top:12px;font-size:13px;cursor:pointer">
             <input type="checkbox" id="bulkAllowMixed" ${bulkAllowMixedLoad ? 'checked' : ''}>
@@ -2865,7 +2912,6 @@
 
     $('#bulkAllowMixed', root)?.addEventListener('change', (e) => {
       bulkAllowMixedLoad = e.target.checked;
-      toast(bulkAllowMixedLoad ? '혼적 허용 (목업)' : '단독배차만 허용 (목업)');
     });
     root.querySelectorAll('.departure-mode button[data-departure]').forEach(btn => {
       btn.onclick = () => {
@@ -2875,12 +2921,26 @@
         renderBulkDispatch(root);
       };
     });
-    $('#bulkDepotMap', root)?.addEventListener('click', () => toast('센터 위치 선택 (지도 목업)'));
+    $('#bulkDepotMap', root)?.addEventListener('click', () => {
+      const address = $('#bulkDepotName', root)?.value?.trim();
+      if (!address) { toast('센터 이름/주소를 입력하세요'); return; }
+      fetch(`${API}/address/coord?query=${encodeURIComponent(address)}`, { headers: getAuthHeaders() })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data?.lat) { toast('주소 좌표를 찾을 수 없습니다'); return; }
+          DATA.bulkDispatch.depot = { name: address, lat: data.lat, lon: data.lon, address };
+          toast(`센터 위치 설정: ${address}`);
+          renderBulkDispatch(root);
+        })
+        .catch(() => toast('주소 변환 실패'));
+    });
     root.querySelectorAll('.bulk-vehicle-select').forEach(sel => {
       sel.onchange = () => {
         const row = bd.vehicles.find(x => x.id === Number(sel.dataset.bulkRow));
         if (!row) return;
         applyVehicleToFleetRow(row, sel.value);
+        const fleetRow = DATA.dispatchFleet.find(f => f.id === row.id);
+        if (fleetRow) fleetRow.vehicleId = row.vehicleId;
         const plan = bd.results.plans.find((_, i) => bd.vehicles[i]?.id === row.id);
         if (plan) {
           plan.plate = row.plate;
@@ -2896,7 +2956,9 @@
       sel.onchange = () => {
         const row = bd.vehicles.find(x => x.id === Number(sel.dataset.bulkRow));
         if (!row) return;
-        row.driverId = Number(sel.value);
+        row.driverId = sel.value || null;
+        const fleetRow = DATA.dispatchFleet.find(f => f.id === row.id);
+        if (fleetRow) fleetRow.driverId = row.driverId;
         const d = driverById(row.driverId);
         if (d) row.driver = d.name;
         const plan = bd.results.plans.find((_, i) => bd.vehicles[i]?.id === row.id);
@@ -2905,18 +2967,80 @@
         if (bulkDispatchRan) renderBulkDispatch(root);
       };
     });
-    $('#runBulkDispatch', root).onclick = () => {
+    $('#runBulkDispatch', root).onclick = async () => {
       const checked = root.querySelectorAll('#bulkFleetList input:checked:not(:disabled)');
       if (!checked.length) { toast('가용 차량을 1대 이상 선택하세요'); return; }
+      if (!bd.stops.length) { toast('배차할 배송 건이 없습니다. 접수창에서 오더를 등록하세요.'); return; }
+
+      const tasks = [];
+      const skipped = [];
+      bd.stops.forEach(stop => {
+        const ord = DATA.orders.find(o => o.id === stop.id);
+        if (!ord?.pickup_lat || !ord?.lat) { skipped.push(stop.id); return; }
+        tasks.push({
+          loadings: [{ name: stop.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
+          unloadings: [{ name: stop.delivery || '하차지', lat: ord.lat, lon: ord.lon }],
+        });
+      });
+      if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
+
+      const driver_ids = [];
+      checked.forEach(chk => {
+        const rowId = Number(chk.closest('li')?.dataset.bulkRow);
+        const row = bd.vehicles.find(v => v.id === rowId);
+        if (row?.driverId) driver_ids.push(row.driverId);
+      });
+      if (!driver_ids.length) { toast('선택된 차량에 기사가 없습니다. 기사를 먼저 지정하세요.'); return; }
+
       const btn = $('#runBulkDispatch', root);
       btn.disabled = true;
-      btn.innerHTML = '<span class="loading"></span>일괄 배차 중…';
-      setTimeout(() => {
+      btn.innerHTML = '<span class="loading"></span>배차 중…';
+      try {
+        const body = { tasks, driver_ids, departure_time: new Date().toISOString() };
+        const res = await fetch(`${API}/trips/auto-dispatch`, {
+          method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(e.detail || '배차 실패');
+          btn.disabled = false; btn.textContent = '일괄 배차 실행';
+          return;
+        }
+        const result = await res.json();
+        const trips = result.trips || [];
+        _bulkDispatchTrips = trips;
+        DATA.bulkDispatch.results = {
+          summary: { vehicles: trips.length, stops: tasks.length, unassigned: skipped.length },
+          plans: trips.map(t => {
+            const dv = driverById(t.driver_id);
+            const vv = vehicleById(t.vehicle_id);
+            return {
+              plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
+              mixed_load: false,
+              visits: (t.waypoints || []).map(w => ({
+                kind: '', text: `${w.name} (${w.type === 'loading' ? '상차' : '하차'})`,
+              })),
+              duration: '—', distance: '—',
+            };
+          }),
+          unassigned: skipped.map(id => ({
+            id, reason: '좌표 정보 없음', orderId: id, shipper: '—',
+            mixed_load: false, tons: '—', window: '—', status: '접수',
+          })),
+        };
         bulkDispatchRan = true;
         bulkDispatchTab = 0;
-        toast('일괄 배차 계산이 완료되었습니다 (목업)');
+        toast(skipped.length
+          ? `배차 완료 · ${trips.length}대 · ${tasks.length}건 (${skipped.length}건 좌표 미확인 제외)`
+          : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
+        await loadRealData();
+      } catch (err) {
+        console.error(err);
+        toast('배차 중 오류가 발생했습니다');
+      } finally {
+        btn.disabled = false; btn.textContent = '일괄 배차 실행';
         renderBulkDispatch(root);
-      }, 2000);
+      }
     };
     root.querySelectorAll('#bulkVehicleTabs .tab').forEach(tab => {
       tab.onclick = () => {
@@ -2925,10 +3049,30 @@
       };
     });
     $('#bulkManualReassign', root)?.addEventListener('click', () => {
-      dispatchRan = false;
       gotoPage('dispatch', 'dispatch-assign');
-      toast('단건·수동 배차로 이동 — 미배정 건 재배정 (목업)');
     });
+
+    // 지도 초기화
+    setTimeout(() => {
+      if (typeof kakao === 'undefined' || !kakao.maps) return;
+      if (bulkDepartureMode === 'depot') {
+        const depotEl = document.getElementById('bulkDepotMapPreview');
+        if (depotEl) {
+          const center = new kakao.maps.LatLng(bd.depot.lat, bd.depot.lon);
+          const m = new kakao.maps.Map(depotEl, { center, level: 5 });
+          new kakao.maps.Marker({ map: m, position: center });
+        }
+      }
+      if (bulkDispatchRan && _bulkDispatchTrips[bulkDispatchTab]?.waypoints?.length) {
+        const routeEl = document.getElementById('bulkRouteMap');
+        if (routeEl) {
+          const wpts = _bulkDispatchTrips[bulkDispatchTab].waypoints;
+          const center = new kakao.maps.LatLng(wpts[0].lat, wpts[0].lon);
+          const m = new kakao.maps.Map(routeEl, { center, level: 10 });
+          wpts.forEach(w => new kakao.maps.Marker({ map: m, position: new kakao.maps.LatLng(w.lat, w.lon) }));
+        }
+      }
+    }, 0);
   }
 
   function unassignedForDispatch() {
@@ -3038,6 +3182,7 @@
   }
 
   function renderDispatchAssign(root) {
+    DATA.dispatchOrders = unassignedForDispatch();
     const plans = DATA.dispatchPlans;
     const tabIdx = Math.min(dispatchPreviewTab, plans.length - 1);
     const plan = plans[tabIdx] || plans[0];
@@ -3057,7 +3202,6 @@
     root.innerHTML = `
       <div class="page-sticky-top">
       ${pageChromeHtml('dispatch-assign', { desc: '미배차 건 선택 · 차량·기사 · 경로 계산 · 배차 결과' })}
-      ${mockNoticeHtml()}
       </div>
       <div class="page-scroll-main">
 
@@ -3324,22 +3468,119 @@
       openModal('배송 건 추가', `
         <form>
           <div class="form-grid" style="max-width:100%">
-            <label>상차 *</label><input required>
-            <label>하차 *</label><input required>
-            <label>화주</label><input>
-            <label>화물</label><input>
-            <label>연락처</label><input>
+            <label>상차지 주소 *</label><input id="addOrdPickup" required placeholder="상차지 주소">
+            <label>하차지 주소 *</label><input id="addOrdDelivery" required placeholder="하차지 주소">
+            <label>화주</label><input id="addOrdShipper" placeholder="화주명">
+            <label>화물 종류</label><input id="addOrdCargo" placeholder="일반화물">
+            <label>중량(톤)</label><input id="addOrdWeight" type="number" step="0.1" min="0" placeholder="0.0">
             <label>희망 도착</label>
             <div>${desiredArrivalFieldsHtml({ dateName: 'dispatch_latest_at_date', hourName: 'dispatch_latest_at_hour', hint: true })}</div>
           </div>
-        </form>`, () => toast('배송 건이 추가되었습니다 (목업)'));
+        </form>`, async () => {
+          const pickup = document.getElementById('addOrdPickup')?.value?.trim();
+          const delivery = document.getElementById('addOrdDelivery')?.value?.trim();
+          if (!pickup || !delivery) { toast('상차지·하차지 주소를 입력하세요'); return false; }
+          const dateEl = document.querySelector('[name="dispatch_latest_at_date"]');
+          const hourEl = document.querySelector('[name="dispatch_latest_at_hour"]');
+          const deadline = (dateEl?.value && hourEl?.value) ? `${dateEl.value} ${hourEl.value}:00` : null;
+          try {
+            const [coordPu, coordDl] = await Promise.all([
+              fetch(`${API}/address/coord?query=${encodeURIComponent(pickup)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null),
+              fetch(`${API}/address/coord?query=${encodeURIComponent(delivery)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null),
+            ]);
+            const body = {
+              address: delivery, lat: coordDl?.lat || null, lon: coordDl?.lon || null,
+              pickup_address: pickup, pickup_lat: coordPu?.lat || null, pickup_lon: coordPu?.lon || null,
+              shipper_name: document.getElementById('addOrdShipper')?.value?.trim() || null,
+              cargo_type: document.getElementById('addOrdCargo')?.value?.trim() || null,
+              cargo_weight_ton: parseFloat(document.getElementById('addOrdWeight')?.value) || null,
+              deadline,
+            };
+            const res = await fetch(`${API}/deliveries`, {
+              method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+            });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '등록 실패'); return false; }
+            toast('배송 건이 추가되었습니다');
+            await loadRealData();
+            renderDispatchAssign(root);
+          } catch (_e) { toast('오류가 발생했습니다'); return false; }
+        });
     };
-    $('#runDispatch', root).onclick = () => {
+    $('#runDispatch', root).onclick = async () => {
       const checked = root.querySelectorAll('#fleetChecklist input:checked:not(:disabled)');
       if (!checked.length) { toast('투입 차량을 1대 이상 선택하세요'); return; }
-      dispatchRan = true;
-      toast('배차가 실행되었습니다 — 차량·기사 조합 기준 미리보기 (목업)');
-      renderDispatchAssign(root);
+
+      const checkedOrderIds = Array.from(root.querySelectorAll('.dispatch-chk:checked'))
+        .map(chk => chk.dataset.id).filter(Boolean);
+      if (!checkedOrderIds.length) { toast('배차할 배송 건을 선택하세요'); return; }
+
+      const tasks = [];
+      const skipped = [];
+      checkedOrderIds.forEach(ordId => {
+        const ord = DATA.orders.find(o => o.id === ordId);
+        if (!ord?.pickup_lat || !ord?.lat) { skipped.push(ordId); return; }
+        tasks.push({
+          loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
+          unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon }],
+        });
+      });
+      if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
+
+      const driver_ids = [];
+      checked.forEach(chk => {
+        const li = chk.closest('li[data-fleet-id]');
+        const row = DATA.dispatchFleet.find(f => f.id === Number(li?.dataset.fleetId));
+        if (row?.driverId) driver_ids.push(row.driverId);
+      });
+      if (!driver_ids.length) { toast('선택된 차량에 기사가 없습니다.'); return; }
+
+      const btn = $('#runDispatch', root);
+      btn.disabled = true; btn.innerHTML = '<span class="loading"></span>배차 중…';
+      try {
+        const body = { tasks, driver_ids, departure_time: new Date().toISOString() };
+        const res = await fetch(`${API}/trips/auto-dispatch`, {
+          method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const e = await res.json().catch(() => ({}));
+          toast(e.detail || '배차 실패');
+          btn.disabled = false; btn.textContent = '배차 실행';
+          return;
+        }
+        const result = await res.json();
+        const trips = result.trips || [];
+        _dispatchRunTrips = trips;
+        DATA.dispatchPlans = trips.map(t => {
+          const dv = driverById(t.driver_id);
+          const vv = vehicleById(t.vehicle_id);
+          return {
+            plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
+            mixed_load: false,
+            visits: (t.waypoints || []).map(w => `${w.name} (${w.type === 'loading' ? '상차' : '하차'})`),
+            duration: '—', distance: '—',
+          };
+        });
+        DATA.dispatchAssigned = trips.map(t => {
+          const dv = driverById(t.driver_id);
+          const vv = vehicleById(t.vehicle_id);
+          return {
+            id: t.id.slice(0, 8), label: `${(t.waypoints || []).length}개 경유지`,
+            plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
+          };
+        });
+        DATA.dispatchUnassigned = skipped.map(id => ({ id, label: '좌표 미확인', reason: '좌표 정보 없음' }));
+        dispatchRan = true;
+        toast(skipped.length
+          ? `배차 완료 · ${trips.length}대 (${skipped.length}건 제외)`
+          : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
+        await loadRealData();
+      } catch (err) {
+        console.error(err);
+        toast('배차 중 오류가 발생했습니다');
+      } finally {
+        btn.disabled = false; btn.textContent = '배차 실행';
+        renderDispatchAssign(root);
+      }
     };
     root.querySelectorAll('.fleet-vehicle-select').forEach(sel => {
       sel.onchange = () => {
@@ -3370,30 +3611,79 @@
         renderDispatchAssign(root);
       };
     });
-    $('#manualReassign', root).onclick = () => toast('수동 재배정 화면 (목업)');
+    $('#manualReassign', root).onclick = () => {
+      const unassignedCount = DATA.dispatchUnassigned?.length || 0;
+      if (!unassignedCount) { toast('재배정할 미배정 건이 없습니다'); return; }
+      toast(`${unassignedCount}건 미배정 — 위 「미배차 건」에서 수동으로 배정하세요`);
+    };
     $('#singleDispatch', root).onclick = () => {
+      const unassigned = unassignedForDispatch();
       openModal('단건 배차 — 차량·기사', `
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">배송 건에 투입 <strong>차량</strong>과 <strong>기사</strong>를 각각 지정합니다. 기사 상태 변경은 자기사 관리에서 합니다.</p>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">배송 건에 투입 <strong>차량</strong>과 <strong>기사</strong>를 각각 지정합니다.</p>
         <div class="form-grid" style="max-width:100%">
+          <label>배송 건</label>
+          <select id="singleOrder"><option value="">— 선택 —</option>${unassigned.map(o => `<option value="${o.id}">${o.id.slice(0,8)} · ${placeShortLabel(o.pickup)} ▶ ${placeShortLabel(o.delivery)}</option>`).join('')}</select>
           <label>투입 차량 *</label>
           <select id="singleVehicle">${vehicleSelectOptions(DATA.dispatchFleet[0]?.vehicleId)}</select>
-          <label>연결 기사</label>
+          <label>연결 기사 *</label>
           <select id="singleDriver">${driverSelectOptions(DATA.dispatchFleet[0]?.driverId, { allowEmpty: true })}</select>
         </div>
         <div class="vehicle-preview" id="singleVehiclePreview" style="margin-top:12px"></div>
-      `, () => toast('단건 배차가 반영되었습니다 (목업)'));
-      const vSel = $('#singleVehicle', $('#modalBox'));
-      const prev = $('#singleVehiclePreview', $('#modalBox'));
-      const refresh = () => { if (prev) prev.innerHTML = vehiclePreviewHtml(vehicleById(vSel.value)); };
+      `, async () => {
+        const ordId = document.getElementById('singleOrder')?.value;
+        const driverId = document.getElementById('singleDriver')?.value;
+        if (!ordId) { toast('배송 건을 선택하세요'); return false; }
+        if (!driverId) { toast('기사를 선택하세요'); return false; }
+        const res = await fetch(`${API}/deliveries/${ordId}/assign`, {
+          method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({ driver_id: driverId }),
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '배정 실패'); return false; }
+        const dv = driverById(driverId);
+        toast(`단건 배차 완료 · ${dv?.name || ''}`);
+        await loadRealData();
+        renderDispatchAssign(root);
+      });
+      const vSel = document.getElementById('singleVehicle');
+      const prev = document.getElementById('singleVehiclePreview');
+      const refresh = () => { if (prev) prev.innerHTML = vehiclePreviewHtml(vehicleById(vSel?.value)); };
       if (vSel) { vSel.onchange = refresh; refresh(); }
     };
-    $('#btnTripCreate', root).onclick = () => toast('Trip이 생성되었습니다 (목업)');
+    $('#btnTripCreate', root).onclick = () => toast('배차 실행 시 Trip이 자동 생성됩니다. 운행 현황에서 확인하세요.');
     $('#btnFinalCheck', root).onclick = () => {
       openModalLarge('순서·노드 최종 확인', `
-        <p style="font-size:13px;margin-bottom:12px">차량별 방문 순서와 지도 노드를 확인합니다. (계획 vs 실제 비교 없음)</p>
-        <ol class="visit-ol">${plans[0].visits.map(v => `<li>${v}</li>`).join('')}</ol>`, () => toast('최종 확인 완료'));
+        <p style="font-size:13px;margin-bottom:12px">차량별 방문 순서와 지도 노드를 확인합니다.</p>
+        <ol class="visit-ol">${(plans[0]?.visits || []).map(v => `<li>${v}</li>`).join('')}</ol>`, () => toast('최종 확인 완료'));
     };
-    $('#btnAppHandoff', root).onclick = () => toast('기사 앱으로 전달되었습니다 (목업)');
+    $('#btnAppHandoff', root).onclick = () => toast('기사 앱에서 경로 최적화 실행 시 운행이 시작됩니다.');
+
+    // 지도 초기화
+    setTimeout(() => {
+      if (typeof kakao === 'undefined' || !kakao.maps) return;
+      if (selectedPending) {
+        const routeEl = document.getElementById('dispatchRouteMap');
+        if (routeEl) {
+          const ord = DATA.orders.find(o => o.id === selectedPending.id);
+          if (ord?.pickup_lat && ord?.lat) {
+            const center = new kakao.maps.LatLng(
+              (ord.pickup_lat + ord.lat) / 2,
+              (ord.pickup_lon + ord.lon) / 2,
+            );
+            const m = new kakao.maps.Map(routeEl, { center, level: 10 });
+            new kakao.maps.Marker({ map: m, position: new kakao.maps.LatLng(ord.pickup_lat, ord.pickup_lon) });
+            new kakao.maps.Marker({ map: m, position: new kakao.maps.LatLng(ord.lat, ord.lon) });
+          }
+        }
+      }
+      if (dispatchRan && _dispatchRunTrips[dispatchPreviewTab]?.waypoints?.length) {
+        const resultMapEl = root.querySelector('#sec-dispatch-preview .map-placeholder');
+        if (resultMapEl) {
+          const wpts = _dispatchRunTrips[dispatchPreviewTab].waypoints;
+          const center = new kakao.maps.LatLng(wpts[0].lat, wpts[0].lon);
+          const m = new kakao.maps.Map(resultMapEl, { center, level: 10 });
+          wpts.forEach(w => new kakao.maps.Marker({ map: m, position: new kakao.maps.LatLng(w.lat, w.lon) }));
+        }
+      }
+    }, 0);
   }
 
   function renderTripStats(root) {
