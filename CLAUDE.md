@@ -638,3 +638,13 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **목업 텍스트 잔존 제거** — 차량 패널 · 임시화주 필터 `(목업)` 문구 제거 (v1.0.59)
 - [x] **데드 코드 삭제** — `ROUTEON_GEN_TASKS` · `BULK_NODE_ROWS` 미사용 상수 삭제 (v1.0.59)
 - [x] **`mockNow` / `mockToday` 함수명 변경** → `nowStr` / `todayStr` 리네임 (v1.0.59)
+
+#### 버그 수정 (2026-06-03, v1.0.60)
+- [x] **`toast` 에러 타입 지원** — `toast(msg, 'error')` 시 `.toast-error` (빨간 배경) 적용
+- [x] **`dispatchFleet` 기사 매핑 오류** — 인덱스 기반 → `vehicleId` 기반 실 배정으로 수정
+- [x] **통계 차량 필터 미적용** — `GET /stats/by-day` 호출 시 `vehicle_id` 파라미터 전달
+- [x] **`fleet-driver-select` NaN 버그** — `Number(sel.value)` → `sel.value || null` (UUID 대응)
+- [x] **`(가짜 데이터)` 문구 잔존** — `renderTripStats` 페이지 설명에서 삭제
+- [x] **`normalizeDispatchListRow` 하드코딩 지역 매핑** — 가짜 데이터 잔재 `{ T5: '인천', ... }` 삭제
+- [x] **`runAutoDispatch` 데드 코드 삭제** — 미호출 + `vehicle_ids` 오파라미터 함수 제거
+- [x] **`pendingIntakes` 접수 후 중복 push** — 제거 후 `unassignedForDispatch`를 `DATA.orders`만 참조하도록 단순화

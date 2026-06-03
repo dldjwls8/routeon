@@ -183,11 +183,9 @@
   function normalizeDispatchListRow(item, idx = 0) {
     const pickupRaw = typeof item.pickup === 'object' ? item.pickup?.place : item.pickup;
     const deliveryRaw = typeof item.delivery === 'object' ? item.delivery?.place : item.delivery;
-    const tripPrefix = (item.cargo_id || '').split('-')[0];
-    const pickupByTrip = { T5: '인천', T6: '경남', T7: '경기' };
     const pickup = pickupRaw
       ? placeShortLabel(pickupRaw)
-      : (item.pickupShort || pickupByTrip[tripPrefix] || placeShortLabel(item.region) || '물류센터');
+      : (item.pickupShort || placeShortLabel(item.region) || '물류센터');
     const delivery = deliveryRaw
       ? placeShortLabel(deliveryRaw)
       : (item.deliveryShort || placeShortLabel(item.name) || placeShortLabel(item.address));
@@ -547,10 +545,10 @@
       }
 
       // dispatchFleet 생성 (차량 + 기사 매핑)
-      DATA.dispatchFleet = DATA.vehicles.map((v, i) => ({
+      DATA.dispatchFleet = DATA.vehicles.map((v) => ({
         id: v.id,
         vehicleId: v.id,
-        driverId: DATA.drivers[i]?.id || null,
+        driverId: DATA.drivers.find(d => d.vehicleId === v.id)?.id || null,
         available: v.status === '가용',
       }));
 
@@ -1813,10 +1811,10 @@
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function toast(msg) {
+  function toast(msg, type) {
     const t = $('#toast');
     t.textContent = msg || '저장되었습니다';
-    t.classList.add('show');
+    t.className = `toast show${type === 'error' ? ' toast-error' : ''}`;
     setTimeout(() => t.classList.remove('show'), 2200);
   }
 
@@ -3073,8 +3071,7 @@
         status: o.status,
         mixed_load: o.mixed_load,
       }));
-    const seen = new Set(pendingIntakes.map(p => p.id));
-    return [...pendingIntakes, ...fromOrders.filter(o => !seen.has(o.id))];
+    return fromOrders;
   }
 
   function bindRouteCalc(btn, box, list) {
@@ -3597,7 +3594,7 @@
       sel.onchange = () => {
         const row = DATA.dispatchFleet.find(x => x.id === Number(sel.dataset.fleetId));
         if (!row) return;
-        row.driverId = Number(sel.value);
+        row.driverId = sel.value || null;
         syncDispatchPlanFromFleet(row, DATA.dispatchPlans[DATA.dispatchFleet.findIndex(x => x.id === row.id)]);
         toast(`기사 연결 변경: ${driverById(row.driverId)?.name || ''} (차량 유지)`);
         if (dispatchRan) renderDispatchAssign(root);
@@ -3707,7 +3704,7 @@
       </div>`;
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('trip-stats', { desc: '운행 이후 — 완료 Trip 사후 통계·리포트 (가짜 데이터)' })}
+      ${pageChromeHtml('trip-stats', { desc: '운행 이후 — 완료 Trip 사후 통계·리포트' })}
       <div class="info-banner" style="margin-bottom:8px">관제 통계 — 계획 vs 실제 미노출 (팀 합의)</div>
 
       <div class="filter-bar card" style="padding:8px 12px;margin-bottom:0">
@@ -3807,13 +3804,18 @@
       const periodMap = { '일': 'today', '주': 'week', '월': 'month' };
       const period = periodMap[statsPeriod] || 'week';
       const driverName = $('#statsDriver', root)?.value || '';
+      const vehiclePlate = $('#statsVehicle', root)?.value || '';
+      const regionFilter = $('#statsRegionFilter', root)?.value || '전체';
       const driver = driverName ? DATA.drivers.find(d => d.name === driverName) : null;
+      const vehicle = vehiclePlate ? DATA.vehicles.find(v => v.plate === vehiclePlate) : null;
       const params = new URLSearchParams({ period });
-      if (driver) params.set('driver_id', driver.id);
+      if (driver) params.set('driver_id', driver.driverId || driver.id);
+      if (vehicle) params.set('vehicle_id', vehicle.id);
       const res = await fetch(`${API}/stats/by-day?${params}`, { headers: getAuthHeaders() });
       if (!res.ok) { toast('조회 실패'); return; }
       const rows = await res.json();
-      renderByDayChart($('#byDayChart', root), rows, `${statsPeriod}간 일별 운행 현황${driverName ? ` · ${driverName}` : ''}`);
+      const filterLabel = [driverName, vehiclePlate, regionFilter !== '전체' ? regionFilter : ''].filter(Boolean).join(' · ');
+      renderByDayChart($('#byDayChart', root), rows, `${statsPeriod}간 일별 운행 현황${filterLabel ? ` · ${filterLabel}` : ''}`);
     };
     root.querySelectorAll('tbody .trip-row[data-trip]').forEach(tr => {
       tr.onclick = () => selectTrip(tr.dataset.trip);
@@ -4644,21 +4646,6 @@
       const ok = await commitPendingRowsToOrders(queue);
       if (btn) { btn.disabled = false; btn.textContent = '접수 저장'; }
       if (!ok) return;
-      const day = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-      queue.forEach((row) => {
-        const n = pendingIntakes.length + 1;
-        pendingIntakes.push({
-          id: `P-${day}-${String(n).padStart(3, '0')}`,
-          pickup: row.pickup,
-          delivery: row.delivery,
-          shipper: row.customer || '—',
-          cargo: row.cargo || '—',
-          contact: row.contact || '—',
-          latestAt: row.latestAt || '—',
-          source: '접수',
-          mixed_load: !!row.mixed_load,
-        });
-      });
       const total = queue.length;
       root._pendingIntakes = [];
       renderPendingIntakePanel(root);
@@ -4874,20 +4861,6 @@
     if (departureName) body.origin_name = departureName;
     const res = await fetch(`${API}/trips`, { method: 'POST', headers: hdrs, body: JSON.stringify(body) });
     if (!res.ok) { const err = await res.json(); alert(err.detail || '운행 생성 실패'); return null; }
-    return await res.json();
-  }
-
-  async function runAutoDispatch(tasks, vehicleIds, departure) {
-    const hdrs = getAuthHeaders();
-    const dispatchTasks = tasks.map((t, i) => ({
-      id: i + 1,
-      loadings: (t.loadings || []).filter(l => l?.lat).map(l => ({ name: l.name, lat: l.lat, lon: l.lon, type: 'loading', task_group: i })),
-      unloadings: (t.unloadings || []).filter(u => u?.lat).map(u => ({ name: u.name, lat: u.lat, lon: u.lon, type: 'unloading', task_group: i })),
-    })).filter(t => t.loadings.length > 0);
-    if (!dispatchTasks.length) { alert('배차할 태스크가 없습니다.'); return null; }
-    const body = { tasks: dispatchTasks, vehicle_ids: vehicleIds, departure_time: departure || new Date().toISOString() };
-    const res = await fetch(`${API}/trips/auto-dispatch`, { method: 'POST', headers: hdrs, body: JSON.stringify(body) });
-    if (!res.ok) { const err = await res.json(); alert(err.detail || '자동 배차 실패'); return null; }
     return await res.json();
   }
 

@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.60 (2026-06-03)
+### 버그 수정 · 코드 정리
+- **`toast` 에러 타입 지원**: `toast(msg, 'error')` 시 `.toast-error` 클래스 적용 → 에러 토스트 빨간색 구분 (CSS 추가)
+- **`dispatchFleet` 기사 매핑 수정**: 차량 인덱스 기반 `DATA.drivers[i]` 매핑 → `DATA.drivers.find(d => d.vehicleId === v.id)` 실 배정 기반으로 수정
+- **통계 차량 필터 적용**: `renderTripStats` 조회 시 `#statsVehicle` 선택값을 `vehicle_id` 파라미터로 `GET /stats/by-day` 전달 (기존에는 무시됨)
+- **`fleet-driver-select` 타입 버그**: `Number(sel.value)` → `sel.value || null` — UUID 기사 ID가 NaN으로 변환되던 문제 수정
+- **`(가짜 데이터)` 문구 제거**: `renderTripStats` 페이지 설명에서 잔존 표현 삭제
+- **`normalizeDispatchListRow` 하드코딩 제거**: `{ T5: '인천', T6: '경남', T7: '경기' }` 가짜 데이터 매핑 삭제
+- **`runAutoDispatch` 데드 코드 삭제**: `vehicle_ids` 오파라미터 + 미호출 함수 제거 (-13줄)
+- **`pendingIntakes` 중복 제거**: 접수 저장 후 모듈 레벨 `pendingIntakes`에 중복 push하던 로직 제거 → `unassignedForDispatch`가 `DATA.orders`만 참조하도록 단순화
+
+---
+
 ## v1.0.59 (2026-06-03)
 ### 코드 정리
 - **목업 문구 제거**: 차량 GPS 패널 `앱 위치 로그 기준(목업)` → `앱 위치 로그 기준`, 임시화주 필터 설명 `숨김(목업)` → `숨김`
