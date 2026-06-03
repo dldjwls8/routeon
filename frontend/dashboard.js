@@ -4241,6 +4241,42 @@
     };
   }
 
+  function collectIntakeRows(root, form, taskNum) {
+    const base = {
+      customer: taskNum === 1 ? customerNameFromIntakeValue(readIntakeField(form, 'customer')) : '',
+      latestAt: taskNum === 1 ? readDesiredArrival(form) : '',
+      contact: taskNum === 1 ? readIntakeField(form, 'contact') : '',
+      mixed_load: readIntakeMixedLoad(form, taskNum),
+    };
+    const card = root.querySelector(`[data-task="${taskNum}"]`);
+    const pickups = [readIntakeField(form, `pickup_${taskNum}`)];
+    if (card) card.querySelectorAll('[data-extra-pickup]').forEach(row => {
+      const v = readIntakeField(form, `pickup_${taskNum}_extra_${row.dataset.extraPickup}`);
+      if (v) pickups.push(v);
+    });
+    const deliveries = [{
+      delivery: readIntakeField(form, `delivery_${taskNum}`),
+      recipient: readIntakeField(form, `recipient_${taskNum}`),
+      cargo: readIntakeField(form, `cargo_${taskNum}`),
+      tons: readIntakeField(form, `tons_${taskNum}`),
+    }];
+    if (card) card.querySelectorAll('[data-extra-delivery]').forEach(row => {
+      const s = row.dataset.extraDelivery;
+      deliveries.push({
+        delivery: readIntakeField(form, `delivery_${taskNum}_extra_${s}`),
+        recipient: readIntakeField(form, `recipient_${taskNum}_extra_${s}`),
+        cargo: readIntakeField(form, `cargo_${taskNum}_extra_${s}`),
+        tons: readIntakeField(form, `tons_${taskNum}_extra_${s}`),
+      });
+    });
+    const count = Math.max(pickups.length, deliveries.length);
+    return Array.from({ length: count }, (_, i) => ({
+      ...base,
+      pickup: pickups[Math.min(i, pickups.length - 1)],
+      ...(deliveries[Math.min(i, deliveries.length - 1)]),
+    }));
+  }
+
   function clearIntakeRow(form, taskNum) {
     [`pickup_${taskNum}`, `delivery_${taskNum}`, `recipient_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
       const el = form.querySelector(`[name="${name}"]`);
@@ -4305,13 +4341,19 @@
       toast('필수 항목을 입력하세요');
       return false;
     }
-    const row = collectIntakeRow(form, taskNum);
-    if (!row.pickup && !row.delivery) return false;
-    const total = addPendingIntake(root, row);
+    const rows = collectIntakeRows(root, form, taskNum);
+    if (!rows.length || (!rows[0].pickup && !rows[0].delivery)) return false;
+    rows.forEach(row => addPendingIntake(root, row));
     clearIntakeRow(form, taskNum);
+    const card = root.querySelector(`[data-task="${taskNum}"]`);
+    if (card) {
+      card.querySelectorAll('.extra-stop-row').forEach(el => el.remove());
+      card._pickupExtraSeq = 0;
+      card._deliveryExtraSeq = 0;
+    }
     const nextFields = getIntakeFieldsForTask(root, taskNum);
     if (nextFields[0]) nextFields[0].focus();
-    toast(`접수 ${total}건 추가됨`);
+    toast(`접수 ${root._pendingIntakes.length}건 추가됨`);
     return true;
   }
 
@@ -4328,12 +4370,41 @@
     return form ? form.closest('.page-viewport-inner') : null;
   }
 
-  function addIntakePickupStop(_root, _taskNum) {
-    toast('상차지 행 추가됨');
+  function addIntakePickupStop(root, taskNum) {
+    const card = root.querySelector(`[data-task="${taskNum}"]`);
+    if (!card) return;
+    const pickupBlock = card.querySelectorAll('.stop-block')[0];
+    if (!pickupBlock) return;
+    const addBtn = pickupBlock.querySelector('[data-add-pickup]');
+    if (!addBtn) return;
+    card._pickupExtraSeq = (card._pickupExtraSeq || 0) + 1;
+    const seq = card._pickupExtraSeq;
+    const name = `pickup_${taskNum}_extra_${seq}`;
+    const row = document.createElement('div');
+    row.className = 'extra-stop-row';
+    row.dataset.extraPickup = seq;
+    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="추가 상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
+    row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
+    pickupBlock.insertBefore(row, addBtn);
+    row.querySelector('.intake-field').focus();
   }
 
-  function addIntakeDeliveryStop(_root, _taskNum) {
-    toast('하차지 행 추가됨');
+  function addIntakeDeliveryStop(root, taskNum) {
+    const card = root.querySelector(`[data-task="${taskNum}"]`);
+    if (!card) return;
+    const deliveryBlock = card.querySelectorAll('.stop-block')[1];
+    if (!deliveryBlock) return;
+    const addBtn = deliveryBlock.querySelector('[data-add-delivery]');
+    if (!addBtn) return;
+    card._deliveryExtraSeq = (card._deliveryExtraSeq || 0) + 1;
+    const seq = card._deliveryExtraSeq;
+    const row = document.createElement('div');
+    row.className = 'extra-stop-row';
+    row.dataset.extraDelivery = seq;
+    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신자(고객사명)" data-intake-field="recipient_${taskNum}_extra_${seq}"><input type="text" class="intake-field" name="cargo_${taskNum}_extra_${seq}" placeholder="화물 종류" data-intake-field="cargo_${taskNum}_extra_${seq}"><input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="톤수" data-intake-field="tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
+    row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
+    deliveryBlock.insertBefore(row, addBtn);
+    row.querySelector('.intake-field').focus();
   }
 
   function bindIntakeStopShortcuts() {

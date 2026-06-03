@@ -6,6 +6,16 @@
 
 ---
 
+## v1.0.57 (2026-06-03)
+### 접수창 복수 상·하차지 추가 기능 구현
+- **`addIntakePickupStop`**: 태스크 카드 상차지 `stop-block`에 입력 행 동적 삽입, `data-extra-pickup` 속성으로 순번 추적, ✕ 제거 버튼 바인딩
+- **`addIntakeDeliveryStop`**: 태스크 카드 하차지 `stop-block`에 입력 행 동적 삽입 (수신자·화물·톤수 필드 포함), `data-extra-delivery` 속성으로 순번 추적
+- **`collectIntakeRows` 신규**: 기본 상/하차지 + extra row 전체 수집, `max(상차지수, 하차지수)`개 배송 건 pair-wise 생성 (초과분은 마지막 항목 재사용)
+- **`commitIntakeRow` 수정**: 복수 row 배치 추가, 제출 후 extra row DOM 제거 + 순번 초기화
+- **CSS `.extra-stop-row`**: 좌측 lime 바 구분선 + 제거 버튼 hover 빨간색
+
+---
+
 ## v1.0.56 (2026-06-03)
 ### 오더관리 API 실 연동 완성 및 배차 일자 수정
 - **오더 수정 저장 실 연동**: `openOrderEditModal` 저장 콜백 async 변환, `PATCH /deliveries/{id}` 실 호출 (address, pickup_address, cargo_type, cargo_weight_ton, recipient_name, contact_name, shipper_name, deadline 업데이트)

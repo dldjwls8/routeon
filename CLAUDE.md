@@ -631,7 +631,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[배차] 배차 일자 하드코딩 수정** — `value="2026-06-01"` → `new Date().toISOString().slice(0,10)` 오늘 날짜 동적 설정 (v1.0.56)
 
 ##### 단기
-- [ ] **[오더관리] 접수창 복수 상·하차지 추가** — `addIntakePickupStop` / `addIntakeDeliveryStop` 빈 함수 구현: 태스크 카드 내 상차지·하차지 입력 행을 동적으로 추가하는 실제 로직
+- [x] **[오더관리] 접수창 복수 상·하차지 추가** — `addIntakePickupStop` / `addIntakeDeliveryStop` DOM 동적 추가, `collectIntakeRows` pair-wise 배송 건 생성, `commitIntakeRow` 제출 후 extra row 정리 (v1.0.57)
 - [ ] **[배차] 권역·거점 필터 연동** — `dispatchRegionFilter` · `dispatchSiteFilter` 선택 값을 배차 실행(`runDispatch`) 시 오더 필터링에 반영
 
 ##### 낮음 (정리)
