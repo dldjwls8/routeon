@@ -16,6 +16,7 @@ SMTP_HOST     = "smtp.gmail.com"
 SMTP_PORT     = 587
 SMTP_EMAIL    = os.getenv("SMTP_EMAIL", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://kdu.duckdns.org").rstrip("/")
 FROM_NAME     = "루트온(RouteOn)"
 
 
@@ -88,7 +89,7 @@ async def send_approved(to_email: str, org_name: str, org_code: str):
       이 조직코드를 기사님들에게 공유해주세요.<br>
       기사님들은 앱에서 해당 코드를 입력하여 가입할 수 있습니다.
     </p>
-    <a href="http://168.138.45.63:3000/login.html"
+    <a href="{PUBLIC_BASE_URL}/login.html"
        style="display:inline-block; background:#FFE812; color:#111; font-weight:700;
               padding:12px 28px; border-radius:6px; text-decoration:none; font-size:14px;">
       대시보드 바로가기 →

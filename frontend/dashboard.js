@@ -1,7 +1,20 @@
 (function () {
   'use strict';
 
-  const API = 'http://168.138.45.63:8000';
+  function apiBase() {
+    const h = location.hostname;
+    if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+    if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
+    return `${location.protocol}//${location.host}/api`;
+  }
+  function wsBase() {
+    const h = location.hostname;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (!h || h === 'localhost' || h === '127.0.0.1') return `${proto}//localhost:8000`;
+    if (location.port && location.port !== '80' && location.port !== '443') return `${proto}//${h}:8000`;
+    return `${proto}//${location.host}`;
+  }
+  const API = apiBase();
 
   /* ── 탑바 드롭다운 ── */
   function _openDropdown(id) {
@@ -5100,7 +5113,7 @@
   function connectLocationWebSocket() {
     const token = getToken();
     if (!token || _locationWS) return;
-    const ws = new WebSocket(`${API.replace(/^http/, 'ws')}/ws/location?token=${token}`);
+    const ws = new WebSocket(`${wsBase()}/ws/location?token=${token}`);
     _locationWS = ws;
     ws.onmessage = (e) => {
       try {
@@ -5164,7 +5177,7 @@
   function connectChatWebSocket() {
     const token = getToken();
     if (!token || _chatWS) return;
-    const ws = new WebSocket(`${API.replace(/^http/, 'ws')}/ws/chat?token=${token}`);
+    const ws = new WebSocket(`${wsBase()}/ws/chat?token=${token}`);
     _chatWS = ws;
     ws.onmessage = (e) => {
       try {

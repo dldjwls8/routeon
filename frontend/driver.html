@@ -5,7 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>루트온 — 기사 채팅</title>
   <script>
-    const API = 'http://168.138.45.63:8000';
+    function apiBase() {
+      const h = location.hostname;
+      if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+      if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
+      return `${location.protocol}//${location.host}/api`;
+    }
+    function wsBase() {
+      const h = location.hostname;
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (!h || h === 'localhost' || h === '127.0.0.1') return `${proto}//localhost:8000`;
+      if (location.port && location.port !== '80' && location.port !== '443') return `${proto}//${h}:8000`;
+      return `${proto}//${location.host}`;
+    }
+    const API = apiBase();
     function getToken() { return localStorage.getItem('token'); }
     function authHeaders() {
       return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` };
@@ -86,9 +99,7 @@
 
     function chatWsUrl() {
       const token = encodeURIComponent(getToken());
-      const apiUrl = new URL(API);
-      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${scheme}//${apiUrl.host}/ws/chat?token=${token}`;
+      return `${wsBase()}/ws/chat?token=${token}`;
     }
 
     async function loadMe() {

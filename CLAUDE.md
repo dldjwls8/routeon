@@ -34,9 +34,9 @@
 | 항목 | 값 |
 |------|-----|
 | 서버 IP | `168.138.45.63` |
-| FastAPI | `http://168.138.45.63:8000` |
+| FastAPI | `http://kdu.duckdns.org/api` (Nginx 프록시) / 직접 접근 `http://168.138.45.63:8000` |
 | Swagger | `http://168.138.45.63:8000/docs` |
-| 관리자 웹 | `http://168.138.45.63` (포트 80) |
+| 관리자 웹 | `http://kdu.duckdns.org` 또는 `http://168.138.45.63` (포트 80) |
 | code-server | `http://168.138.45.63:8443` |
 | 프로젝트 경로 | `/opt/routeon/` |
 
@@ -56,12 +56,13 @@ routeon/
 ├── docs/
 │   └── Rest.txt
 ├── backend/
-│   ├── main.py             FastAPI 앱 — 모든 API 엔드포인트 (단일 파일)
+│   ├── main.py             FastAPI 앱 생성·lifespan·CORS·라우터 등록
 │   ├── auth.py             JWT 인증 (비동기)
 │   ├── database.py         DB 연결 — AsyncEngine, AsyncSession
 │   ├── models.py           DB 테이블
 │   ├── requirements.txt
 │   ├── Dockerfile
+│   ├── routers/            도메인별 API 라우터
 │   ├── uploads/            기업 등록 서류 업로드 저장소
 │   ├── services/
 │   │   ├── kakao_mobility.py      카카오 모빌리티 API + TTL 캐시 + find_best_rest_stop
@@ -486,7 +487,7 @@ dashboard.html 채팅 알림 WS:
 - 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
 
 Android 앱 채팅 구현 필수 사항:
-- `ws://168.138.45.63:8000/ws/chat?token={JWT}` 상시 연결 (채팅 화면 외에도 유지)
+- `ws://168.138.45.63:8000/ws/chat?token={JWT}` 또는 Nginx 경유 `ws://kdu.duckdns.org/ws/chat?token={JWT}` 상시 연결 (채팅 화면 외에도 유지)
 - 수신 이벤트: `chat.ready`(연결 확인), `chat.message`(새 메시지), `chat.read`(읽음), `ping`(heartbeat → 무시 또는 pong)
 - 메시지 전송은 REST `POST /chat/conversations/{id}/messages`로 처리
 - WS 미연결 시 상대방 메시지를 실시간으로 수신할 수 없음 (REST 폴링으로 대체 가능)
@@ -501,7 +502,7 @@ Android 앱 채팅 구현 필수 사항:
 - SQLAlchemy 비동기: db.query() 금지 → await db.execute(select())
 - build_time_matrix() → (time_matrix, dist_matrix) 튜플 반환
 - insert_rest_stops() → async, 반드시 await
-- main.py 단일 파일 구조 유지 (추후 리팩토링 예정)
+- main.py는 앱 초기화와 라우터 등록만 담당. 실제 엔드포인트는 `backend/routers/` 도메인별 모듈에 위치
 - 카카오 API Key 프론트엔드 하드코딩 금지 → /config 엔드포인트 경유
 - Nginx: /api/* → FastAPI, /ws/* → WebSocket 프록시 (proxy_read/send_timeout 3600s)
 - GPS 전송 주기: 5초 (앱 설정)
@@ -608,6 +609,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[접수창] 자동완성 드롭다운 다크모드 대응** — 배경·테두리·텍스트·hover 전부 다크 테마 변수로 교체 (v1.0.70)
 - [x] **[배차] cargo_type·cargo_weight_ton·recipient_name waypoints 누락 버그 수정** — 일괄 배차·수동 배차 tasks 구성(프론트 2곳) + `dispatch.py` waypoints dict(백엔드 1곳) 총 3곳 수정 (v1.0.71)
 - [x] **[기사 앱] Trip 하차지 카운트 누락 수정** — `POST /trips`의 `dest_*` 목적지를 신규 생성/조회 응답에서 `type=unloading` waypoint로 보강해 앱 `unloading_count=0` 표시 문제 해결 (v1.0.72)
+- [x] **[정합성] 버전·URL·라우터 문서 정리** — FastAPI 메타 버전 갱신, 프론트 API/WS base 동적 계산, 이메일 공개 URL 환경변수화, GraphHopper 산출물 gitignore 정리 (v1.0.73)
 
 ### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
@@ -680,7 +682,7 @@ Android 앱 채팅 구현 필수 사항:
 #### 미완성·개선 항목 (2026-06-03 프론트엔드 코드 점검) — 2026-06-03 전체 완료
 
 ##### 🔴 버그/불일치
-- [x] **WebSocket URL 하드코딩** → `API.replace(/^http/, 'ws')` 패턴으로 수정
+- [x] **WebSocket URL 하드코딩** → HTTP API base와 WS base를 분리해 Nginx 경유 `/api`·`/ws`와 직접 `:8000` 접속 모두 지원
 - [x] **차량 상세 저장 — 상태·연결기사 DB 미반영** → `vehicles.status` 컬럼 추가, `VehicleUpdate`에 `status`/`driver_id` 추가, PATCH에서 User.vehicle_id 동기화
 - [x] **기사 상세 저장 — 상태·배정차량 DB 미반영** → `users.vehicle_id`/`users.driver_status` 컬럼 추가, `PATCH /users/{id}` 엔드포인트 신설, 프론트 async PATCH 호출
 

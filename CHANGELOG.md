@@ -6,6 +6,16 @@
 
 ---
 
+## v1.0.73 (2026-06-03)
+### 정합성 정리
+- **FastAPI 버전 표기 갱신**: `/docs` 메타 버전 `0.3.0` → `1.0.73`으로 변경해 CHANGELOG 기준 버전과 일치시킴
+- **프론트 API/WS URL 하드코딩 제거**: 관리자/기사/설정/통계/차량/슈퍼관리자/로그인/가입/채팅 화면의 `168.138.45.63:8000` 고정값 제거. Nginx 경유 접속은 `/api`·`/ws`, 로컬/비표준 포트 접속은 `:8000` 직접 접근으로 자동 계산
+- **승인 이메일 링크 정리**: `http://168.138.45.63:3000/login.html` 하드코딩 제거, `PUBLIC_BASE_URL` 환경변수 기반으로 `/login.html` 생성
+- **문서 구조 정합성 수정**: `CLAUDE.md`의 `main.py 단일 파일` 설명을 라우터 분리 구조로 갱신
+- **Git 추적 정책 정리**: GraphHopper cache/JAR/PBF 및 로컬 통합 테스트 스크립트를 `.gitignore`에 추가
+
+---
+
 ## v1.0.72 (2026-06-03)
 ### 버그 수정
 - **기사 앱 운행 목록 하차지 누락 수정**: 수동 `POST /trips` 생성 시 하차지가 `dest_name/dest_lat/dest_lon`에만 저장되고 `waypoints`에는 상차지만 남아 기사 앱에서 `unloading_count=0`으로 표시되던 문제 수정. 신규 Trip 생성 시 `dest_*` 목적지를 `type=unloading` waypoint로 자동 보강하고, 기존 Trip도 `/trips` 조회 응답에서 동일 좌표 중복 없이 하차 waypoint를 보강하도록 변경

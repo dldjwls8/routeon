@@ -6,7 +6,12 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script>
     if (!localStorage.getItem('token')) location.href = '/login.html';
-    const API = 'http://168.138.45.63:8000';
+    const API = (() => {
+      const h = location.hostname;
+      if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+      if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
+      return `${location.protocol}//${location.host}/api`;
+    })();
     function authHeaders() {
       return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` };
     }

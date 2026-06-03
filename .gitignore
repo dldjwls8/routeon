@@ -18,6 +18,15 @@ build/
 *.log
 logs/
 
+# GraphHopper / OSM 엔진 산출물
+Engine/graph-cache/
+Engine/*.jar
+Engine/*.osm.pbf
+
+# 로컬 통합 테스트 스크립트
+test_frontend.py
+backend/test_polyline.py
+
 # OS
 .DS_Store
 Thumbs.db

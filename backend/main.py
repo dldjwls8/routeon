@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="RouteOn API",
     description="배송 최적화 서비스 — 경로 최적화 + 배송 관리 + GPS",
-    version="0.3.0",
+    version="1.0.73",
     lifespan=lifespan,
 )
 

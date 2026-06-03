@@ -234,9 +234,16 @@
     // ────────────────────────────────────────────────
     const API = (() => {
       const h = location.hostname;
-      return (h === 'localhost' || h === '127.0.0.1')
-        ? 'http://localhost:8000'
-        : `${location.protocol}//${h}:8000`;
+      if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+      if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
+      return `${location.protocol}//${location.host}/api`;
+    })();
+    const WS_BASE = (() => {
+      const h = location.hostname;
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (!h || h === 'localhost' || h === '127.0.0.1') return `${proto}//localhost:8000`;
+      if (location.port && location.port !== '80' && location.port !== '443') return `${proto}//${h}:8000`;
+      return `${proto}//${location.host}`;
     })();
 
     const getToken  = () => localStorage.getItem('token') || '';
@@ -244,8 +251,7 @@
     const authHdrs  = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` });
     const escHtml   = v => String(v || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const wsUrl     = () => {
-      const s = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${s}//${new URL(API).host}/ws/chat?token=${encodeURIComponent(getToken())}`;
+      return `${WS_BASE}/ws/chat?token=${encodeURIComponent(getToken())}`;
     };
     const fmtTime   = iso => new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
     const fmtDate   = iso => new Date(iso).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
