@@ -157,12 +157,18 @@ async def reissue_org_code(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """관리자: 조직코드 재발급 (새 랜덤 코드로 변경)"""
+    """관리자: 조직코드 재발급 (Organization.org_code 갱신)"""
     import random, string
+    if not current_user.organization_id:
+        raise HTTPException(400, "소속 조직이 없습니다.")
+    org = (await db.execute(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )).scalar_one_or_none()
+    if not org:
+        raise HTTPException(404, "소속 조직을 찾을 수 없습니다.")
     new_code = "RT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    current_user.license_number = new_code
+    org.org_code = new_code
     await db.commit()
-    await db.refresh(current_user)
     return {"org_code": new_code}
 
 
@@ -185,15 +191,24 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/auth/me")
-async def me(current_user: User = Depends(get_current_user)):
+async def me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """현재 로그인된 유저 정보 확인"""
+    org_code = None
+    if current_user.organization_id:
+        org = (await db.execute(
+            select(Organization).where(Organization.id == current_user.organization_id)
+        )).scalar_one_or_none()
+        org_code = org.org_code if org else None
     return {
         "id":       str(current_user.id),
         "username": current_user.username,
         "name":     current_user.name,
         "role":     current_user.role,
         "phone":    current_user.phone,
-        "org_code": current_user.license_number,
+        "org_code": org_code,
     }
 
 

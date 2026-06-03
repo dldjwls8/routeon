@@ -858,6 +858,10 @@
         status: statusMap[d.status] || '접수',
         pickup: d.pickup_address || '—',
         delivery: d.address,
+        lat: d.lat,
+        lon: d.lon,
+        pickup_lat: d.pickup_lat,
+        pickup_lon: d.pickup_lon,
         window: d.deadline ? d.deadline.slice(0, 16).replace('T', ' ') : '—',
         driver: null,
         recipient: d.recipient_name || '',
@@ -3019,7 +3023,7 @@
         if (!ord?.pickup_lat || !ord?.lat) { skipped.push(stop.id); return; }
         tasks.push({
           loadings: [{ name: stop.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
-          unloadings: [{ name: stop.delivery || '하차지', lat: ord.lat, lon: ord.lon }],
+          unloadings: [{ name: stop.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id }],
         });
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
@@ -3602,7 +3606,7 @@
         if (_siteForRun && addressToRegion(ord.pickup || '') !== _siteForRun.region) return;
         tasks.push({
           loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
-          unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon }],
+          unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id }],
         });
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
@@ -4451,38 +4455,65 @@
       mixed_load: readIntakeMixedLoad(form, taskNum),
     };
     const card = root.querySelector(`[data-task="${taskNum}"]`);
-    const pickups = [readIntakeField(form, `pickup_${taskNum}`)];
+    const puMainEl = form.querySelector(`[name="pickup_${taskNum}"]`);
+    const pickups = [{
+      value: puMainEl ? puMainEl.value.trim() : '',
+      lat:   puMainEl?.dataset.lat ? parseFloat(puMainEl.dataset.lat) : null,
+      lon:   puMainEl?.dataset.lon ? parseFloat(puMainEl.dataset.lon) : null,
+    }];
     if (card) card.querySelectorAll('[data-extra-pickup]').forEach(row => {
-      const v = readIntakeField(form, `pickup_${taskNum}_extra_${row.dataset.extraPickup}`);
-      if (v) pickups.push(v);
+      const el = form.querySelector(`[name="pickup_${taskNum}_extra_${row.dataset.extraPickup}"]`);
+      const v = el ? el.value.trim() : '';
+      if (v) pickups.push({ value: v, lat: el?.dataset.lat ? parseFloat(el.dataset.lat) : null, lon: el?.dataset.lon ? parseFloat(el.dataset.lon) : null });
     });
+    const delMainEl = form.querySelector(`[name="delivery_${taskNum}"]`);
     const deliveries = [{
-      delivery: readIntakeField(form, `delivery_${taskNum}`),
+      delivery:  delMainEl ? delMainEl.value.trim() : '',
+      lat:       delMainEl?.dataset.lat ? parseFloat(delMainEl.dataset.lat) : null,
+      lon:       delMainEl?.dataset.lon ? parseFloat(delMainEl.dataset.lon) : null,
       recipient: readIntakeField(form, `recipient_${taskNum}`),
-      cargo: readIntakeField(form, `cargo_${taskNum}`),
-      tons: readIntakeField(form, `tons_${taskNum}`),
+      cargo:     readIntakeField(form, `cargo_${taskNum}`),
+      tons:      readIntakeField(form, `tons_${taskNum}`),
     }];
     if (card) card.querySelectorAll('[data-extra-delivery]').forEach(row => {
       const s = row.dataset.extraDelivery;
+      const delEl = form.querySelector(`[name="delivery_${taskNum}_extra_${s}"]`);
       deliveries.push({
-        delivery: readIntakeField(form, `delivery_${taskNum}_extra_${s}`),
+        delivery:  delEl ? delEl.value.trim() : '',
+        lat:       delEl?.dataset.lat ? parseFloat(delEl.dataset.lat) : null,
+        lon:       delEl?.dataset.lon ? parseFloat(delEl.dataset.lon) : null,
         recipient: readIntakeField(form, `recipient_${taskNum}_extra_${s}`),
-        cargo: readIntakeField(form, `cargo_${taskNum}_extra_${s}`),
-        tons: readIntakeField(form, `tons_${taskNum}_extra_${s}`),
+        cargo:     readIntakeField(form, `cargo_${taskNum}_extra_${s}`),
+        tons:      readIntakeField(form, `tons_${taskNum}_extra_${s}`),
       });
     });
     const count = Math.max(pickups.length, deliveries.length);
-    return Array.from({ length: count }, (_, i) => ({
-      ...base,
-      pickup: pickups[Math.min(i, pickups.length - 1)],
-      ...(deliveries[Math.min(i, deliveries.length - 1)]),
-    }));
+    return Array.from({ length: count }, (_, i) => {
+      const pu = pickups[Math.min(i, pickups.length - 1)];
+      const dl = deliveries[Math.min(i, deliveries.length - 1)];
+      return {
+        ...base,
+        pickup:     pu.value,
+        pickup_lat: pu.lat,
+        pickup_lon: pu.lon,
+        delivery:   dl.delivery,
+        lat:        dl.lat,
+        lon:        dl.lon,
+        recipient:  dl.recipient,
+        cargo:      dl.cargo,
+        tons:       dl.tons,
+      };
+    });
   }
 
   function clearIntakeRow(form, taskNum) {
     [`pickup_${taskNum}`, `delivery_${taskNum}`, `recipient_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
       const el = form.querySelector(`[name="${name}"]`);
-      if (el) el.value = '';
+      if (el) {
+        el.value = '';
+        delete el.dataset.lat;
+        delete el.dataset.lon;
+      }
     });
     if (taskNum === 1) {
       ['latest_at_date', 'latest_at_hour'].forEach(name => {

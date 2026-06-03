@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.64 (2026-06-03)
+### 논리·설계 오류 점검 후 수정 (6건)
+- **`location.py` 도착 감지 500 수정**: `delivery.lat`이 null인 배송에서 `LatLng(lat=None)` Pydantic 오류 → null 체크 후 continue 처리
+- **`auth.py` org_code 재발급 수정**: `User.license_number`에 저장하던 잘못된 로직 → `Organization.org_code` 필드 업데이트로 수정. `GET /auth/me`도 `Organization` 테이블에서 실제 org_code 반환하도록 수정
+- **`dispatch.py` auto-dispatch 후 Delivery 미연결 수정**: Trip 생성 후 관련 Delivery의 `trip_id`/`assigned_to`/`status` 미업데이트 문제 → unloading에 `delivery_id` 전달 시 일괄 업데이트 로직 추가. `WaypointSchema`에 `delivery_id` 옵션 필드 추가
+- **`_delivery_schema` trip_id 필드 누락 수정**: API 응답에 `trip_id`가 없어 클라이언트가 연결 확인 불가 → 필드 추가
+- **`collectIntakeRows` 좌표 미수집 수정**: 대기열 추가 경로(`commitIntakeRow → collectIntakeRows`)에서 `dataset.lat/lon` 미수집 — `collectIntakeRow`(단수)만 고쳐진 v1.0.63의 누락 보완. 추가 상차지/하차지도 포함
+- **`clearIntakeRow` dataset 잔존 수정**: `el.value = ''`만 하고 `dataset.lat/lon` 미초기화 → 이전 좌표 잔존 문제 수정
+- **`commitPendingRowsToOrders` 좌표 미반영 수정**: 저장 직후 `DATA.orders`에 `lat/lon/pickup_lat/pickup_lon` 미포함 → 즉시 배차 시 좌표 없는 오더로 처리되던 문제 수정
+- 일괄 배차/수동 배차 tasks에 `delivery_id` 포함하여 백엔드 연결 완성
+
+---
+
 ## v1.0.63 (2026-06-03)
 ### 배차 불가 버그 수정
 - **접수창 좌표 미수집 수정**: `collectIntakeRow()`에서 `input.dataset.lat/lon`을 읽지 않아 모든 접수 건의 좌표가 null로 저장되던 문제 수정 — 카카오 Places 자동완성 선택 시 `pickup_lat/lon`, `lat/lon` 정상 수집

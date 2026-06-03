@@ -194,6 +194,7 @@ async def auto_dispatch_trips(
         driver = driver_map[driver_id]
 
         waypoints = []
+        delivery_ids = []
         for tg, task in enumerate(tasks):
             for ld in task.loadings:
                 waypoints.append({"name": ld.name, "lat": ld.lat,
@@ -201,6 +202,11 @@ async def auto_dispatch_trips(
             for u in task.unloadings:
                 waypoints.append({"name": u.name, "lat": u.lat,
                                   "lon": u.lon, "type": "unloading", "task_group": tg})
+                if u.delivery_id:
+                    try:
+                        delivery_ids.append(uuid_lib.UUID(u.delivery_id))
+                    except ValueError:
+                        pass
 
         t = Trip(
             driver_id=driver.id,
@@ -210,6 +216,19 @@ async def auto_dispatch_trips(
         )
         db.add(t)
         await db.flush()
+
+        # 배송 레코드를 이 trip·기사에 연결
+        if delivery_ids:
+            await db.execute(
+                update(Delivery)
+                .where(Delivery.id.in_(delivery_ids))
+                .values(
+                    trip_id=t.id,
+                    assigned_to=driver.id,
+                    status=DeliveryStatus.in_progress,
+                )
+            )
+
         created_trips.append(_trip_schema(t))
 
     await db.commit()

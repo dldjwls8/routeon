@@ -45,6 +45,7 @@ class WaypointSchema(BaseModel):
     recipient_name:   Optional[str] = None   # 수신자(고객사명) — unloading 전용
     cargo_type:       Optional[str] = None   # 화물 종류
     cargo_weight_ton: Optional[float] = None # 화물 톤수
+    delivery_id:      Optional[str] = None   # Delivery UUID — auto-dispatch 연결용
 
 class TripCreate(BaseModel):
     driver_id:         str

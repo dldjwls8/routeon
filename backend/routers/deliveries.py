@@ -291,6 +291,7 @@ def _delivery_schema(d: Delivery) -> dict:
         "cargo_weight_ton": d.cargo_weight_ton,
         "status":           d.status,
         "sequence":         d.sequence,
+        "trip_id":          str(d.trip_id)    if d.trip_id    else None,
         "assigned_to":      str(d.assigned_to) if d.assigned_to else None,
         "deadline":         d.deadline.isoformat()     if d.deadline     else None,
         "completed_at":     d.completed_at.isoformat() if d.completed_at else None,

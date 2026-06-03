@@ -96,6 +96,8 @@ async def create_location_log(
 
     arrived = []
     for delivery in pending:
+        if delivery.lat is None or delivery.lon is None:
+            continue
         dest = LatLng(lat=delivery.lat, lon=delivery.lon)
         dist = _haversine(current, dest)
         if dist <= ARRIVAL_RADIUS_M:
