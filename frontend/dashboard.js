@@ -3017,7 +3017,10 @@
         if (!ord?.pickup_lat || !ord?.lat) { skipped.push(stop.id); return; }
         tasks.push({
           loadings: [{ name: stop.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
-          unloadings: [{ name: stop.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id }],
+          unloadings: [{ name: stop.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id,
+            recipient_name: ord.recipient_name || null,
+            cargo_type: ord.cargo_type || null,
+            cargo_weight_ton: ord.cargo_weight_ton ?? null }],
         });
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
@@ -3629,7 +3632,10 @@
         if (_siteForRun && addressToRegion(ord.pickup || '') !== _siteForRun.region) return;
         tasks.push({
           loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
-          unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id }],
+          unloadings: [{ name: ord.delivery || '하차지', lat: ord.lat, lon: ord.lon, delivery_id: ord.id,
+            recipient_name: ord.recipient_name || null,
+            cargo_type: ord.cargo_type || null,
+            cargo_weight_ton: ord.cargo_weight_ton ?? null }],
         });
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }

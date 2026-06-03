@@ -197,11 +197,19 @@ async def auto_dispatch_trips(
         delivery_ids = []
         for tg, task in enumerate(tasks):
             for ld in task.loadings:
-                waypoints.append({"name": ld.name, "lat": ld.lat,
-                                  "lon": ld.lon, "type": "loading", "task_group": tg})
+                waypoints.append({"name": ld.name, "lat": ld.lat, "lon": ld.lon,
+                                  "type": "loading", "task_group": tg,
+                                  "cargo_type": ld.cargo_type,
+                                  "cargo_weight_ton": ld.cargo_weight_ton,
+                                  "recipient_name": ld.recipient_name,
+                                  "delivery_id": ld.delivery_id})
             for u in task.unloadings:
-                waypoints.append({"name": u.name, "lat": u.lat,
-                                  "lon": u.lon, "type": "unloading", "task_group": tg})
+                waypoints.append({"name": u.name, "lat": u.lat, "lon": u.lon,
+                                  "type": "unloading", "task_group": tg,
+                                  "cargo_type": u.cargo_type,
+                                  "cargo_weight_ton": u.cargo_weight_ton,
+                                  "recipient_name": u.recipient_name,
+                                  "delivery_id": u.delivery_id})
                 if u.delivery_id:
                     try:
                         delivery_ids.append(uuid_lib.UUID(u.delivery_id))
