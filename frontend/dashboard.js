@@ -2028,23 +2028,28 @@
     DATA.vehicles.forEach(v => { fleetByType[v.type] = (fleetByType[v.type] || 0) + 1; });
     const fleetMax = Math.max(...Object.values(fleetByType), 1);
     const fleetRows = Object.entries(fleetByType).sort((a, b) => b[1] - a[1]);
-    const cargoChips = [
-      { label: '일반화물', kg: '12.4t' },
-      { label: '냉장', kg: '6.2t' },
-      { label: '양곡·자재', kg: '4.1t' },
-      { label: '하역', kg: '2.2t' },
-    ];
+    const cargoMap = {};
+    DATA.orders.forEach(o => {
+      const label = (o.cargo || '').trim();
+      if (!label) return;
+      const tonsNum = parseFloat(String(o.tons || '').replace(/[^0-9.]/g, '')) || 0;
+      cargoMap[label] = (cargoMap[label] || 0) + tonsNum;
+    });
+    const cargoChips = Object.entries(cargoMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([label, tot]) => ({ label, kg: tot > 0 ? `${parseFloat(tot.toFixed(1))}t` : '' }));
     root.innerHTML = `
         ${pageChromeHtml('dashboard', {
           title: '관제 대시보드',
-          desc: '실시간 운행·오더 현황 요약 (목업 데이터)',
+          desc: '실시간 운행·오더 현황 요약',
         })}
         <div class="dash-layout">
           <aside class="dash-left" aria-label="요약 위젯">
             <div class="dash-widget">
               <h2>오늘 배송 진행</h2>
               <div class="dash-cargo-chips">
-                ${cargoChips.map(c => `<span class="dash-cargo-chip">${c.label} ${c.kg}</span>`).join('')}
+                ${cargoChips.length ? cargoChips.map(c => `<span class="dash-cargo-chip">${c.label}${c.kg ? ' ' + c.kg : ''}</span>`).join('') : '<span class="text-muted-hint">접수된 화물 없음</span>'}
               </div>
               <div class="dash-gauge-wrap">
                 <div class="dash-gauge" style="--pct:${pct}">
