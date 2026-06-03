@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-02 (v1.0.50 기준 — 스키마 변경 없음)
+> 최종 검토: 2026-06-03 (v1.0.56 기준)
 
 ---
 
@@ -14,7 +14,7 @@
 | `userrole` | `superadmin`, `admin`, `driver`, `pending` |
 | `orgstatus` | `pending_review`, `approved`, `rejected` |
 | `tripstatus` | `scheduled`, `in_progress`, `completed`, `cancelled` |
-| `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual` |
+| `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual`, `cancelled` |
 | `reststoptype` | `highway_rest`, `drowsy_shelter`, `depot`, `custom`, `truck_yard`, `logistics_park` |
 
 ---
@@ -292,6 +292,22 @@ sudo docker exec routeon-api python seeds/seed_rest_stops_xls.py
 
 ---
 
+## Delivery status 변경 흐름
+
+```
+pending → cancelled    : PATCH /deliveries/{id} (관리자 취소 버튼)
+pending → in_progress  : PATCH /deliveries/{id}/assign (기사 배정 시 자동)
+in_progress → done     : GPS 50m 자동 완료
+in_progress → done_manual : PATCH /deliveries/{id}/complete (수동 완료)
+```
+
+수정 가능 조건:
+- `pending` 상태일 때만 필드 수정 가능 (`PATCH /deliveries/{id}`)
+- `done` / `done_manual` 상태는 수정·취소·삭제 불가
+- `cancelled` 상태는 삭제만 가능 (`DELETE /deliveries/{id}`)
+
+---
+
 ## Trip status 변경 흐름
 
 ```
@@ -323,6 +339,7 @@ completed 처리 시:
 | `pending` | `'접수'` | 미배차 건 목록 표시 (`unassignedForDispatch()`) |
 | `in_progress` | `'운행중'` | 미표시 |
 | `done` / `done_manual` | `'완료'` | 미표시 |
+| `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
 
 ### users ID 타입
 | 테이블 | PK 타입 | 프론트 비교 방식 |
