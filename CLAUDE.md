@@ -85,7 +85,7 @@ routeon/
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,245줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (5,415줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (5,447줄, dashboard.html에서 분리)
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
@@ -385,7 +385,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 |-----------|------|------|
 | `GET /users?role=driver` | 관리자 | 같은 기업 유저 목록 |
 | `DELETE /users/{id}` | 관리자 | 유저 삭제 |
-| `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 연결 기사 최신 GPS를 `last_gps`로 포함 |
+| `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 같은 조직 연결 기사와 최신 GPS를 `driver_id`, `driver_name`, `last_gps`로 포함 |
 | `POST /vehicles` | 관리자 | 같은 조직 차량 등록 (`organization_id` 자동 지정) |
 | `DELETE /vehicles/{id}` | 관리자 | 같은 조직 차량 비활성화 |
 
@@ -520,6 +520,11 @@ chat.html 구조:
 - 우측: 메시지창 — 날짜 구분선, 위로 스크롤 시 이전 메시지 페이지네이션
 - WS /ws/chat 연결 + 자동 재연결. 한글 IME 중복 전송 방지(e.isComposing), 줄바꿈 표시(white-space: pre-wrap)
 - dashboard.html에서 채팅 WS 연결 제거 — chat.html에서만 관리
+
+dashboard.html 관제 지도:
+- 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 연결 기사 기준으로 지도 마커를 즉시 표시한다.
+- 이후 `/ws/location` 수신 시 같은 마커 위치와 `DATA.vehicles[].start_lat/start_lon`, `last_gps_label`, `last_gps_at`을 함께 갱신한다.
+- 대시보드 오더 요약 카드는 상태 필터별 최대 5건만 표시하며, 전체 목록은 `오더관리 > 오더 목록` 페이지에서 페이지네이션으로 조회한다.
 
 dashboard.html 채팅 알림 WS:
 - WS /ws/chat 경량 연결 (수신 전용, 전송 없음) — `connectChatWebSocket()`

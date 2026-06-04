@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-04 (v1.0.78 기준, `app_settings` 전역 설정 테이블 추가)
+> 최종 검토: 2026-06-04 (v1.0.79 기준, 스키마 변경 없음 — 차량 위치/대시보드 표시 로직 최신화)
 
 ---
 
@@ -201,6 +201,7 @@
 | `created_at` | DATETIME | NOT NULL | |
 
 > 프론트 오더 목록/상세의 `접수시간`은 이 `created_at` 값을 표시한다.
+> 대시보드 첫 화면의 오더 요약 카드는 상태 필터별 최대 5건만 표시하고, 전체 오더는 오더 목록 페이지에서 조회한다.
 
 ---
 
@@ -367,10 +368,11 @@ cancelled 처리 시:
 | `weight_kg` | `weight_kg` | `weight_kg`, `tonnage` | 프론트가 `weight_kg / 1000`으로 톤수 문자열 계산 |
 | `vehicle_type` | `vehicle_type` | `type` | 정상 매핑 |
 | `plate_number` | `plate_number` | `plate` | 정상 매핑 |
-| 배정 기사 | `driver_id`, `driver_name` | `driverId`, `driver` | 차량 상세/목록에서 사용 |
+| 배정 기사 | `driver_id`, `driver_name` | `driverId`, `driver` | 같은 조직의 `users.vehicle_id == vehicles.id` 기사만 매핑 |
 | 최근 위치 | `last_gps` | `last_gps` | Redis 우선, miss 시 TimescaleDB 최근 기록 폴백 |
 
 > `vehicles` API는 `weight_kg`를 원본 필드로 반환하고, 프론트에서 `tonnage` 표시값을 파생한다. 과거 `max_load_kg` 접근으로 톤수가 `0.0톤`으로 보이던 문제는 v1.0.75에서 수정됨.
+> 대시보드 지도는 `last_gps`를 `DATA.vehicles[].start_lat/start_lon`으로 보존해 초기 마커를 표시하고, 이후 `/ws/location` 수신값으로 같은 마커와 프론트 GPS 표시값을 갱신한다.
 
 ### deliveries status 매핑
 | DB `status` | 프론트 표시 | 배차 탭 노출 조건 |

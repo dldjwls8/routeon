@@ -136,7 +136,11 @@ async def delete_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db),
 
 async def _vehicle_schema(v: Vehicle, db: AsyncSession) -> dict:
     driver = (await db.execute(
-        select(User).where(User.vehicle_id == v.id, User.role == UserRole.driver).limit(1)
+        select(User).where(
+            User.vehicle_id == v.id,
+            User.organization_id == v.organization_id,
+            User.role == UserRole.driver,
+        ).limit(1)
     )).scalar_one_or_none()
     gps = None
     if driver:

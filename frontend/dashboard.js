@@ -342,6 +342,8 @@
           last_gps_label: v.last_gps ? `${Number(v.last_gps.lat).toFixed(2)}, ${Number(v.last_gps.lon).toFixed(2)}` : '',
           last_gps_at: v.last_gps?.recorded_at ? v.last_gps.recorded_at.replace('T', ' ').slice(0, 16) : '',
           status: v.status || '가용',
+          driverId: v.driver_id || null,
+          driver: v.driver_name || '',
         }));
       }
 
@@ -2153,6 +2155,7 @@
     hideDashboardMap();
     const orderTabs = ['전체', '접수', '배차', '운행중', '완료'];
     const filteredOrders = DATA.orders.filter(o => dashOrderTab === '전체' || o.status === dashOrderTab);
+    const dashboardOrders = filteredOrders.slice(0, 5);
     const completed = DATA.orders.filter(o => o.status === '완료').length;
     const total = DATA.orders.length;
     const pct = total ? Math.round((completed / total) * 100) : 0;
@@ -2237,7 +2240,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${filteredOrders.length ? filteredOrders.map(o => `
+                  ${dashboardOrders.length ? dashboardOrders.map(o => `
                     <tr data-goto-orders>
                       <td>${o.id}</td>
                       <td>${o.customer}</td>
@@ -2250,6 +2253,7 @@
                 </tbody>
               </table>
               <div class="dash-orders-ft">
+                <span>${filteredOrders.length > 5 ? `최근 5건 표시 · 전체 ${filteredOrders.length}건` : `전체 ${filteredOrders.length}건`}</span>
                 <button type="button" id="dashGoOrderList">전체 오더 목록 보기 →</button>
               </div>
             </div>
@@ -5246,7 +5250,10 @@
     container.style.width = '100%';
     container.style.height = '100%';
     mapCard.appendChild(container);
-    if (map) kakao.maps.event.trigger(map, 'resize');
+    if (map) {
+      kakao.maps.event.trigger(map, 'resize');
+      renderVehicleLocationMarkers();
+    }
   }
 
   function hideDashboardMap() {
@@ -5258,12 +5265,28 @@
 
   function updateDriverMarker(driverId, lat, lon, name) {
     if (!map) return;
+    const position = new kakao.maps.LatLng(lat, lon);
     if (_driverMarkers[driverId]) {
-      _driverMarkers[driverId].setPosition(new kakao.maps.LatLng(lat, lon));
+      _driverMarkers[driverId].setPosition(position);
+      _driverMarkers[driverId].setMap(map);
     } else {
-      const marker = new kakao.maps.Marker({ position: new kakao.maps.LatLng(lat, lon), title: name, map });
+      const marker = new kakao.maps.Marker({ position, title: name, map });
       _driverMarkers[driverId] = marker;
     }
+  }
+
+  function renderVehicleLocationMarkers() {
+    if (!map) return;
+    const bounds = new kakao.maps.LatLngBounds();
+    let count = 0;
+    DATA.vehicles.forEach(v => {
+      if (!v.driverId || v.start_lat == null || v.start_lon == null) return;
+      const driver = DATA.drivers.find(d => d.id === v.driverId);
+      updateDriverMarker(v.driverId, Number(v.start_lat), Number(v.start_lon), driver?.name || v.driver || v.plate);
+      bounds.extend(new kakao.maps.LatLng(Number(v.start_lat), Number(v.start_lon)));
+      count += 1;
+    });
+    if (count > 0) map.setBounds(bounds);
   }
 
   // ── WebSocket ──────────────────────────────────────────────────
@@ -5278,7 +5301,16 @@
         const msg = JSON.parse(e.data);
         if (msg.type === 'location' || msg.type === 'gps') {
           const d = DATA.drivers.find(x => x.id === (msg.driver_id || msg.user_id));
-          if (d) updateDriverMarker(d.id, msg.lat, msg.lon, d.name);
+          if (d) {
+            const v = DATA.vehicles.find(x => x.driverId === d.id);
+            if (v) {
+              v.start_lat = Number(msg.lat);
+              v.start_lon = Number(msg.lon);
+              v.last_gps_label = `${Number(msg.lat).toFixed(2)}, ${Number(msg.lon).toFixed(2)}`;
+              v.last_gps_at = '실시간';
+            }
+            updateDriverMarker(d.id, msg.lat, msg.lon, d.name);
+          }
         }
       } catch {}
     };

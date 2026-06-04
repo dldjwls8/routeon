@@ -6,6 +6,15 @@
 
 ---
 
+## v1.0.79 (2026-06-04)
+### 대시보드 차량 위치·오더 카드 보강
+- **대시보드 차량 위치 초기 표시 수정**: `/vehicles` 응답의 `last_gps`, `driver_id`, `driver_name`을 `DATA.vehicles`에 보존하고, 대시보드 지도 진입 시 기존 GPS 기반 기사/차량 마커를 즉시 렌더링하도록 수정. 기존에는 위치 WS 수신 이후에만 마커가 표시될 수 있었음
+- **실시간 위치 동기화 보강**: 위치 WS 수신 시 지도 마커뿐 아니라 차량의 `start_lat/start_lon`, `last_gps_label`, `last_gps_at`도 갱신해 재렌더 후에도 최신 위치가 유지되도록 수정
+- **차량 API 조직 격리 보강**: `_vehicle_schema()`의 연결 기사 조회에 `User.organization_id == Vehicle.organization_id` 조건을 추가해 차량 응답의 `driver_id`/`driver_name`이 같은 조직 기사만 참조하도록 정리
+- **대시보드 오더 카드 5건 제한**: 대시보드 첫 화면의 오더 요약 카드만 상태별 최대 5건 표시로 제한하고, 오더 관리 페이지 목록/페이지네이션은 기존 동작을 유지
+
+---
+
 ## v1.0.78 (2026-06-04)
 ### 슈퍼관리자 설정·대시보드 UX 정리
 - **기업 가입 신청 자동 수락 토글 추가**: `app_settings` 테이블과 `GET/PATCH /superadmin/settings` API를 추가하고, `superadmin.html` 운영 설정 탭에서 신규 기업 가입 신청 자동 승인 여부를 제어하도록 구현. ON 상태에서는 `POST /organizations`가 기업을 즉시 `approved`로 생성하고 승인 메일을 발송
