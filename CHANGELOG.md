@@ -6,12 +6,23 @@
 
 ---
 
+## v1.0.77 (2026-06-04)
+### 문서 구조 정리 및 최신화
+- **문서 역할 분리**: `CHANGELOG.md`는 완료된 버전별 변경 이력만 남기고 중복된 `예정 작업`/백로그 섹션 2건 제거
+- **CLAUDE 로드맵 축약**: `CLAUDE.md`의 긴 완료 체크리스트를 삭제하고, 완료 이력은 `CHANGELOG.md`를 단일 출처로 참조하도록 변경. 남은 작업/장기 과제만 짧게 유지
+- **API 문서 최신화**: `CLAUDE.md`에 최신 Waypoint 연락처 필드, `trip.cancelled`/`trip.progress_updated` WS 이벤트, 사용자·차량·배송 수정 API를 반영
+- **DB 연동 주석 최신화**: `DB_SCHEMA.md`의 Trip 취소 흐름과 차량 `weight_kg` 프론트 매핑 설명을 현재 코드 기준으로 정리
+
+---
+
 ## v1.0.76 (2026-06-04)
 ### 기사 앱 API 정합성 보강
 - **웹 배차 취소 앱 동기화**: `PATCH /trips/{id}/status?status=cancelled` 처리 시 Trip뿐 아니라 연결된 진행 배송도 `cancelled`로 변경하고 기사 앱 WS에 `trip.cancelled` 이벤트를 전송하도록 수정. 오더 취소가 연결 Trip의 마지막 진행 배송을 취소하는 경우에도 같은 이벤트를 전송
 - **세부 운행 단계 기록 추가**: `trips.current_phase`, `trips.phase_updated_at` 컬럼과 `PATCH /trips/{id}/progress` API 추가. 앱에서 상차/하차 waypoint 도착·출발 이벤트를 보내면 `waypoints[].arrived_at/departed_at`과 현재 단계(`loading_arrived`, `loading_completed`, `unloading_arrived`, `unloading_completed` 등)를 기록
 - **화주 연락처 전달 보강**: `deliveries.contact_phone`, `deliveries.shipper_phone` 컬럼 및 API 필드 추가. `GET /trips`/`GET /trips/{id}`의 waypoint 응답에 화주명, 담당자명, 담당자 연락처, 화주 연락처를 포함하도록 수정
 - **기사 취소 요청 사유 필수화**: `POST /trips/{id}/cancel-request`가 `{ "reason": "..." }`를 필수로 받아 저장·브로드캐스트하고, 관리자 승인 시 취소 처리와 앱 알림을 동일 경로로 수행
+
+---
 
 ## v1.0.75 (2026-06-03)
 ### 프론트엔드 오류 발견점 수정
@@ -990,28 +1001,6 @@
 - `updateProgressIndicator(driverId)` — GPS 수신마다 패널 진행도만 재렌더링 (스크롤 위치 보존)
 - `driverCurrentPositions` 전역 객체: WS GPS 수신 + 패널 열기 시 `/location-logs/{id}` API 위치로 초기화
 
----
-
-## 예정 작업
-
-### 진행 중 / 단기
-- [ ] Android 앱: `/optimize` 호출 시 `dest_name/dest_lat/dest_lon` 파라미터 지원 (팀원 A)
-- [x] 긴급 경유지 추가(`PATCH /trips/{id}/waypoints`) type=unloading 기본값 E2E 검증 — 정상 동작 확인
-- [x] 상차지 인근 기사 확인 — `GET /nearby-drivers` 구현 완료
-- [x] **ETA 실시간 추적** — GPS 핑 수신마다 남은 경유지 기준 예상 완료 시간 재계산 (출발 시각 고정 방식 → 현재 위치 기반 동적 갱신)
-- [ ] **지도 클릭 비활성화** — 지도와 상호작용하는 모든 클릭 이벤트 제거 (`chore/disable-map-interaction` 브랜치)
-
-### 기능 개발 백로그
-- [x] **관리자 프리셋 기능** — 자주 쓰는 상차지/하차지 조합 저장·불러오기·삭제
-- [x] **폴리라인 개선** — 기사별 단일 색상 + 지나온 구간 실시간 투명화
-- [ ] **UI/UX 리팩토링** — 관리자 웹 전반 일관성 개선, 컴포넌트 정리
-- [ ] **카카오 소셜 로그인** — 회원가입·로그인 시 카카오 OAuth 연동
-- [ ] **카카오톡 알림** — 운행 배차·경유지 추가·완료 등 주요 이벤트 카카오톡 메시지 발송
-
-### 마무리
-- [ ] 발표 준비
-
----
 ## v1.0.2 (2026-05-14)
 
 ### 기사 이름 필드 추가
@@ -1458,24 +1447,3 @@
 **앱 연동 완료**
 - `POST /location-logs` GPS 전송 (5초 주기)
 - WS `replan_requested` 수신 → 자동 replan
-
----
-
-## 예정 작업
-
-### 진행 중 / 단기
-- [ ] Android 앱: `/optimize` 호출 시 `dest_name/dest_lat/dest_lon` 파라미터 지원 (팀원 A)
-- [x] 긴급 경유지 추가(`PATCH /trips/{id}/waypoints`) type=unloading 기본값 E2E 검증 — 정상 동작 확인
-- [x] 상차지 인근 기사 확인 — `GET /nearby-drivers` 구현 완료
-- [x] **ETA 실시간 추적** — GPS 핑 수신마다 남은 경유지 기준 예상 완료 시간 재계산 (출발 시각 고정 방식 → 현재 위치 기반 동적 갱신)
-- [ ] **지도 클릭 비활성화** — 지도와 상호작용하는 모든 클릭 이벤트 제거 (`chore/disable-map-interaction` 브랜치)
-
-### 기능 개발 백로그
-- [x] **관리자 프리셋 기능** — 자주 쓰는 상차지/하차지 조합 저장·불러오기·삭제
-- [x] **폴리라인 개선** — 기사별 단일 색상 + 지나온 구간 실시간 투명화
-- [ ] **UI/UX 리팩토링** — 관리자 웹 전반 일관성 개선, 컴포넌트 정리
-- [ ] **카카오 소셜 로그인** — 회원가입·로그인 시 카카오 OAuth 연동
-- [ ] **카카오톡 알림** — 운행 배차·경유지 추가·완료 등 주요 이벤트 카카오톡 메시지 발송
-
-### 마무리
-- [ ] 발표 준비

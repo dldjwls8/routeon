@@ -84,8 +84,8 @@ routeon/
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
-    ├── dashboard.css       대시보드 스타일 (2,226줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (5,241줄, dashboard.html에서 분리)
+    ├── dashboard.css       대시보드 스타일 (2,245줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (5,364줄, dashboard.html에서 분리)
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=stats&page=trip-stats
@@ -116,13 +116,16 @@ routeon/
 {
   "name": "강남역", "lat": 37.4979, "lon": 127.0276,
   "type": "loading", "task_group": 0,
-  "recipient_name": "고객사명", "cargo_type": "파렛트",
+  "shipper_name": "화주명", "contact_name": "담당자명",
+  "contact_phone": "010-0000-0000", "shipper_phone": "02-000-0000",
+  "recipient_name": "수신자명", "cargo_type": "파렛트",
   "cargo_weight_ton": 2.0, "delivery_id": "uuid"
 }
 ```
 - `type`: `"loading"` (상차지) | `"unloading"` (하차지)
 - `task_group`: 같은 그룹의 loading-unloading 쌍을 OR-Tools pickup_deliveries 제약으로 묶음.
   `null`이면 자유 최적화 (긴급 배차 등). 운행 생성 패널과 자동 배차 모두 자동 부여.
+- `shipper_name` / `contact_name` / `contact_phone` / `shipper_phone`: 화주·담당자 연락처. 기사 앱 Trip API 응답에 포함.
 - `recipient_name` / `cargo_type` / `cargo_weight_ton`: 수신자·화물 종류·톤수. unloading 전용. 배차 시 Delivery 원본에서 복사.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 
@@ -153,7 +156,7 @@ await db.refresh(obj)
            └─ insert_rest_stops() — 6,000초 임계값 + find_best_rest_stop() picker
            └─ 휴식지 후보: highway_rest 전용 (75건) — 졸음쉼터·공영차고지·물류단지 제외
            └─ total_distance_km + estimated_duration_min 포함 응답
-           └─ trip.status → in_progress 변경
+           └─ trip.status → in_progress, current_phase → en_route_to_loading 변경
            └─ WS broadcast → 관리자에게 trip.started 이벤트 (대시보드 즉시 갱신)
 3. 기사:   POST /optimize/replan → 운행 중 재경로 (current_name 선택 입력)
            └─ current_name 미입력 시 카카오 역지오코딩으로 주소 자동 조회
@@ -201,6 +204,20 @@ await db.refresh(obj)
 {"type": "trip.assigned", "trip_id": "uuid", "driver_id": "uuid", "message": "새 배차가 배정되었습니다. 경로 최적화를 실행하세요."}
 ```
 앱에서 `driver_id`로 본인 건 필터링 후 `/optimize` 호출 안내.
+
+### WS 메시지 형식 (trip.cancelled)
+웹에서 Trip 또는 연결된 마지막 Delivery가 취소되거나, 기사 취소 요청을 관리자가 승인하면 같은 조직 기사 WS에 브로드캐스트.
+```json
+{"type": "trip.cancelled", "trip_id": "uuid", "driver_id": "uuid", "message": "배차가 취소되었습니다."}
+```
+앱은 현재 운행 목록을 다시 조회하고 해당 Trip을 숨김 또는 취소 상태로 반영한다.
+
+### WS 메시지 형식 (trip.progress_updated)
+기사 앱이 `PATCH /trips/{id}/progress`로 상차/하차 도착·출발·완료를 기록하면 같은 조직 관리자 WS에 브로드캐스트.
+```json
+{"type": "trip.progress_updated", "trip_id": "uuid", "driver_id": "uuid", "phase": "loading_completed", "waypoint_index": 0, "event": "completed"}
+```
+대시보드는 Trip 목록/상세를 다시 조회해 `current_phase`와 waypoint `arrived_at`/`departed_at`을 반영한다.
 
 ### WS 메시지 형식 (heartbeat)
 서버가 20초마다 클라이언트에 전송. 앱은 무시하거나 `{"type":"pong"}`으로 응답.
@@ -417,6 +434,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /deliveries` | 관리자 | 같은 조직 배송지 단건 등록 (`organization_id` 자동 지정) |
 | `POST /deliveries/batch` | 관리자 | 같은 조직 배송지 일괄 등록 |
 | `PATCH /deliveries/{id}/assign` | 관리자 | 같은 조직 기사 배정 |
+| `PATCH /deliveries/{id}` | 관리자 | 배송지 수정·상태 변경. 마지막 진행 배송 취소 시 연결 Trip도 cancelled 처리 |
 | `DELETE /deliveries/{id}` | 관리자 | 같은 조직 배송 취소 |
 | `GET /deliveries` | 로그인 | 관리자: 같은 조직 배송 목록 / 기사: 본인 배정 배송 목록 |
 | `GET /deliveries/{id}` | 로그인 | 배송 상세 |
@@ -435,6 +453,17 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `PATCH /customers/{id}` | 관리자 | 거래처 수정 |
 | `DELETE /customers/{id}` | 관리자 | 거래처 삭제 |
 | `WS /ws/location` | 로그인 | 실시간 위치 + 재경로 알림 WebSocket. 관리자→GPS 수신, 기사→replan_requested 수신 |
+
+### 사용자/차량
+| 엔드포인트 | 권한 | 설명 |
+|-----------|------|------|
+| `GET /users?role=` | 관리자 | 같은 조직 사용자 목록. `role=driver/admin/pending` 필터 지원 |
+| `PATCH /users/{id}` | 관리자 | 기사/관리자 정보 수정. 기사 상태·배정 차량 변경 포함 |
+| `DELETE /users/{id}` | 관리자 | 같은 조직 사용자 삭제. 본인 삭제 불가 |
+| `GET /vehicles` | 관리자 | 같은 조직 활성 차량 목록. `last_gps`, `driver_id`, `driver_name` 포함 |
+| `POST /vehicles` | 관리자 | 차량 등록 |
+| `PATCH /vehicles/{id}` | 관리자 | 차량 제원·상태·배정 기사 수정 |
+| `DELETE /vehicles/{id}` | 관리자 | 차량 비활성화 |
 
 ### 통계
 | 엔드포인트 | 권한 | 설명 |
@@ -526,193 +555,16 @@ Android 앱 채팅 구현 필수 사항:
 
 ---
 
-## 개발 로드맵
+## 남은 작업
 
-- [x] FastAPI 백엔드 + Docker 5컨테이너
-- [x] PostgreSQL + TimescaleDB + Redis
-- [x] JWT 인증 + 회원가입/로그인
-- [x] 배송 CRUD API
-- [x] GPS 수신 + 50m 자동 완료
-- [x] 카카오맵/모빌리티 API 전환
-- [x] OR-Tools TSP + 휴게소 삽입 마이그레이션
-- [x] 비동기(asyncio) 전환
-- [x] 관리자 웹 (로그인, 대시보드, 카카오맵)
-- [x] PATCH /auth/me 회원 정보 수정
-- [x] lon/lng 통일
-- [x] 졸음쉼터 시드 데이터 253건 + 휴게소·공영차고지·물류단지 156건 (총 409건)
-- [x] TTL 캐시 + find_best_rest_stop picker
-- [x] extra_stops / route_mode / dist_matrix
-- [x] WebSocket 실시간 위치
-- [x] GET /trips/{id}/polyline 경로선 API
-- [x] 관리자 웹 실시간 경로선 표시
-- [x] PATCH /trips/{id}/waypoints 원격 배차
-- [x] PATCH /trips/{id}/status 운행 완료/취소
-- [x] 앱 연동 확인
-- [x] 다중 기업(organizations) 구조
-- [x] 슈퍼 관리자 기업 심사 (승인/반려 + 이메일 알림)
-- [x] Oracle Cloud 서버 마이그레이션
-- [x] 관리자/기사 1:1 채팅 (conversations/messages, WS /ws/chat)
-- [x] 대시보드 UX 개편 — 지도 클릭 팝업, 운행 생성 인라인 패널
-- [x] GraphHopper 전환 + WS 조직 격리 버그 수정
-- [x] 지도 POI 팝업 (장소명·전화·카테고리·링크) + 호버 커서
-- [x] 운행 생성 플로우 재설계 — 상차지/하차지 분리, 기사 출발지 GPS 폴백, 태스크 단위 입력(상차지 1개+하차지 N개 묶음)
-- [x] 전체 기사 폴리라인 동시 표시 + 실시간 관제 (기사별 색상 팔레트, dim/highlight)
-- [x] 통계/애널리틱스 대시보드 (dashboard.html `trip-stats`, /stats/* API)
-- [x] WS 버그 수정 — driver 403, 20초 끊김 (heartbeat + uvicorn ping + nginx timeout)
-- [x] 상차지 인근 기사 확인 — GET /nearby-drivers (Redis 위치 기준, 반경 필터, 거리순 정렬)
-- [x] 관리자 프리셋 — GET/POST/DELETE /presets, 대시보드 불러오기·저장·삭제 UI
-- [x] 폴리라인 개선 — 기사별 단일 색상 + 지나온 구간 실시간 투명화 (GPS 수신마다 setPath 재분할)
-- [x] 채팅 UI 분리 — chat.html 별도 페이지 (기사 카드 💬 버튼 → 새 탭 열기, IME 버그·줄바꿈 수정)
-- [x] 채팅 새 메시지 배지 실시간 갱신 — dashboard WS /ws/chat 경량 연결, chat.read 수신 시 즉시 배지 초기화
-- [x] 대시보드 실시간 반영 — trip.started/trip.replanned WS 브로드캐스트, 운행 완료·취소 후 폴리라인 즉시 제거, 기사 강퇴·배송 삭제 즉시 반영
-- [x] 설정 페이지 (settings.html) — 조직코드 관리, 계정 정보 변경, 기사 자동승인 토글 UI (관리자 전용 인증 가드)
-- [x] 기사·차량 관리 통합 — dashboard.html `drivers`/`vehicles` 탭에서 처리, 기존 drivers.html/vehicles.html은 리다이렉트 진입점으로 유지
-- [x] Android 앱: `/optimize` dest_* 파라미터 추가 (팀원 A)
-- [x] 긴급 배차 개선 — 긴급 경유지 추가 버튼을 상차지/하차지로 분리, `addEmergencyWaypoint(type)` type 파라미터 전달, 백엔드는 WaypointSchema가 이미 type 지원
-- [x] 긴급 배차 태스크 단위 묶음 — 상차지 클릭 시 임시 저장(`_emergencyTask`), 하차지 N개 지도 클릭으로 순차 추가, 배지에 구성 목록 표시, ✅ 전송 버튼으로 한 번에 서버 전송(같은 task_group 부여). 상차지 없이 하차지만 추가 시 즉시 전송(task_group=null) 유지
-- [x] 기사·차량 운행 생성 테스트 하네스 — curl 기반 통합 테스트 (운행 생성·최적화·완료·교체·자동배차·취소요청 흐름 전수 검증)
-- [x] 통계 강화 — `GET /stats/by-driver-day` 신규 엔드포인트, 기사별 추이 라인 차트(건수/거리 탭 전환), 기사별 실적 CSV 내보내기(BOM UTF-8)
-- [x] 통계 전면 개편 — 기간 드롭다운(오늘/이번 주/이번 달/전체), 기사·차량 필터, 상태별 4카드+배정·안전 3카드, 기사별 실적(운행 일수·시간 합), 차량별 실적 테이블, 과거 경로 지도(GPS 궤적 폴리라인), `trips.safety_issue` 컬럼 추가, waypoints `arrived_at`/`departed_at` 머문 시간 스키마
-- [x] 운행 자동 배차 — `POST /trips/auto-dispatch` + `GET /drivers/available`, 배송 태스크(상차지+하차지) N개를 기사 위치 기반 greedy 배정(위치 미확인 시 라운드 로빈), 대시보드 "🚛 자동 배차" 버튼 → 모달(태스크 입력 + 장소 검색 자동완성 + 기사 칩 선택 + 분배 미리보기)
-- [x] 기사·차량 교체 — `PATCH /trips/{id}/reassign`, 기사/차량 단순 교체 또는 현재 운행 취소 + 잔여 경유지 새 운행 이관(transfer_remaining), 대시보드 "🔄 기사·차량 교체" 버튼 → 모달(기사·차량 드롭다운 + 이관 옵션)
-- [x] 기사 배차 취소 요청 — `POST /trips/{id}/cancel-request` (기사), `POST /trips/{id}/cancel-request/respond?action=approve|reject` (관리자), WS `trip.cancel_requested`/`trip.cancel_responded` 브로드캐스트, 대시보드 notice 박스·카드 배지 즉시 반영
-- [x] 예상 운행 완료 시간 — `_trip_schema`에 `started_at` 추가, `calcETADate()` + `formatCardETA()`로 기사 카드·패널에 완료 예상 시각·남은 시간 표시, 1분 주기 setInterval 갱신
-  - ETA 공식: `started_at + estimated_duration_min` (출발 시각 기준 고정 완료 예상 시각)
-  - `_trip_schema`의 datetime 필드(`created_at`, `started_at`, `completed_at`)에 `Z` 접미사 필수 — 없으면 JS가 KST로 파싱해 9시간 오차 발생
-- [x] 기사 현재 위치 경로 진행도 UI — 수직 타임라인 형태로 경로 노드 표시, `haversineKm` + `buildCumulativeDist` + `getNodeRatios` + `getDriverRatio`로 폴리라인 누적 거리 비율 계산, 구간 connector 높이 실제 거리 비율 반영(44~140px), 🚚 인디케이터 connector 내 정확한 비율 위치 표시, 지나온 노드 체크(✓) + dim, GPS 수신마다 `updateProgressIndicator()` 갱신
-- [x] 기사 마지막 위치 DB 폴백 — `GET /location-logs/{user_id}` Redis miss 시 TimescaleDB 최근 기록 조회, `is_realtime`/`recorded_at` 응답, 대시보드 패널 🟢/🔘 위치 배지
-- [x] 자동 배차 위치 기반 greedy 배정 — 상차지 기준 최근접 기사 greedy 배정, 배정 후 기준 위치 갱신, 위치 미확인 기사 라운드 로빈 폴백
-- [x] 운행 생성 패널 태스크 단위 입력 — 상차지+하차지 분리 목록 → 태스크 카드(상차지 N개+하차지 N개 묶음) 구조, 카카오 Places 자동완성 + 지도 클릭 병행, 상차지 복수 지원(`loadings[]`)
-- [x] OR-Tools pickup_deliveries 제약 도입 — `_apply_loading_precedence` 제거, `task_group` 필드로 상차-하차 쌍 보장하면서 전체 순서는 OR-Tools 자유 최적화
-- [x] `/optimize` `started_at` 버그 수정 — in_progress 전환 시 started_at 미기록 문제 수정 (ETA 계산 정상화)
-- [x] 다크/라이트/자동 테마 시스템 — CSS custom properties + `html[data-theme]` + FOUC 방지 스크립트, OS 설정 자동 감지(`prefers-color-scheme`), 테마 선택 UI settings.html 이관
-- [x] 탑바 버튼 수정 — 🔔 알림 드롭다운, ⚙ 설정 이동, 👤 관리자 드롭다운(프로필/설정/로그아웃)
-- [x] settings.html UI/UX 개편 — 대시보드 디자인 시스템 통일, 화면 설정 카드(테마 세그먼트) 추가
-- [x] 전체 공개 페이지 테마 통일 — login / index / chat / register 다크·라이트 적용, register 파일 선택 UI 커스텀 드롭존
-- [x] LoginRequest.password 필드 누락 버그 수정 (로그인 500 오류)
-- [x] 백엔드 라우터 도메인별 모듈 분리 — `main.py` 3,312줄 → 59줄, `backend/routers/` 11개 파일, `backend/core/` config·managers·utils 분리, API 호환성 유지
-- [x] dashboard.html CSS/JS 파일 분리 — 6,048줄 → HTML 65줄 + `dashboard.css` + `dashboard.js` 별도 파일
-- [x] 대시보드 실 API 연동 완성 — 오더 목록·배차 assign·기사·차량·Trip 상태·통계 그래프·고객 위치 지도·Trip 폴리라인·거래처 CRUD (`GET/POST/PATCH/DELETE /customers`)
-- [x] 프론트엔드 포트 변경 — `docker-compose.yml` `3000:80` → `80:80`, 표준 HTTP 포트로 서비스
-- [x] 채팅 알림 WS 연동 — dashboard.js `connectChatWebSocket()` + `loadChatConversations()` + `updateChatNotifUI()`, 🔔 빨간 점 배지, 알림 드롭다운 미읽 목록(클릭 시 chat.html 새 탭), 기사 테이블 행 unread 배지
-- [x] 페이지네이션 실 구현 — `PAGE_SIZE=20`, `orderPage`/`vehiclePage`/`customerPage`/`driverPage` 독립 상태, 실제 건수 기반 페이지 계산, ‹ › 이전/다음 버튼, 필터·검색 변경 시 1페이지 리셋
-- [x] 담당자(staff) 실 연동 — `GET /users?role=admin` 로드, `POST /auth/register(role=admin)` 추가 모달, `DELETE /users/{id}` 삭제 (본인 삭제 불가·"나" 배지)
-- [x] 일정 캘린더/간트/마일스톤 실 연동 — `GET /trips` + `GET /deliveries` → 현재 월 캘린더·오늘 간트·운행 이력 마일스톤
-- [x] 배차 탭 빈 페이지 버그 수정 — `plan = undefined`일 때 template literal TypeError → optional chaining 적용 (`renderDispatchAssign`, `renderBulkDispatch`)
-- [x] vehicles `weight_kg` 필드명 불일치 버그 수정 — API 응답 `weight_kg`를 프론트가 `max_load_kg`로 접근 → 톤수 항상 "0.0톤" 표시, `loadRealData`·`vehiclePreviewHtml`·`applyVehicleMetaToRow`·일괄배차 프리뷰 4개소 수정
-- [x] 대시보드 필터 클릭 시 지도 사라짐 버그 수정 — `renderDashboard()` 내 `root.innerHTML` 실행 전에 `hideDashboardMap()` 호출 추가, `#map-container` 파괴 방지
-- [x] 다크모드 모달 흰 배경 버그 수정 — `.modal { background: #fff }` 하드코딩 → `var(--dark-card)`, `.modal-hd/.modal-ft` 보더 `var(--dark-border)`, 모달 내 input/select/textarea 다크 스타일, 라이트모드 오버라이드
-- [x] UI 레이아웃 버그 4건 수정 — 접수 버튼 sticky 고정, 좌우 패널 `grid-template-rows:1fr`로 높이 일치, 고객위치 맵 재로드 시 `_miniMapInstance` 초기화, 자기사·차량 좌측 패널 높이 채움
-- [x] **[배차] 일괄 자동 배차 실 API 연동** — `renderBulkDispatch` 목업 배너 제거, 실 데이터 초기화(`stops`·`vehicles`), `POST /trips/auto-dispatch` 연동, 결과 Trip→plans 변환
-- [x] **[배차] 단건·수동 배차 실 API 연동** — `renderDispatchAssign` 목업 배너 제거, `#runDispatch` → `POST /trips/auto-dispatch`, `#addDispatchOrder` → `POST /deliveries`, `#singleDispatch` → `PATCH /deliveries/{id}/assign`, `#btnTripCreate`·`#btnAppHandoff`·`#manualReassign` 목업 toast 정리
-- [x] **[배차] 배차 화면 지도 4곳 렌더링** — `map-placeholder` → 카카오맵 실 렌더링 (일괄 배차 센터 지도·경로 지도, 단건 배차 선택건 경로·배차 결과 경로) — `setTimeout(() => kakao.maps.Map(...), 0)` 패턴
-- [x] **[기본정보] 내 정보 저장** — `renderProfile` 저장 버튼 `PATCH /auth/me` 연동 (v1.0.52)
-- [x] **[오더관리] 접수창 엑셀 임포트** — `#excelImport` 버튼 SheetJS 파싱 + `POST /deliveries/batch` 연동 (헤더 기반 컬럼 매핑, 대기열 추가) (v1.0.53)
-- [x] **[대시보드] 홈 화물 집계 실 데이터화** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 실 집계로 교체 (v1.0.54)
-- [x] **[운행 현황] 운행 중 기사·차량 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 제거, 실제 API 저장 연동 (v1.0.55)
-- [x] **[배차] 경로 계산 실 API 연동** — `bindRouteCalc` mock → `POST /route/preview` GraphHopper 실 도로 경로, 지도 폴리라인 오버레이 (v1.0.66)
-- [x] **[배차] 일괄 배차 기사 앱 WS 알림** — `POST /trips/auto-dispatch` 완료 후 `trip.assigned` 이벤트 WS 브로드캐스트 (v1.0.66)
-- [x] **[오더관리] 운행중 오더 상태 변경 저장** — `orderIsEditable` 조건 분리(`canSave`), 완료·취소 외 모든 상태에서 상태 드롭다운 저장 가능 (v1.0.67)
-- [x] **[고객관리] 위치 목록 읽기전용 전환** — `locModal` 추가·편집 버튼 제거, 오더 하차지 파생 읽기 전용 뷰로 변경 (v1.0.68)
-- [x] **[접수창] 상차지·하차지 기본값 제거** — 접수창 진입 시 sample 오더에서 pickup/delivery 미리채움 제거 (v1.0.69)
-- [x] **[접수창] 자동완성 표시 개선** — 중복 place_name 필터, 실제 장소명 우선 정렬, category_group_name 뱃지, 최대 7건 표시 (v1.0.69)
-- [x] **[접수창] 자동완성 키보드 화살표 시각 피드백** — `setActive()` 헬퍼로 ArrowDown/ArrowUp 하이라이트 추가 (v1.0.69)
-- [x] **[접수창] 자동완성 드롭다운 다크모드 대응** — 배경·테두리·텍스트·hover 전부 다크 테마 변수로 교체 (v1.0.70)
-- [x] **[배차] cargo_type·cargo_weight_ton·recipient_name waypoints 누락 버그 수정** — 일괄 배차·수동 배차 tasks 구성(프론트 2곳) + `dispatch.py` waypoints dict(백엔드 1곳) 총 3곳 수정 (v1.0.71)
-- [x] **[기사 앱] Trip 하차지 카운트 누락 수정** — `POST /trips`의 `dest_*` 목적지를 신규 생성/조회 응답에서 `type=unloading` waypoint로 보강해 앱 `unloading_count=0` 표시 문제 해결 (v1.0.72)
-- [x] **[정합성] 버전·URL·라우터 문서 정리** — FastAPI 메타 버전 갱신, 프론트 API/WS base 동적 계산, 이메일 공개 URL 환경변수화, GraphHopper 산출물 gitignore 정리 (v1.0.73)
-- [x] **[프론트 통합] stats/drivers/vehicles 독립 페이지 레거시화** — `dashboard.html?main=&page=` 직접 진입 지원, 세 HTML은 통합 대시보드 탭으로 리다이렉트 (v1.0.74)
-- [x] **[정합성] 차량·배송 조직 격리** — `vehicles.organization_id`, `deliveries.organization_id` 추가, 차량·배송 조회/생성/수정/삭제/배정 및 통계 배송 집계 조직 기준 제한 (v1.0.75)
-- [x] **[프론트 오류 발견점 수정]** — 오더 수정 모달 `scheduled` 배송 상태 제거, `기사 앱 전달` 목업 문구를 `앱 조회 상태` 안내로 변경, 차량 최근 GPS 인천 고정 좌표 제거, 접수창 기존 오더 고객·희망도착 기본값 제거 (v1.0.75)
-- [x] **[기사 앱 API] 취소·진행 상세 보강** — 웹 Trip/오더 취소 시 앱 WS `trip.cancelled`, 연결 Delivery 취소 동기화, `PATCH /trips/{id}/progress`, `current_phase`, 화주 연락처 waypoint 응답, 취소 요청 사유 필수화 (v1.0.76)
+완료된 상세 이력은 `CHANGELOG.md`를 단일 출처로 관리한다. 이 섹션에는 아직 남은 작업이나 장기 과제만 짧게 기록한다.
 
-### 장기 과제 (미정)
-- [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)
-- [ ] UI/UX 리팩토링
-- [ ] 카카오 소셜 로그인 (회원가입·로그인 OAuth 연동)
-- [ ] 카카오톡 알림 (배차·경유지 추가·완료 등)
+### 단기 확인
+- [ ] Android 앱에서 `PATCH /trips/{id}/progress` 연동 후 상차/하차 단계 기록 확인
+- [ ] 웹 취소 이벤트(`trip.cancelled`)가 기사 앱에서 즉시 반영되는지 E2E 확인
+
+### 장기 과제
+- [ ] UI/UX 리팩토링 — 관리자 웹 전반 일관성 개선, 컴포넌트 정리
+- [ ] 카카오 소셜 로그인 — 회원가입·로그인 OAuth 연동
+- [ ] 카카오톡 알림 — 배차·경유지 추가·완료 등 주요 이벤트 알림
 - [ ] 발표 준비
-
-### dashboard.js 목업 → 실 API 연동 예정 목록
-
-#### 높은 우선순위 (핵심 업무 흐름)
-- [x] **오더 목록 실 API 연동** — `DATA.orders` 인메모리 → `GET /deliveries` 조회, 오더 접수 `POST /deliveries/batch` 저장
-- [x] **배차 assign 저장** — toast(목업) → `PATCH /deliveries/{id}/assign` 실제 연동
-- [x] **dashboard 내 기사 등록/수정/삭제** — toast(목업) → `POST /auth/register`, `DELETE /users/{id}`, `POST /auth/approve/{id}` (통합 대시보드에서 처리)
-- [x] **dashboard 내 차량 등록/삭제** — toast(목업) → `POST /vehicles`, `DELETE /vehicles/{id}` (통합 대시보드에서 처리)
-- [x] **pending 기사 승인** — dashboard에서 승인 대기 목록 표시 + `POST /auth/approve/{user_id}` 연동
-
-#### 중간 우선순위
-- [x] **Trip 상태 변경 UI** — `tripDetailBodyHtml` 완료/취소 버튼 + `PATCH /trips/{id}/status` 연동
-- [x] **Trip 궤적 지도 (통계 페이지)** — 기사별 실적 행 클릭 → `GET /stats/route-history` + 카카오맵 폴리라인
-- [x] **고객 위치 지도** — `map-placeholder` → 카카오맵 마커 (`initCustomerLocMap`) 배송지 좌표 표시
-- [x] **통계 일별 그래프** — `GET /stats/by-day` SVG 막대 그래프 (`renderByDayChart`) 조회 버튼 연동
-- [x] **기사·차량 교체/대차** — 목업 배너 제거 + `PATCH /trips/{id}/reassign` 실 연동
-- [x] **Trip 경로 폴리라인** — Trip 상세 패널 `tripRouteMapCanvas` + `showTripRoutePolyline()` + `GET /trips/{id}/polyline`
-- [x] **고객(거래처) 저장** — `GET/POST/PATCH/DELETE /customers` 신규 구현, `customerModal` · `bindCustomerDetail` · `openTempCustomerModal` 연동
-
-#### 낮은 우선순위 (Phase 2)
-- [x] **엑셀 임포트 (운행 생성 패널)** — SheetJS 파싱 + `POST /deliveries/batch` 실 연동 완료 (v1.0.39) ※ 오더 접수창(`#excelImport`) 별도 미구현
-- [x] **채팅 알림 (dashboard)** — `connectChatWebSocket()` WS `/ws/chat` 수신 전용 연결, `loadChatConversations()` 초기 unread 반영, `updateChatNotifUI()` 🔔 배지 + 드롭다운 + 기사 테이블 배지 갱신
-- [x] **페이지네이션** — `PAGE_SIZE=20`, 리스트별 독립 페이지 상태(`orderPage`/`vehiclePage`/`customerPage`/`driverPage`), 필터·검색 변경 시 1페이지 리셋
-- [x] **담당자(staff) 관리** — `GET /users?role=admin` 실 연동, `POST /auth/register(role=admin)` 추가, `DELETE /users/{id}` 삭제, 본인 행 "나" 배지·삭제 불가 처리
-- [x] **일정 캘린더/간트/마일스톤** — `GET /trips` + `GET /deliveries` 실 연동: 캘린더는 현재 월 동적 표시·이달 이벤트 필터, 간트는 오늘 운행 06–21시 타임라인, 마일스톤은 취소 제외 최근 30건 운행 이력
-
-#### 미완성·목업 잔존 항목 (2026-06-02 파악)
-- [x] **일괄 자동 배차 저장** — `renderBulkDispatch` 목업 제거, `POST /trips/auto-dispatch` 실 연결, 결과 Trip→plans 변환, 지도 렌더링 (v1.0.51)
-- [x] **단건·수동 배차 저장** — `renderDispatchAssign` 목업 제거, `#runDispatch` → `POST /trips/auto-dispatch`, `#singleDispatch` → `PATCH /deliveries/{id}/assign`, `#addDispatchOrder` → `POST /deliveries` (v1.0.51)
-- [x] **배차 화면 지도 4곳** — 카카오맵 `setTimeout` 패턴으로 렌더링: `bulkDepotMapPreview`(센터 위치), `bulkRouteMap`(배차 결과 경유지), `dispatchRouteMap`(선택 건 출발·도착), 배차 결과 지도 (v1.0.51)
-- [x] **내 정보 저장** — `renderProfile` 탭 분리(내 정보/비밀번호 변경), `PATCH /auth/me` 실 연동, `DATA.me` 전역 저장 (v1.0.52)
-- [x] **접수창 엑셀 임포트** — `renderOrderIntake` `#excelImport` SheetJS 파싱, 헤더 기반 컬럼 매핑(화주명·상차지·하차지·화물종류·중량·희망도착 등), 파싱 결과를 `addPendingIntake` 대기열에 추가 (v1.0.53)
-- [x] **대시보드 홈 화물 집계** — `cargoChips` 하드코딩 제거, `DATA.orders` 화물 종류별 그룹·중량 합산 실 집계, 상위 6종 표시, 데이터 없을 시 "접수된 화물 없음" 표시 (v1.0.54)
-- [x] **운행 중 교체·대차 Phase 2** — `handoverMockDisclaimerHtml` 목업 배너 삭제, 사고신고 `PATCH /trips/{id}/safety` 실 연동, 차량 상세 저장 `PATCH /vehicles/{id}` 실 연동 (v1.0.55)
-
-#### 신규 파악 항목 (2026-06-03)
-
-##### 즉시 수정
-- [x] **[오더관리] 오더 취소 API 연동** — 취소 버튼 async onclick: `PATCH /deliveries/{id}` status=cancelled 실 연동, DB Enum cancelled 추가 (v1.0.56)
-- [x] **[오더관리] 오더 삭제 API 연동** — 삭제 버튼 async onclick: `DELETE /deliveries/{id}` 실 연동 (v1.0.56)
-- [x] **[오더관리] 오더 수정 저장 API 연동** — 저장 콜백 async: `PATCH /deliveries/{id}` 실 연동 (address, pickup_address, cargo_type, cargo_weight_ton, deadline 등) (v1.0.56)
-- [x] **[배차] 배차 일자 하드코딩 수정** — `value="2026-06-01"` → `new Date().toISOString().slice(0,10)` 오늘 날짜 동적 설정 (v1.0.56)
-
-##### 단기
-- [x] **[오더관리] 접수창 복수 상·하차지 추가** — `addIntakePickupStop` / `addIntakeDeliveryStop` DOM 동적 추가, `collectIntakeRows` pair-wise 배송 건 생성, `commitIntakeRow` 제출 후 extra row 정리 (v1.0.57)
-- [x] **[배차] 권역·거점 필터 연동** — `dispatchRegionSel` · `dispatchSiteSel` 상태 변수, `_passRegion` / `_passSite` 필터 함수, 테이블·`runDispatch` 양쪽 적용 (v1.0.58)
-
-##### 낮음 (정리)
-- [x] **목업 텍스트 잔존 제거** — 차량 패널 · 임시화주 필터 `(목업)` 문구 제거 (v1.0.59)
-- [x] **데드 코드 삭제** — `ROUTEON_GEN_TASKS` · `BULK_NODE_ROWS` 미사용 상수 삭제 (v1.0.59)
-- [x] **`mockNow` / `mockToday` 함수명 변경** → `nowStr` / `todayStr` 리네임 (v1.0.59)
-
-#### 버그 수정 (2026-06-03, v1.0.60)
-- [x] **`toast` 에러 타입 지원** — `toast(msg, 'error')` 시 `.toast-error` (빨간 배경) 적용
-- [x] **`dispatchFleet` 기사 매핑 오류** — 인덱스 기반 → `vehicleId` 기반 실 배정으로 수정
-- [x] **통계 차량 필터 미적용** — `GET /stats/by-day` 호출 시 `vehicle_id` 파라미터 전달
-- [x] **`fleet-driver-select` NaN 버그** — `Number(sel.value)` → `sel.value || null` (UUID 대응)
-- [x] **`(가짜 데이터)` 문구 잔존** — `renderTripStats` 페이지 설명에서 삭제
-- [x] **`normalizeDispatchListRow` 하드코딩 지역 매핑** — 가짜 데이터 잔재 `{ T5: '인천', ... }` 삭제
-- [x] **`runAutoDispatch` 데드 코드 삭제** — 미호출 + `vehicle_ids` 오파라미터 함수 제거
-- [x] **`pendingIntakes` 접수 후 중복 push** — 제거 후 `unassignedForDispatch`를 `DATA.orders`만 참조하도록 단순화
-
-#### 미완성·개선 항목 (2026-06-03 프론트엔드 코드 점검) — 2026-06-03 전체 완료
-
-##### 🔴 버그/불일치
-- [x] **WebSocket URL 하드코딩** → HTTP API base와 WS base를 분리해 Nginx 경유 `/api`·`/ws`와 직접 `:8000` 접속 모두 지원
-- [x] **차량 상세 저장 — 상태·연결기사 DB 미반영** → `vehicles.status` 컬럼 추가, `VehicleUpdate`에 `status`/`driver_id` 추가, PATCH에서 User.vehicle_id 동기화
-- [x] **기사 상세 저장 — 상태·배정차량 DB 미반영** → `users.vehicle_id`/`users.driver_status` 컬럼 추가, `PATCH /users/{id}` 엔드포인트 신설, 프론트 async PATCH 호출
-
-##### 🟡 미구현
-- [x] **캘린더 이전/다음 달 이동 없음** → `calendarYear`/`calendarMonth` 상태 변수 추가, `‹ ›` 네비게이션 버튼 + "오늘" 버튼 구현
-- [x] **통계 기사별 거리 평균 항상 '—'** → `by-driver` API에 `avg_distance_km` 필드 추가, 프론트 바인딩
-- [x] **통계 차트 자동 로드 없음** → `renderTripStats` 진입 시 `setTimeout(() => statsApply.click(), 0)` 자동 호출
-- [x] **접수창 장소 검색 자동완성 미구현** → `bindPlaceSearch` 함수 추가 (카카오 Places `keywordSearch` + 키보드 네비게이션 드롭다운)
-
-##### 🔵 UX 개선
-- [x] **오더 목록에서 접수창 이동 버튼 없음** → `card-hd`에 `+ 접수 창` 버튼 추가
-
-#### 배차 불가 버그 수정 (2026-06-03, v1.0.63)
-- [x] **접수창 좌표 미수집** — `collectIntakeRow()`에서 `input.dataset.lat/lon`을 읽지 않아 모든 접수 건 좌표 null 저장 → `puEl.dataset.lat/lon`, `delEl.dataset.lat/lon` 읽도록 수정
-- [x] **`commitPendingRowsToOrders` null 하드코딩** — `lat/lon/pickup_lat/pickup_lon: null` 고정 → `r.lat ?? null` 실값 전달
-- [x] **`DeliveryUpdate` 좌표 필드 누락** — `PATCH /deliveries/{id}`에 `lat/lon/pickup_lat/pickup_lon` 필드 없어 좌표 업데이트 불가 → 4개 필드 추가 + 엔드포인트 처리 추가
-- [x] **`/location-logs` 500 오류** — 기사 앱이 null 좌표 전송 시 Pydantic `float` validation 실패 → `lat/lon` Optional 처리, null이면 저장 스킵 후 `{"ok": true}` 반환
-- [x] **기존 pending 배송 좌표 없음** — 좌표 없던 pending 6건을 카카오 geocoding API로 일괄 복구

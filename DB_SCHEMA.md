@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-04 (v1.0.76 기준)
+> 최종 검토: 2026-06-04 (v1.0.77 기준, 스키마 변경 없음)
 
 ---
 
@@ -322,9 +322,9 @@ in_progress → done_manual : PATCH /deliveries/{id}/complete (수동 완료)
 ## Trip status 변경 흐름
 
 ```
-scheduled → in_progress  : POST /optimize 호출 시 자동
-in_progress → completed  : PATCH /trips/{id}/status?status=completed
-in_progress → cancelled  : PATCH /trips/{id}/status?status=cancelled
+scheduled → in_progress          : POST /optimize 호출 시 자동
+in_progress → completed          : PATCH /trips/{id}/status?status=completed
+scheduled/in_progress → cancelled: PATCH /trips/{id}/status?status=cancelled
 ```
 
 completed 처리 시:
@@ -348,11 +348,13 @@ cancelled 처리 시:
 ### vehicles — API vs 프론트 필드명
 | DB 컬럼 | API 응답 | 프론트 `DATA.vehicles` | 비고 |
 |---------|---------|----------------------|------|
-| `weight_kg` | `weight_kg` | `max_load_kg` (0으로 표시) | 프론트 변수명 불일치 — 향후 `weight_kg` 통일 필요 |
+| `weight_kg` | `weight_kg` | `weight_kg`, `tonnage` | 프론트가 `weight_kg / 1000`으로 톤수 문자열 계산 |
 | `vehicle_type` | `vehicle_type` | `type` | 정상 매핑 |
 | `plate_number` | `plate_number` | `plate` | 정상 매핑 |
+| 배정 기사 | `driver_id`, `driver_name` | `driverId`, `driver` | 차량 상세/목록에서 사용 |
+| 최근 위치 | `last_gps` | `last_gps` | Redis 우선, miss 시 TimescaleDB 최근 기록 폴백 |
 
-> `vehicles` API는 `response_model` 없이 ORM 직렬화 반환 → `tonnage` / `max_load_kg` 필드 없음. 현재 프론트에서 톤수를 "0.0톤"으로 표시. 차량 등록 시 `vehicle_type` 필드에 "5톤카고" 형식으로 직접 기입 중.
+> `vehicles` API는 `weight_kg`를 원본 필드로 반환하고, 프론트에서 `tonnage` 표시값을 파생한다. 과거 `max_load_kg` 접근으로 톤수가 `0.0톤`으로 보이던 문제는 v1.0.75에서 수정됨.
 
 ### deliveries status 매핑
 | DB `status` | 프론트 표시 | 배차 탭 노출 조건 |
