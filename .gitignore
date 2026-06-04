@@ -27,6 +27,9 @@ Engine/*.osm.pbf
 test_frontend.py
 backend/test_polyline.py
 
+# 사용자/기업 업로드 파일
+backend/uploads/
+
 # OS
 .DS_Store
 Thumbs.db
