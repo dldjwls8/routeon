@@ -101,6 +101,23 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT '가용';"
         ))
+        await conn.execute(text(
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"
+        ))
+        await conn.execute(text("""
+            UPDATE vehicles v
+               SET organization_id = u.organization_id
+              FROM users u
+             WHERE v.organization_id IS NULL
+               AND u.vehicle_id = v.id
+               AND u.organization_id IS NOT NULL;
+        """))
+        await conn.execute(text("""
+            UPDATE vehicles
+               SET organization_id = (SELECT id FROM organizations ORDER BY id LIMIT 1)
+             WHERE organization_id IS NULL
+               AND EXISTS (SELECT 1 FROM organizations);
+        """))
 
         # users.vehicle_id / users.driver_status 컬럼 추가
         await conn.execute(text(
@@ -109,3 +126,31 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS driver_status VARCHAR(20);"
         ))
+
+        # deliveries.organization_id 컬럼 추가
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"
+        ))
+        await conn.execute(text("""
+            UPDATE deliveries d
+               SET organization_id = u.organization_id
+              FROM users u
+             WHERE d.organization_id IS NULL
+               AND d.assigned_to = u.id
+               AND u.organization_id IS NOT NULL;
+        """))
+        await conn.execute(text("""
+            UPDATE deliveries d
+               SET organization_id = u.organization_id
+              FROM trips t
+              JOIN users u ON u.id = t.driver_id
+             WHERE d.organization_id IS NULL
+               AND d.trip_id = t.id
+               AND u.organization_id IS NOT NULL;
+        """))
+        await conn.execute(text("""
+            UPDATE deliveries
+               SET organization_id = (SELECT id FROM organizations ORDER BY id LIMIT 1)
+             WHERE organization_id IS NULL
+               AND EXISTS (SELECT 1 FROM organizations);
+        """))

@@ -137,7 +137,10 @@ async def auto_dispatch_trips(
         assigned_vehicle_ids = set(vehicle_by_driver.values())
         if assigned_vehicle_ids:
             vehicle_rows = (await db.execute(
-                select(Vehicle).where(Vehicle.id.in_(assigned_vehicle_ids))
+                select(Vehicle).where(
+                    Vehicle.id.in_(assigned_vehicle_ids),
+                    Vehicle.organization_id == current_user.organization_id,
+                )
             )).scalars().all()
             vehicles = {v.id: v for v in vehicle_rows}
             missing = assigned_vehicle_ids - set(vehicles)
@@ -149,7 +152,10 @@ async def auto_dispatch_trips(
 
     if req.vehicle_id is not None:
         vehicle = (await db.execute(
-            select(Vehicle).where(Vehicle.id == req.vehicle_id)
+            select(Vehicle).where(
+                Vehicle.id == req.vehicle_id,
+                Vehicle.organization_id == current_user.organization_id,
+            )
         )).scalar_one_or_none()
         if not vehicle:
             raise HTTPException(404, "차량을 찾을 수 없습니다.")

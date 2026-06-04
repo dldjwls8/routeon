@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-03 (v1.0.73 기준)
+> 최종 검토: 2026-06-03 (v1.0.75 기준)
 
 ---
 
@@ -64,6 +64,7 @@
 | 컬럼 | 타입 | 제약 | 설명 |
 |------|------|------|------|
 | `id` | INTEGER | PK AUTOINCREMENT | |
+| `organization_id` | INTEGER | FK → organizations.id | 소속 기업. 관리자 조회/수정/삭제는 이 값으로 격리 |
 | `plate_number` | VARCHAR(20) | UNIQUE NOT NULL | 차량 번호판 |
 | `vehicle_type` | VARCHAR(50) | NOT NULL | 예: 5톤카고, 15톤탑차 |
 | `height_m` | FLOAT | NOT NULL | 차량 높이 (m) |
@@ -160,6 +161,7 @@
 | 컬럼 | 타입 | 제약 | 설명 |
 |------|------|------|------|
 | `id` | UUID | PK | |
+| `organization_id` | INTEGER | FK → organizations.id | 소속 기업. 관리자 조회/수정/삭제는 이 값으로 격리 |
 | `assigned_to` | UUID | FK → users.id | 담당 기사 |
 | `trip_id` | UUID | FK → trips.id | 소속 운행 |
 | `address` | VARCHAR(255) | NOT NULL | 하차 주소 |
@@ -306,7 +308,7 @@ in_progress → done_manual : PATCH /deliveries/{id}/complete (수동 완료)
 
 수정 가능 조건:
 - `pending` 상태일 때만 **주소·화물 필드** 수정 가능 (`PATCH /deliveries/{id}`)
-- `pending` / `in_progress` / `scheduled(배차)` 상태는 **상태(status) 변경** 가능 — 관리자 웹 오더 수정 모달의 `canSave` 로직 적용
+- `pending` / `in_progress` 상태는 **상태(status) 변경** 가능 — 관리자 웹 오더 수정 모달의 `canSave` 로직 적용
 - `done` / `done_manual` 상태는 수정·취소·삭제 불가
 - `cancelled` 상태는 삭제만 가능 (`DELETE /deliveries/{id}`)
 

@@ -172,6 +172,7 @@ class Vehicle(Base):
     __tablename__ = "vehicles"
 
     id           = Column(Integer, primary_key=True, autoincrement=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     plate_number = Column(String(20), unique=True, nullable=False)
     vehicle_type = Column(String(50), nullable=False)
     height_m     = Column(Float, nullable=False)
@@ -251,6 +252,7 @@ class Delivery(Base):
     __tablename__ = "deliveries"
 
     id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id  = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     assigned_to      = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     trip_id          = Column(UUID(as_uuid=True), ForeignKey("trips.id"), nullable=True)
     address          = Column(String(255), nullable=False)   # 하차 주소

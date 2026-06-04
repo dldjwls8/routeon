@@ -315,10 +315,10 @@
           tonnage: v.tonnage || `${((v.weight_kg || 0) / 1000).toFixed(1)}톤`,
           type: v.vehicle_type || '카고',
           weight_kg: v.weight_kg || 0,
-          start_lat: 37.4563,
-          start_lon: 126.7052,
-          last_gps_label: '',
-          last_gps_at: '',
+          start_lat: v.last_gps?.lat ?? null,
+          start_lon: v.last_gps?.lon ?? null,
+          last_gps_label: v.last_gps ? `${Number(v.last_gps.lat).toFixed(2)}, ${Number(v.last_gps.lon).toFixed(2)}` : '',
+          last_gps_at: v.last_gps?.recorded_at ? v.last_gps.recorded_at.replace('T', ' ').slice(0, 16) : '',
           status: v.status || '가용',
         }));
       }
@@ -954,9 +954,12 @@
 
   function vehicleLastGpsDetailHtml(v) {
     if (!v) return '<p class="empty-hint">차량 미선택</p>';
+    const coord = v.start_lat != null && v.start_lon != null
+      ? `${Number(v.start_lat).toFixed(6)}, ${Number(v.start_lon).toFixed(6)}`
+      : 'GPS 미수신';
     return `
       <label>마지막 GPS <span class="badge badge-muted">읽기 전용</span></label>
-      <p style="margin:0;font-size:13px">${v.start_lat}, ${v.start_lon} · 갱신 ${vehicleLastGpsAt(v)}</p>
+      <p style="margin:0;font-size:13px">${coord} · 갱신 ${vehicleLastGpsAt(v)}</p>
       <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">관리자 입력 없음 · 앱 위치 로그 기준</p>`;
   }
 
@@ -2835,8 +2838,8 @@
         label: v?.plate || `차량${f.id}`,
         plate: v?.plate || '—', tonnage: v?.tonnage || '—',
         type: v?.type || '—', weight_kg: v?.weight_kg || 0,
-        start_lat: v?.start_lat || 37.4563, start_lon: v?.start_lon || 126.7052,
-        start_city: '', end_policy: 'open_end', driver: d?.name || '—',
+        start_lat: v?.start_lat ?? null, start_lon: v?.start_lon ?? null,
+        start_city: vehicleLastGpsLabel(v), end_policy: 'open_end', driver: d?.name || '—',
       };
     });
     const bd = DATA.bulkDispatch;
@@ -2908,7 +2911,7 @@
                   <div class="vehicle-preview bulk-vehicle-preview" data-bulk-row="${v.id}">
                     <strong>${v.plate}</strong> · ${v.tonnage || '—'} · ${v.type || '—'} · max ${v.weight_kg} kg
                     <div class="fleet-meta">
-                      <span>출발: 최근 GPS (${Number(v.start_lat).toFixed(2)}, ${Number(v.start_lon).toFixed(2)})</span>
+                      <span>출발: 최근 GPS ${v.start_lat != null && v.start_lon != null ? `(${Number(v.start_lat).toFixed(2)}, ${Number(v.start_lon).toFixed(2)})` : '(미수신)'}</span>
                       <span class="coord">${v.start_city || '—'} · GPS</span>
                     </div>
                   </div>
@@ -3239,7 +3242,9 @@
       if (!ord) { toast('배송 건을 먼저 선택하세요'); return; }
       const v = vehicleById(dispatchManualVehicleId);
       const stops = [];
-      if (v) stops.push({ seq: 1, name: `출발 (${v.plate})`, lat: v.start_lat, lon: v.start_lon, role: '출발' });
+      if (v?.start_lat != null && v?.start_lon != null) {
+        stops.push({ seq: 1, name: `출발 (${v.plate})`, lat: v.start_lat, lon: v.start_lon, role: '출발' });
+      }
       if (ord.pickup_lat && ord.pickup_lon) {
         stops.push({ seq: stops.length + 1, name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon, role: '상차' });
       } else if (ord.pickup && ord.pickup !== '—') {
@@ -3570,7 +3575,7 @@
             <div class="card-actions" style="margin-top:16px">
               <button type="button" class="btn btn-primary" id="btnTripCreate">Trip 생성</button>
               <button type="button" class="btn" id="btnFinalCheck">순서 확인</button>
-              <button type="button" class="btn btn-primary" id="btnAppHandoff">기사 앱 전달</button>
+              <button type="button" class="btn btn-primary" id="btnAppHandoff">앱 조회 상태</button>
             </div>
           </div>
         </div>
@@ -3906,8 +3911,8 @@
     $('#btnAppHandoff', root).onclick = () => {
       const assigned = DATA.dispatchAssigned;
       if (!assigned.length) { toast('배차 결과가 없습니다. 먼저 배차를 실행하세요'); return; }
-      openModal('기사 앱 전달 완료', `
-        <p style="font-size:13px;margin-bottom:12px">아래 기사의 앱으로 배차 알림이 전송되었습니다.<br>기사가 앱에서 <strong>경로 최적화</strong>를 실행하면 운행이 시작됩니다.</p>
+      openModal('기사 앱 조회 가능', `
+        <p style="font-size:13px;margin-bottom:12px">아래 Trip은 서버에 생성되어 기사 앱의 운행 목록에서 조회 가능합니다.<br>별도 푸시 알림은 전송하지 않으며, 기사가 앱에서 <strong>경로 최적화</strong>를 실행하면 운행이 시작됩니다.</p>
         <ul class="route-list">
           ${assigned.map(a => `<li><strong>${a.driver}</strong> · ${a.plate} (${a.tonnage})<br><small style="color:var(--text-muted)">${a.label}</small></li>`).join('')}
         </ul>`);
@@ -4414,7 +4419,7 @@
     const custOpts = DATA.customers.map(c =>
       `<option value="${c.name}" ${c.name === o.customer ? 'selected' : ''}>${c.name}</option>`
     ).join('');
-    const statusOpts = ['접수', '배차', '운행중', '완료', '취소'].map(s =>
+    const statusOpts = ['접수', '운행중', '완료', '취소'].map(s =>
       `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
     ).join('');
     // 완료·취소 상태는 조회 전용, 나머지는 상태 변경 가능 (접수 상태만 필드 전체 수정)
@@ -4441,7 +4446,7 @@
       const form = $('#orderEditForm');
       if (!form) return;
       if (canSave) {
-        const statusKoMap = { '접수': 'pending', '배차': 'scheduled', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
+        const statusKoMap = { '접수': 'pending', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
         const selectedStatus = form.querySelector('[name="status"]')?.value;
         const body = { status: statusKoMap[selectedStatus] || undefined };
         if (orderIsEditable(o)) {
@@ -4900,9 +4905,7 @@
   }
 
   function renderOrderIntake(root) {
-    const sample = DATA.orders.find(o => o.status === '접수') || DATA.orders[0];
-    const sampleCustId = sample ? DATA.customers.find(c => c.name === sample.customer)?.id : null;
-    const selectedCustId = root._intakeCustomerId ?? sampleCustId;
+    const selectedCustId = root._intakeCustomerId ?? null;
     const custOpts = intakeCustomerSelectOptions(selectedCustId);
     const taskCount = root._taskCount || 1;
     root._pendingIntakes = root._pendingIntakes || [];
@@ -4923,7 +4926,7 @@
               <div class="intake-layout-wrap">
                 <div class="intake-main">
                   <div id="taskCardsList">
-                    ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(i + 1, custOpts, i === 0 ? sample : null, i * 10)).join('')}
+                    ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(i + 1, custOpts, null, i * 10)).join('')}
                   </div>
                   <button type="button" class="intake-aux-link" id="addTaskCard" style="margin-bottom:8px">+ 태스크 추가</button>
                   <div class="intake-actions" style="margin-top:10px">

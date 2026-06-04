@@ -47,15 +47,21 @@ class VehicleCreate(BaseModel):
 @router.get("/vehicles")
 async def get_vehicles(db: AsyncSession = Depends(get_db),
                  current_user: User = Depends(require_admin)):
-    _r = await db.execute(select(Vehicle).where(Vehicle.is_active == True))
-    return _r.scalars().all()
+    _r = await db.execute(
+        select(Vehicle).where(
+            Vehicle.is_active == True,
+            Vehicle.organization_id == current_user.organization_id,
+        )
+    )
+    vehicles = _r.scalars().all()
+    return [await _vehicle_schema(v, db) for v in vehicles]
 
 @router.post("/vehicles", status_code=201)
 async def create_vehicle(req: VehicleCreate, db: AsyncSession = Depends(get_db),
                    current_user: User = Depends(require_admin)):
-    v = Vehicle(**req.model_dump())
+    v = Vehicle(**req.model_dump(), organization_id=current_user.organization_id)
     db.add(v); await db.commit(); await db.refresh(v)
-    return v
+    return await _vehicle_schema(v, db)
 
 class VehicleUpdate(BaseModel):
     vehicle_type: Optional[str] = None
@@ -68,7 +74,12 @@ class VehicleUpdate(BaseModel):
 async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
                          db: AsyncSession = Depends(get_db),
                          current_user: User = Depends(require_admin)):
-    _r = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    _r = await db.execute(
+        select(Vehicle).where(
+            Vehicle.id == vehicle_id,
+            Vehicle.organization_id == current_user.organization_id,
+        )
+    )
     v = _r.scalar_one_or_none()
     if not v:
         raise HTTPException(404, "차량을 찾을 수 없습니다.")
@@ -82,28 +93,86 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
         v.status = req.status
     if 'driver_id' in req.model_fields_set:
         # 기존 연결 기사의 vehicle_id 해제
-        _old = await db.execute(select(User).where(User.vehicle_id == vehicle_id))
+        _old = await db.execute(
+            select(User).where(
+                User.vehicle_id == vehicle_id,
+                User.organization_id == current_user.organization_id,
+            )
+        )
         for old_d in _old.scalars().all():
             old_d.vehicle_id = None
         # 새 기사 연결
         if req.driver_id:
-            _new = await db.execute(select(User).where(User.id == uuid_lib.UUID(req.driver_id)))
+            _new = await db.execute(
+                select(User).where(
+                    User.id == uuid_lib.UUID(req.driver_id),
+                    User.organization_id == current_user.organization_id,
+                    User.role == UserRole.driver,
+                )
+            )
             new_d = _new.scalar_one_or_none()
-            if new_d:
-                new_d.vehicle_id = vehicle_id
+            if not new_d:
+                raise HTTPException(404, "같은 조직의 기사를 찾을 수 없습니다.")
+            new_d.vehicle_id = vehicle_id
     await db.commit()
     await db.refresh(v)
-    return v
+    return await _vehicle_schema(v, db)
 
 @router.delete("/vehicles/{vehicle_id}", status_code=204)
 async def delete_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db),
                    current_user: User = Depends(require_admin)):
-    _r = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    _r = await db.execute(
+        select(Vehicle).where(
+            Vehicle.id == vehicle_id,
+            Vehicle.organization_id == current_user.organization_id,
+        )
+    )
     v = _r.scalar_one_or_none()
     if not v:
         raise HTTPException(404, "차량을 찾을 수 없습니다.")
     v.is_active = False
     await db.commit()
+
+
+async def _vehicle_schema(v: Vehicle, db: AsyncSession) -> dict:
+    driver = (await db.execute(
+        select(User).where(User.vehicle_id == v.id, User.role == UserRole.driver).limit(1)
+    )).scalar_one_or_none()
+    gps = None
+    if driver:
+        val = redis.get(f"location:{driver.id}")
+        if val:
+            lat_s, lon_s = val.split(",")
+            gps = {"lat": float(lat_s), "lon": float(lon_s), "recorded_at": None}
+        else:
+            loc = (await db.execute(
+                select(Location)
+                .where(Location.user_id == driver.id)
+                .order_by(Location.recorded_at.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+            if loc:
+                gps = {
+                    "lat": loc.lat,
+                    "lon": loc.lon,
+                    "recorded_at": loc.recorded_at.isoformat(),
+                }
+    return {
+        "id": v.id,
+        "organization_id": v.organization_id,
+        "plate_number": v.plate_number,
+        "vehicle_type": v.vehicle_type,
+        "height_m": v.height_m,
+        "weight_kg": v.weight_kg,
+        "length_cm": v.length_cm,
+        "width_cm": v.width_cm,
+        "status": v.status,
+        "is_active": v.is_active,
+        "created_at": v.created_at.isoformat() if v.created_at else None,
+        "driver_id": str(driver.id) if driver else None,
+        "driver_name": driver.name or driver.username if driver else None,
+        "last_gps": gps,
+    }
 
 
 # ────────────────────────────────────────────────

@@ -109,18 +109,20 @@ async def stats_summary(
     del_stmt = select(
         func.count().filter(Delivery.trip_id != None).label("assigned"),
         func.count().filter(Delivery.trip_id == None).label("unassigned"),
-    )
+    ).where(Delivery.organization_id == current_user.organization_id)
     if cutoff:
         del_stmt = del_stmt.where(Delivery.created_at >= cutoff)
     if driver_ids:
         assigned_sub = select(Delivery.id).join(Trip, Delivery.trip_id == Trip.id).where(Trip.driver_id.in_(driver_ids))
         unassigned_del_stmt = select(func.count()).select_from(Delivery).where(
-            Delivery.trip_id == None
+            Delivery.trip_id == None,
+            Delivery.organization_id == current_user.organization_id,
         )
         if cutoff:
             unassigned_del_stmt = unassigned_del_stmt.where(Delivery.created_at >= cutoff)
         assigned_del_stmt = select(func.count()).select_from(Delivery).where(
-            Delivery.id.in_(assigned_sub)
+            Delivery.id.in_(assigned_sub),
+            Delivery.organization_id == current_user.organization_id,
         )
         if cutoff:
             assigned_del_stmt = assigned_del_stmt.where(Delivery.created_at >= cutoff)

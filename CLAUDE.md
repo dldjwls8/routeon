@@ -353,9 +353,9 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 |-----------|------|------|
 | `GET /users?role=driver` | 관리자 | 같은 기업 유저 목록 |
 | `DELETE /users/{id}` | 관리자 | 유저 삭제 |
-| `GET /vehicles` | 관리자 | 차량 목록 |
-| `POST /vehicles` | 관리자 | 차량 등록 |
-| `DELETE /vehicles/{id}` | 관리자 | 차량 비활성화 |
+| `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 연결 기사 최신 GPS를 `last_gps`로 포함 |
+| `POST /vehicles` | 관리자 | 같은 조직 차량 등록 (`organization_id` 자동 지정) |
+| `DELETE /vehicles/{id}` | 관리자 | 같은 조직 차량 비활성화 |
 
 ### 기업(Organizations)
 | 엔드포인트 | 권한 | 설명 |
@@ -398,13 +398,13 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 배송/위치
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `POST /deliveries` | 관리자 | 배송지 단건 등록 |
-| `POST /deliveries/batch` | 관리자 | 배송지 일괄 등록 |
-| `PATCH /deliveries/{id}/assign` | 관리자 | 기사 배정 |
-| `DELETE /deliveries/{id}` | 관리자 | 배송 취소 |
-| `GET /deliveries` | 로그인 | 배송 목록 |
+| `POST /deliveries` | 관리자 | 같은 조직 배송지 단건 등록 (`organization_id` 자동 지정) |
+| `POST /deliveries/batch` | 관리자 | 같은 조직 배송지 일괄 등록 |
+| `PATCH /deliveries/{id}/assign` | 관리자 | 같은 조직 기사 배정 |
+| `DELETE /deliveries/{id}` | 관리자 | 같은 조직 배송 취소 |
+| `GET /deliveries` | 로그인 | 관리자: 같은 조직 배송 목록 / 기사: 본인 배정 배송 목록 |
 | `GET /deliveries/{id}` | 로그인 | 배송 상세 |
-| `PATCH /deliveries/{id}/complete` | 기사 | 수동 완료 |
+| `PATCH /deliveries/{id}/complete` | 기사 | 본인 배정 배송 수동 완료 |
 | `GET /address/coord?query=` | 없음 | 주소 → 좌표 변환 |
 | `POST /route/preview` | 관리자 | 경유지 순서대로 GraphHopper 실 도로 경로·거리·시간 반환. 좌표 없는 경유지 자동 스킵. 응답: `{distance_m, duration_sec, polyline: [[lat,lon],...]}` |
 | `POST /rest-spots` | 없음 | 근처 휴식 장소 검색 (카카오 로컬) |
@@ -605,6 +605,9 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[배차] cargo_type·cargo_weight_ton·recipient_name waypoints 누락 버그 수정** — 일괄 배차·수동 배차 tasks 구성(프론트 2곳) + `dispatch.py` waypoints dict(백엔드 1곳) 총 3곳 수정 (v1.0.71)
 - [x] **[기사 앱] Trip 하차지 카운트 누락 수정** — `POST /trips`의 `dest_*` 목적지를 신규 생성/조회 응답에서 `type=unloading` waypoint로 보강해 앱 `unloading_count=0` 표시 문제 해결 (v1.0.72)
 - [x] **[정합성] 버전·URL·라우터 문서 정리** — FastAPI 메타 버전 갱신, 프론트 API/WS base 동적 계산, 이메일 공개 URL 환경변수화, GraphHopper 산출물 gitignore 정리 (v1.0.73)
+- [x] **[프론트 통합] stats/drivers/vehicles 독립 페이지 레거시화** — `dashboard.html?main=&page=` 직접 진입 지원, 세 HTML은 통합 대시보드 탭으로 리다이렉트 (v1.0.74)
+- [x] **[정합성] 차량·배송 조직 격리** — `vehicles.organization_id`, `deliveries.organization_id` 추가, 차량·배송 조회/생성/수정/삭제/배정 및 통계 배송 집계 조직 기준 제한 (v1.0.75)
+- [x] **[프론트 오류 발견점 수정]** — 오더 수정 모달 `scheduled` 배송 상태 제거, `기사 앱 전달` 목업 문구를 `앱 조회 상태` 안내로 변경, 차량 최근 GPS 인천 고정 좌표 제거, 접수창 기존 오더 고객·희망도착 기본값 제거 (v1.0.75)
 
 ### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

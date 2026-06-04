@@ -86,6 +86,7 @@ async def create_delivery(
             raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
 
     delivery = Delivery(
+        organization_id  = current_user.organization_id,
         address          = req.address,
         lat              = req.lat,
         lon              = req.lon,
@@ -123,6 +124,7 @@ async def create_deliveries_batch(
             except ValueError:
                 raise HTTPException(400, f"deadline 형식 오류: {req.deadline}")
         d = Delivery(
+            organization_id=current_user.organization_id,
             address=req.address, lat=req.lat, lon=req.lon, deadline=deadline,
             recipient_name=req.recipient_name, cargo_type=req.cargo_type,
             cargo_weight_ton=req.cargo_weight_ton,
@@ -147,12 +149,23 @@ async def assign_delivery(
 ):
     """관리자: 배송지에 기사 배정"""
     import uuid as uuid_lib
-    _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
+    _r = await db.execute(
+        select(Delivery).where(
+            Delivery.id == uuid_lib.UUID(delivery_id),
+            Delivery.organization_id == current_user.organization_id,
+        )
+    )
     delivery = _r.scalar_one_or_none()
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
 
-    _r2 = await db.execute(select(User).where(User.id == uuid_lib.UUID(req.driver_id)))
+    _r2 = await db.execute(
+        select(User).where(
+            User.id == uuid_lib.UUID(req.driver_id),
+            User.organization_id == current_user.organization_id,
+            User.role == UserRole.driver,
+        )
+    )
     driver = _r2.scalar_one_or_none()
     if not driver:
         raise HTTPException(404, "기사를 찾을 수 없습니다.")
@@ -173,7 +186,12 @@ async def update_delivery(
 ):
     """관리자: 오더 수정 (상태 변경·필드 업데이트)"""
     from datetime import datetime
-    _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
+    _r = await db.execute(
+        select(Delivery).where(
+            Delivery.id == uuid_lib.UUID(delivery_id),
+            Delivery.organization_id == current_user.organization_id,
+        )
+    )
     delivery = _r.scalar_one_or_none()
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
@@ -224,7 +242,12 @@ async def delete_delivery(
 ):
     """관리자: 배송 취소 (삭제)"""
     import uuid as uuid_lib
-    _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
+    _r = await db.execute(
+        select(Delivery).where(
+            Delivery.id == uuid_lib.UUID(delivery_id),
+            Delivery.organization_id == current_user.organization_id,
+        )
+    )
     delivery = _r.scalar_one_or_none()
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
@@ -249,6 +272,8 @@ async def get_deliveries(
             Delivery.assigned_to == current_user.id,
             Delivery.status == DeliveryStatus.in_progress,
         )
+    else:
+        stmt = stmt.where(Delivery.organization_id == current_user.organization_id)
     stmt = stmt.order_by(Delivery.sequence, Delivery.created_at)
     _r = await db.execute(stmt)
     deliveries = _r.scalars().all()
@@ -263,7 +288,10 @@ async def get_delivery(
 ):
     """배송 상세 조회"""
     import uuid as uuid_lib
-    _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
+    stmt = select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id))
+    if current_user.role != UserRole.driver:
+        stmt = stmt.where(Delivery.organization_id == current_user.organization_id)
+    _r = await db.execute(stmt)
     delivery = _r.scalar_one_or_none()
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
@@ -277,6 +305,7 @@ def _delivery_schema(d: Delivery) -> dict:
     """Delivery 모델 → dict 변환 헬퍼"""
     return {
         "id":               str(d.id),
+        "organization_id":  d.organization_id,
         "address":          d.address,
         "lat":              d.lat,
         "lon":              d.lon,
@@ -316,6 +345,8 @@ async def manual_complete(
 
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
+    if delivery.assigned_to != current_user.id:
+        raise HTTPException(403, "본인에게 배정된 배송만 완료할 수 있습니다.")
     if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual):
         raise HTTPException(400, "이미 완료된 배송입니다.")
 

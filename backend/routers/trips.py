@@ -146,7 +146,10 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
     vehicle = None
     if req.vehicle_id is not None:
         vehicle = (await db.execute(
-            select(Vehicle).where(Vehicle.id == req.vehicle_id)
+            select(Vehicle).where(
+                Vehicle.id == req.vehicle_id,
+                Vehicle.organization_id == current_user.organization_id,
+            )
         )).scalar_one_or_none()
         if not vehicle:
             raise HTTPException(404, "차량을 찾을 수 없습니다.")
@@ -173,6 +176,7 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
             continue
         matched_delivery = (await db.execute(
             select(Delivery).where(
+                Delivery.organization_id == current_user.organization_id,
                 Delivery.assigned_to == driver_uuid,
                 Delivery.trip_id == None,
                 Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
@@ -201,7 +205,10 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
     if delivery_ids:
         await db.execute(
             update(Delivery)
-            .where(Delivery.id.in_(delivery_ids))
+            .where(
+                Delivery.id.in_(delivery_ids),
+                Delivery.organization_id == current_user.organization_id,
+            )
             .values(
                 trip_id=t.id,
                 assigned_to=driver_uuid,
@@ -524,7 +531,12 @@ async def reassign_trip(
             t.driver_id = new_driver_uuid
 
     if req.new_vehicle_id is not None and not req.transfer_remaining:
-        vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == req.new_vehicle_id))).scalar_one_or_none()
+        vehicle = (await db.execute(
+            select(Vehicle).where(
+                Vehicle.id == req.new_vehicle_id,
+                Vehicle.organization_id == current_user.organization_id,
+            )
+        )).scalar_one_or_none()
         if not vehicle:
             raise HTTPException(404, "차량을 찾을 수 없습니다.")
         if not vehicle.is_active:
