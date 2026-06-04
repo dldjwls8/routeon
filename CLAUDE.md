@@ -321,6 +321,21 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `completed` | 운행 완료 | PATCH /trips/{id}/status?status=completed |
 | `cancelled` | 취소 | PATCH /trips/{id}/status?status=cancelled |
 
+### Trip current_phase 값
+`Trip.status`는 앱 호환을 위해 4단계로 유지하고, 상차/하차 상세 진행은 `trips.current_phase`로 기록한다.
+
+| 값 | 의미 |
+|----|------|
+| `waiting` | 배차 후 출발 전 |
+| `en_route_to_loading` | 상차지 이동 중 |
+| `loading_arrived` | 상차지 도착 |
+| `loading_completed` | 상차 완료/상차지 출발 |
+| `en_route_to_unloading` | 하차지 이동 중 |
+| `unloading_arrived` | 하차지 도착 |
+| `unloading_completed` | 하차 완료 |
+| `completed` | 운행 완료 |
+| `cancelled` | 운행 취소 |
+
 ### 기업(Organization) 상태 값
 | 값 | 의미 |
 |----|------|
@@ -386,9 +401,10 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `GET /trips/{id}` | 로그인 | 운행 상세 |
 | `GET /trips/{id}/polyline` | 로그인 | 실제 도로 경로선 좌표 |
 | `PATCH /trips/{id}/waypoints` | 관리자 | 경유지 추가 + 앱에 재경로 알림 |
-| `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 (?status=completed\|cancelled) |
-| `POST /trips/{id}/cancel-request` | 기사 | 배차 취소 요청 `{reason?}` — WS `trip.cancel_requested` 브로드캐스트 |
-| `POST /trips/{id}/cancel-request/respond` | 관리자 | 취소 요청 승인/거절 `?action=approve\|reject` — WS `trip.cancel_responded` 브로드캐스트 |
+| `PATCH /trips/{id}/status` | 로그인 | 운행 완료/취소 (?status=completed\|cancelled). 취소 시 연결 배송도 cancelled 처리하고 기사 앱 WS `trip.cancelled` 전송 |
+| `PATCH /trips/{id}/progress` | 로그인 | 상차/하차 세부 진행 기록 `{waypoint_index, event: arrived\|departed\|completed}` 또는 `{phase}` |
+| `POST /trips/{id}/cancel-request` | 기사 | 배차 취소 요청 `{reason}` — 사유 필수, WS `trip.cancel_requested` 브로드캐스트 |
+| `POST /trips/{id}/cancel-request/respond` | 관리자 | 취소 요청 승인/거절 `?action=approve\|reject` — 승인 시 `trip.cancelled` + `trip.cancel_responded` 브로드캐스트 |
 | `PATCH /trips/{id}/reassign` | 관리자 | 기사·차량 교체 `{new_driver_id?, new_vehicle_id?, transfer_remaining}` — `transfer_remaining=true` 시 현재 운행 취소 + 잔여 경유지 새 운행 이관, WS `trip.reassigned` 브로드캐스트 |
 | `POST /optimize` | 로그인 | 경로 최적화. origin_lat/lon 미입력 시 Redis GPS 자동 사용. origin_name 미입력 시 역지오코딩 자동 조회. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로. current_name 미입력 시 역지오코딩 자동 조회 |
@@ -608,6 +624,7 @@ Android 앱 채팅 구현 필수 사항:
 - [x] **[프론트 통합] stats/drivers/vehicles 독립 페이지 레거시화** — `dashboard.html?main=&page=` 직접 진입 지원, 세 HTML은 통합 대시보드 탭으로 리다이렉트 (v1.0.74)
 - [x] **[정합성] 차량·배송 조직 격리** — `vehicles.organization_id`, `deliveries.organization_id` 추가, 차량·배송 조회/생성/수정/삭제/배정 및 통계 배송 집계 조직 기준 제한 (v1.0.75)
 - [x] **[프론트 오류 발견점 수정]** — 오더 수정 모달 `scheduled` 배송 상태 제거, `기사 앱 전달` 목업 문구를 `앱 조회 상태` 안내로 변경, 차량 최근 GPS 인천 고정 좌표 제거, 접수창 기존 오더 고객·희망도착 기본값 제거 (v1.0.75)
+- [x] **[기사 앱 API] 취소·진행 상세 보강** — 웹 Trip/오더 취소 시 앱 WS `trip.cancelled`, 연결 Delivery 취소 동기화, `PATCH /trips/{id}/progress`, `current_phase`, 화주 연락처 waypoint 응답, 취소 요청 사유 필수화 (v1.0.76)
 
 ### 장기 과제 (미정)
 - [ ] 폴리라인 개선 (구간별 색상, 애니메이션 등)

@@ -236,6 +236,10 @@ async def auto_dispatch_trips(
                                   "cargo_type": ld.cargo_type,
                                   "cargo_weight_ton": ld.cargo_weight_ton,
                                   "recipient_name": ld.recipient_name,
+                                  "shipper_name": ld.shipper_name,
+                                  "contact_name": ld.contact_name,
+                                  "contact_phone": ld.contact_phone,
+                                  "shipper_phone": ld.shipper_phone,
                                   "delivery_id": ld.delivery_id})
             for u in task.unloadings:
                 waypoints.append({"name": u.name, "lat": u.lat, "lon": u.lon,
@@ -243,6 +247,10 @@ async def auto_dispatch_trips(
                                   "cargo_type": u.cargo_type,
                                   "cargo_weight_ton": u.cargo_weight_ton,
                                   "recipient_name": u.recipient_name,
+                                  "shipper_name": u.shipper_name,
+                                  "contact_name": u.contact_name,
+                                  "contact_phone": u.contact_phone,
+                                  "shipper_phone": u.shipper_phone,
                                   "delivery_id": u.delivery_id})
                 if u.delivery_id:
                     try:

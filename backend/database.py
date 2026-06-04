@@ -131,6 +131,12 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"
         ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(20);"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS shipper_phone VARCHAR(20);"
+        ))
         await conn.execute(text("""
             UPDATE deliveries d
                SET organization_id = u.organization_id
@@ -154,3 +160,11 @@ async def init_db():
              WHERE organization_id IS NULL
                AND EXISTS (SELECT 1 FROM organizations);
         """))
+
+        # trips 상세 진행 상태 컬럼 추가
+        await conn.execute(text(
+            "ALTER TABLE trips ADD COLUMN IF NOT EXISTS current_phase VARCHAR(40) NOT NULL DEFAULT 'waiting';"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE trips ADD COLUMN IF NOT EXISTS phase_updated_at TIMESTAMP;"
+        ))

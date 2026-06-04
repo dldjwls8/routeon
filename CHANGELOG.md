@@ -6,6 +6,13 @@
 
 ---
 
+## v1.0.76 (2026-06-04)
+### 기사 앱 API 정합성 보강
+- **웹 배차 취소 앱 동기화**: `PATCH /trips/{id}/status?status=cancelled` 처리 시 Trip뿐 아니라 연결된 진행 배송도 `cancelled`로 변경하고 기사 앱 WS에 `trip.cancelled` 이벤트를 전송하도록 수정. 오더 취소가 연결 Trip의 마지막 진행 배송을 취소하는 경우에도 같은 이벤트를 전송
+- **세부 운행 단계 기록 추가**: `trips.current_phase`, `trips.phase_updated_at` 컬럼과 `PATCH /trips/{id}/progress` API 추가. 앱에서 상차/하차 waypoint 도착·출발 이벤트를 보내면 `waypoints[].arrived_at/departed_at`과 현재 단계(`loading_arrived`, `loading_completed`, `unloading_arrived`, `unloading_completed` 등)를 기록
+- **화주 연락처 전달 보강**: `deliveries.contact_phone`, `deliveries.shipper_phone` 컬럼 및 API 필드 추가. `GET /trips`/`GET /trips/{id}`의 waypoint 응답에 화주명, 담당자명, 담당자 연락처, 화주 연락처를 포함하도록 수정
+- **기사 취소 요청 사유 필수화**: `POST /trips/{id}/cancel-request`가 `{ "reason": "..." }`를 필수로 받아 저장·브로드캐스트하고, 관리자 승인 시 취소 처리와 앱 알림을 동일 경로로 수행
+
 ## v1.0.75 (2026-06-03)
 ### 프론트엔드 오류 발견점 수정
 - **오더 상태 불일치 수정**: 오더 수정 모달에서 백엔드 `DeliveryStatus`에 없는 `scheduled` 값을 보내던 `배차` 옵션 제거. 배송 상태 변경은 `접수`/`운행중`/`완료`/`취소`만 전송하도록 정리

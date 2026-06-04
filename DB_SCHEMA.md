@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-03 (v1.0.75 기준)
+> 최종 검토: 2026-06-04 (v1.0.76 기준)
 
 ---
 
@@ -112,7 +112,7 @@
 | `dest_name` | VARCHAR(200) | | 도착지 이름 (nullable — 기사가 /optimize 시 자동 결정 가능) |
 | `dest_lat` | FLOAT | | 도착지 위도 |
 | `dest_lon` | FLOAT | | 도착지 경도 |
-| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"recipient_name":str\|null,"cargo_type":str\|null,"cargo_weight_ton":float\|null,"delivery_id":uuid\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]`. `dest_*` 목적지가 별도 입력된 수동 Trip은 신규 생성 시 동일 좌표 중복 없이 `type="unloading"` waypoint로 보강되며, 기존 Trip 조회 응답도 같은 방식으로 보강됨 |
+| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"recipient_name":str\|null,"cargo_type":str\|null,"cargo_weight_ton":float\|null,"shipper_name":str\|null,"contact_name":str\|null,"contact_phone":str\|null,"shipper_phone":str\|null,"delivery_id":uuid\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]`. `dest_*` 목적지가 별도 입력된 수동 Trip은 신규 생성 시 동일 좌표 중복 없이 `type="unloading"` waypoint로 보강되며, 기존 Trip 조회 응답도 같은 방식으로 보강됨 |
 | `vehicle_height_m` | FLOAT | | 차량 높이 오버라이드 |
 | `vehicle_weight_kg` | FLOAT | | 총중량 오버라이드 |
 | `vehicle_length_cm` | FLOAT | | 차량 길이 오버라이드 |
@@ -120,6 +120,8 @@
 | `departure_time` | VARCHAR(50) | | 출발 예정 시각 ISO-8601 |
 | `optimized_route` | JSONB | | 최적화 결과 (아래 구조 참고) |
 | `status` | tripstatus | NOT NULL DEFAULT 'scheduled' | 운행 상태 |
+| `current_phase` | VARCHAR(40) | NOT NULL DEFAULT 'waiting' | 세부 운행 단계 — `waiting`, `en_route_to_loading`, `loading_arrived`, `loading_completed`, `en_route_to_unloading`, `unloading_arrived`, `unloading_completed`, `completed`, `cancelled` |
+| `phase_updated_at` | DATETIME | | 세부 운행 단계 갱신 시각 |
 | `is_emergency` | BOOLEAN | DEFAULT FALSE | 긴급 예외 적용 여부 |
 | `safety_issue` | BOOLEAN | NOT NULL DEFAULT FALSE | 안전 이슈 플래그 (앱에서 `PATCH /trips/{id}/safety`로 기록) |
 | `started_at` | DATETIME | | |
@@ -172,6 +174,8 @@
 | `pickup_lon` | FLOAT | NULLABLE | 상차 경도 |
 | `shipper_name` | VARCHAR(100) | NULLABLE | 화주명 |
 | `contact_name` | VARCHAR(100) | NULLABLE | 담당자명 |
+| `contact_phone` | VARCHAR(20) | NULLABLE | 담당자 연락처 |
+| `shipper_phone` | VARCHAR(20) | NULLABLE | 화주 연락처. 미입력 시 API 응답은 `contact_phone`으로 폴백 |
 | `mixed_load` | BOOLEAN | NOT NULL DEFAULT FALSE | 혼적 여부 |
 | `recipient_name` | VARCHAR(100) | NULLABLE | 수신자(고객사명) |
 | `cargo_type` | VARCHAR(100) | NULLABLE | 화물 종류 |
@@ -309,6 +313,7 @@ in_progress → done_manual : PATCH /deliveries/{id}/complete (수동 완료)
 수정 가능 조건:
 - `pending` 상태일 때만 **주소·화물 필드** 수정 가능 (`PATCH /deliveries/{id}`)
 - `pending` / `in_progress` 상태는 **상태(status) 변경** 가능 — 관리자 웹 오더 수정 모달의 `canSave` 로직 적용
+- 연결된 Trip의 마지막 진행 배송을 `cancelled`로 변경하면 Trip도 `cancelled` 처리되고 기사 앱 WS에 `trip.cancelled` 이벤트가 전송됨
 - `done` / `done_manual` 상태는 수정·취소·삭제 불가
 - `cancelled` 상태는 삭제만 가능 (`DELETE /deliveries/{id}`)
 
@@ -325,6 +330,16 @@ in_progress → cancelled  : PATCH /trips/{id}/status?status=cancelled
 completed 처리 시:
 - trips.completed_at 자동 기록
 - 소속 deliveries 중 in_progress 건 → done_manual 일괄 처리
+
+cancelled 처리 시:
+- trips.current_phase → `cancelled`
+- 소속 deliveries 중 pending/in_progress 건 → cancelled
+- 기사 앱 WS에 `trip.cancelled` 이벤트 전송
+
+세부 진행 기록:
+- `PATCH /trips/{id}/progress` body `{waypoint_index, event}` 또는 `{phase}`.
+- `event=arrived`는 해당 waypoint `arrived_at`, `event=departed|completed`는 `departed_at`을 기록.
+- loading waypoint는 `loading_arrived`/`loading_completed`, unloading waypoint는 `unloading_arrived`/`unloading_completed`로 `current_phase` 자동 계산.
 
 ---
 

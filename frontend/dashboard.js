@@ -497,7 +497,7 @@
           recipient: d.recipient_name || '',
           cargo: d.cargo_type || '',
           tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
-          contact: d.contact_name || '',
+          contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
           mixed_load: !!d.mixed_load,
         }));
         // 캘린더에 오더 이벤트 추가
@@ -886,6 +886,8 @@
       pickup_lon: r.pickup_lon ?? null,
       shipper_name: r.customer || null,
       contact_name: r.contact || null,
+      contact_phone: r.contact || null,
+      shipper_phone: r.contact || null,
       mixed_load: !!r.mixed_load,
     }));
     const res = await fetch(`${API}/deliveries/batch`, {
@@ -916,7 +918,7 @@
         recipient: d.recipient_name || '',
         cargo: d.cargo_type || '',
         tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
-        contact: d.contact_name || '',
+        contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
         mixed_load: !!d.mixed_load,
       });
     });
@@ -3185,7 +3187,14 @@
   function dispatchTaskFromOrder(ord) {
     if (!ord?.pickup_lat || !ord?.pickup_lon || !ord?.lat || !ord?.lon) return null;
     return {
-      loadings: [{ name: ord.pickup || '상차지', lat: ord.pickup_lat, lon: ord.pickup_lon }],
+      loadings: [{
+        name: ord.pickup || '상차지',
+        lat: ord.pickup_lat,
+        lon: ord.pickup_lon,
+        shipper_name: ord.customer || null,
+        contact_phone: ord.contact || null,
+        shipper_phone: ord.contact || null,
+      }],
       unloadings: [{
         name: ord.delivery || '하차지',
         lat: ord.lat,
@@ -3194,6 +3203,9 @@
         recipient_name: ord.recipient || null,
         cargo_type: ord.cargo || null,
         cargo_weight_ton: parseFloat(String(ord.tons || '').replace(/[^0-9.]/g, '')) || null,
+        shipper_name: ord.customer || null,
+        contact_phone: ord.contact || null,
+        shipper_phone: ord.contact || null,
       }],
     };
   }
@@ -3706,6 +3718,8 @@
               address: delivery, lat: coordDl?.lat || null, lon: coordDl?.lon || null,
               pickup_address: pickup, pickup_lat: coordPu?.lat || null, pickup_lon: coordPu?.lon || null,
               shipper_name: document.getElementById('addOrdShipper')?.value?.trim() || null,
+              contact_phone: null,
+              shipper_phone: null,
               cargo_type: document.getElementById('addOrdCargo')?.value?.trim() || null,
               cargo_weight_ton: parseFloat(document.getElementById('addOrdWeight')?.value) || null,
               deadline,
@@ -4474,6 +4488,8 @@
             cargo_type: cargo || undefined,
             cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
             contact_name: contact || undefined,
+            contact_phone: contact || undefined,
+            shipper_phone: contact || undefined,
             shipper_name: customer || undefined,
             deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
           });

@@ -120,6 +120,9 @@ async def create_location_log(
 
     if active_trip and active_trip.optimized_route:
         active_trip_id = str(active_trip.id)
+        if arrived:
+            active_trip.current_phase = "unloading_completed"
+            active_trip.phase_updated_at = datetime.utcnow()
         route = active_trip.optimized_route.get("route", [])
 
         done_r = await db.execute(
@@ -149,6 +152,8 @@ async def create_location_log(
         else:
             eta_remaining_min = 0.0
         redis.setex(f"eta:{active_trip.id}", 600, str(eta_remaining_min))
+        if arrived:
+            await db.commit()
 
     # 5. WebSocket 브로드캐스트 — 같은 조직 관리자에게만 전송
     if current_user.organization_id:

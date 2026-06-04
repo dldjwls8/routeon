@@ -257,6 +257,8 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     t.origin_lat  = origin_lat
     t.origin_lon  = origin_lon
     t.status      = TripStatus.in_progress
+    t.current_phase = "en_route_to_loading"
+    t.phase_updated_at = datetime.utcnow()
     t.is_emergency = req.is_emergency
     if not t.started_at:
         t.started_at = datetime.utcnow()

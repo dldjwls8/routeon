@@ -49,6 +49,8 @@ class DeliveryCreate(BaseModel):
     pickup_lon:       Optional[float] = None
     shipper_name:     Optional[str]   = None
     contact_name:     Optional[str]   = None
+    contact_phone:    Optional[str]   = None
+    shipper_phone:    Optional[str]   = None
     mixed_load:       bool            = False
 
 class DeliveryAssign(BaseModel):
@@ -67,6 +69,8 @@ class DeliveryUpdate(BaseModel):
     cargo_weight_ton: Optional[float] = None
     contact_name:     Optional[str]   = None
     shipper_name:     Optional[str]   = None
+    contact_phone:    Optional[str]   = None
+    shipper_phone:    Optional[str]   = None
     deadline:         Optional[str]   = None
 
 
@@ -99,6 +103,8 @@ async def create_delivery(
         pickup_lon       = req.pickup_lon,
         shipper_name     = req.shipper_name,
         contact_name     = req.contact_name,
+        contact_phone    = req.contact_phone,
+        shipper_phone    = req.shipper_phone or req.contact_phone,
         mixed_load       = req.mixed_load,
     )
     db.add(delivery)
@@ -130,7 +136,9 @@ async def create_deliveries_batch(
             cargo_weight_ton=req.cargo_weight_ton,
             pickup_address=req.pickup_address, pickup_lat=req.pickup_lat,
             pickup_lon=req.pickup_lon, shipper_name=req.shipper_name,
-            contact_name=req.contact_name, mixed_load=req.mixed_load,
+            contact_name=req.contact_name, contact_phone=req.contact_phone,
+            shipper_phone=req.shipper_phone or req.contact_phone,
+            mixed_load=req.mixed_load,
         )
         db.add(d)
         deliveries.append(d)
@@ -197,9 +205,11 @@ async def update_delivery(
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
     if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual):
         raise HTTPException(400, "완료된 배송은 수정할 수 없습니다.")
+    cancelled_now = False
     if req.status is not None:
         try:
             delivery.status = DeliveryStatus(req.status)
+            cancelled_now = delivery.status == DeliveryStatus.cancelled
         except ValueError:
             raise HTTPException(400, f"올바르지 않은 상태: {req.status}")
     if req.address is not None:
@@ -224,11 +234,41 @@ async def update_delivery(
         delivery.contact_name = req.contact_name
     if req.shipper_name is not None:
         delivery.shipper_name = req.shipper_name
+    if req.contact_phone is not None:
+        delivery.contact_phone = req.contact_phone
+    if req.shipper_phone is not None:
+        delivery.shipper_phone = req.shipper_phone
     if req.deadline is not None:
         try:
             delivery.deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
         except ValueError:
             raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
+    if cancelled_now and delivery.trip_id:
+        active_count = (await db.execute(
+            select(func.count(Delivery.id)).where(
+                Delivery.trip_id == delivery.trip_id,
+                Delivery.id != delivery.id,
+                Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+            )
+        )).scalar_one()
+        if active_count == 0:
+            trip = (await db.execute(select(Trip).where(Trip.id == delivery.trip_id))).scalar_one_or_none()
+            if trip and trip.status in (TripStatus.scheduled, TripStatus.in_progress):
+                trip.status = TripStatus.cancelled
+                trip.current_phase = "cancelled"
+                trip.phase_updated_at = datetime.utcnow()
+                trip.cancel_requested = False
+                if current_user.organization_id:
+                    payload = {
+                        "type": "trip.cancelled",
+                        "trip_id": str(trip.id),
+                        "driver_id": str(trip.driver_id),
+                        "reason": "관리자 웹에서 오더 취소",
+                        "cancelled_by": str(current_user.id),
+                        "message": "배차가 취소되었습니다.",
+                    }
+                    await manager.broadcast_replan_to_org(current_user.organization_id, payload)
+                    await manager.broadcast_to_org(current_user.organization_id, payload)
     await db.commit()
     await db.refresh(delivery)
     return _delivery_schema(delivery)
@@ -314,6 +354,8 @@ def _delivery_schema(d: Delivery) -> dict:
         "pickup_lon":       d.pickup_lon,
         "shipper_name":     d.shipper_name,
         "contact_name":     d.contact_name,
+        "contact_phone":    d.contact_phone,
+        "shipper_phone":    d.shipper_phone or d.contact_phone,
         "mixed_load":       d.mixed_load,
         "recipient_name":   d.recipient_name,
         "cargo_type":       d.cargo_type,

@@ -45,6 +45,10 @@ class WaypointSchema(BaseModel):
     recipient_name:   Optional[str] = None   # 수신자(고객사명) — unloading 전용
     cargo_type:       Optional[str] = None   # 화물 종류
     cargo_weight_ton: Optional[float] = None # 화물 톤수
+    shipper_name:     Optional[str] = None   # 화주명
+    contact_name:     Optional[str] = None   # 담당자명
+    contact_phone:    Optional[str] = None   # 담당자 연락처
+    shipper_phone:    Optional[str] = None   # 화주 연락처
     delivery_id:      Optional[str] = None   # Delivery UUID — auto-dispatch 연결용
 
 class TripCreate(BaseModel):
@@ -82,8 +86,77 @@ def _dest_waypoint(name: str, lat: float, lon: float) -> dict:
         "recipient_name": None,
         "cargo_type": None,
         "cargo_weight_ton": None,
+        "shipper_name": None,
+        "contact_name": None,
+        "contact_phone": None,
+        "shipper_phone": None,
         "delivery_id": None,
     }
+
+
+def _apply_delivery_to_waypoint(w: dict, delivery: Delivery) -> None:
+    w["recipient_name"] = w.get("recipient_name") or delivery.recipient_name
+    w["cargo_type"] = w.get("cargo_type") or delivery.cargo_type
+    w["cargo_weight_ton"] = (
+        w.get("cargo_weight_ton")
+        if w.get("cargo_weight_ton") is not None
+        else delivery.cargo_weight_ton
+    )
+    w["shipper_name"] = w.get("shipper_name") or delivery.shipper_name
+    w["contact_name"] = w.get("contact_name") or delivery.contact_name
+    w["contact_phone"] = w.get("contact_phone") or delivery.contact_phone
+    w["shipper_phone"] = w.get("shipper_phone") or delivery.shipper_phone or delivery.contact_phone
+
+
+def _assert_trip_access(t: Trip, current_user: User) -> None:
+    if current_user.role == UserRole.driver:
+        if str(t.driver_id) != str(current_user.id):
+            raise HTTPException(403, "본인 운행만 조회할 수 있습니다.")
+        return
+    if current_user.role == UserRole.superadmin:
+        return
+    if not current_user.organization_id:
+        raise HTTPException(403, "소속 조직이 없습니다.")
+    if not t.driver or t.driver.organization_id != current_user.organization_id:
+        raise HTTPException(403, "다른 조직 운행에는 접근할 수 없습니다.")
+
+
+async def _cancel_trip_and_deliveries(
+    db: AsyncSession,
+    t: Trip,
+    *,
+    reason: Optional[str] = None,
+    cancelled_by: Optional[str] = None,
+    org_id: Optional[int] = None,
+    notify: bool = True,
+) -> None:
+    t.status = TripStatus.cancelled
+    t.current_phase = "cancelled"
+    t.phase_updated_at = datetime.utcnow()
+    t.cancel_requested = False
+    if reason is not None:
+        t.cancel_request_reason = reason
+
+    await db.execute(
+        update(Delivery)
+        .where(
+            Delivery.trip_id == t.id,
+            Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+        )
+        .values(status=DeliveryStatus.cancelled)
+    )
+
+    if notify and org_id:
+        payload = {
+            "type": "trip.cancelled",
+            "trip_id": str(t.id),
+            "driver_id": str(t.driver_id),
+            "reason": reason or "",
+            "cancelled_by": cancelled_by or "",
+            "message": "배차가 취소되었습니다.",
+        }
+        await manager.broadcast_replan_to_org(org_id, payload)
+        await manager.broadcast_to_org(org_id, payload)
 
 
 @router.get("/trips")
@@ -94,7 +167,7 @@ async def get_trips(
     status: Optional[str] = None,
 ):
     import uuid as uuid_lib
-    stmt = select(Trip)
+    stmt = select(Trip).options(selectinload(Trip.deliveries), selectinload(Trip.driver))
     if current_user.role == UserRole.driver:
         # 기사: 본인 운행만
         stmt = stmt.where(Trip.driver_id == current_user.id)
@@ -186,9 +259,7 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
         )).scalar_one_or_none()
         if matched_delivery:
             w["delivery_id"] = str(matched_delivery.id)
-            w["recipient_name"] = w.get("recipient_name") or matched_delivery.recipient_name
-            w["cargo_type"] = w.get("cargo_type") or matched_delivery.cargo_type
-            w["cargo_weight_ton"] = w.get("cargo_weight_ton") if w.get("cargo_weight_ton") is not None else matched_delivery.cargo_weight_ton
+            _apply_delivery_to_waypoint(w, matched_delivery)
             delivery_ids.append(matched_delivery.id)
 
     t = Trip(
@@ -223,10 +294,15 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
 async def get_trip(trip_id: str, db: AsyncSession = Depends(get_db),
              current_user: User = Depends(get_current_user)):
     import uuid as uuid_lib
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    _assert_trip_access(t, current_user)
     return _trip_schema(t)
 
 
@@ -242,10 +318,15 @@ async def get_trip_polyline(
     """
     import uuid as uuid_lib
 
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t  = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    _assert_trip_access(t, current_user)
 
     route_data = t.optimized_route
     if not route_data or not route_data.get("route"):
@@ -286,10 +367,16 @@ async def add_waypoint(
     """
     import uuid as uuid_lib
 
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t  = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    if not t.driver or t.driver.organization_id != current_user.organization_id:
+        raise HTTPException(403, "다른 조직 운행은 수정할 수 없습니다.")
 
     # waypoints 배열에 추가
     current_waypoints = list(t.waypoints or [])
@@ -341,10 +428,15 @@ async def update_trip_status(
     if status not in ("completed", "cancelled"):
         raise HTTPException(400, "status는 'completed' 또는 'cancelled'만 가능합니다.")
 
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t  = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    _assert_trip_access(t, current_user)
 
     if t.status == TripStatus.completed:
         raise HTTPException(400, "이미 완료된 운행입니다.")
@@ -355,8 +447,10 @@ async def update_trip_status(
     if current_user.role == UserRole.driver and str(t.driver_id) != str(current_user.id):
         raise HTTPException(403, "본인 운행만 처리할 수 있습니다.")
 
-    t.status = TripStatus(status)
     if status == "completed":
+        t.status = TripStatus.completed
+        t.current_phase = "completed"
+        t.phase_updated_at = datetime.utcnow()
         t.completed_at = datetime.utcnow()
 
         # 소속 배송지 중 미완료 건 일괄 완료 처리
@@ -369,6 +463,16 @@ async def update_trip_status(
         for d in _rd.scalars().all():
             d.status       = DeliveryStatus.done_manual
             d.completed_at = datetime.utcnow()
+    else:
+        org_id = t.driver.organization_id if t.driver else current_user.organization_id
+        cancel_reason = "기사 앱에서 운행 취소" if current_user.role == UserRole.driver else "관리자 웹에서 배차 취소"
+        await _cancel_trip_and_deliveries(
+            db,
+            t,
+            reason=cancel_reason,
+            cancelled_by=str(current_user.id),
+            org_id=org_id,
+        )
 
     await db.commit()
     await db.refresh(t)
@@ -376,11 +480,12 @@ async def update_trip_status(
     return {
         "trip_id":      str(t.id),
         "status":       t.status,
+        "current_phase": t.current_phase,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
     }
 
 class CancelRequestSchema(BaseModel):
-    reason: Optional[str] = None
+    reason: str
 
 
 @router.post("/trips/{trip_id}/cancel-request")
@@ -393,7 +498,11 @@ async def request_trip_cancel(
     """기사가 운행 취소를 요청합니다. 관리자에게 WS 알림이 전송됩니다."""
     import uuid as uuid_lib
 
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t  = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
@@ -403,9 +512,12 @@ async def request_trip_cancel(
         raise HTTPException(400, "취소 요청이 불가능한 운행 상태입니다.")
     if t.cancel_requested:
         raise HTTPException(400, "이미 취소 요청이 진행 중입니다.")
+    reason = req.reason.strip()
+    if not reason:
+        raise HTTPException(400, "취소 사유를 입력해주세요.")
 
     t.cancel_requested      = True
-    t.cancel_request_reason = req.reason
+    t.cancel_request_reason = reason
     await db.commit()
 
     if current_user.organization_id:
@@ -413,10 +525,10 @@ async def request_trip_cancel(
             "type":      "trip.cancel_requested",
             "trip_id":   trip_id,
             "driver_id": str(current_user.id),
-            "reason":    req.reason or "",
+            "reason":    reason,
         })
 
-    return {"trip_id": trip_id, "cancel_requested": True}
+    return {"trip_id": trip_id, "cancel_requested": True, "reason": reason}
 
 
 @router.post("/trips/{trip_id}/cancel-request/respond")
@@ -433,18 +545,30 @@ async def respond_trip_cancel(
     if action not in ("approve", "reject"):
         raise HTTPException(400, "action은 'approve' 또는 'reject'만 가능합니다.")
 
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t  = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    if not t.driver or t.driver.organization_id != current_user.organization_id:
+        raise HTTPException(403, "다른 조직 운행은 처리할 수 없습니다.")
     if not t.cancel_requested:
         raise HTTPException(400, "진행 중인 취소 요청이 없습니다.")
 
-    t.cancel_requested      = False
-    t.cancel_request_reason = None
-
     if action == "approve":
-        t.status = TripStatus.cancelled
+        await _cancel_trip_and_deliveries(
+            db,
+            t,
+            reason=t.cancel_request_reason,
+            cancelled_by=str(current_user.id),
+            org_id=current_user.organization_id,
+        )
+    else:
+        t.cancel_requested = False
+    t.cancel_request_reason = None
 
     await db.commit()
 
@@ -453,12 +577,14 @@ async def respond_trip_cancel(
             "type":    "trip.cancel_responded",
             "trip_id": trip_id,
             "action":  action,
+            "status":  t.status.value,
         })
         await manager.broadcast_to_org(current_user.organization_id, {
             "type":      "trip.cancel_responded",
             "trip_id":   trip_id,
             "driver_id": str(t.driver_id),
             "action":    action,
+            "status":    t.status.value,
         })
 
     return {"trip_id": trip_id, "action": action}
@@ -468,6 +594,35 @@ class ReassignRequest(BaseModel):
     new_driver_id:      Optional[str] = None
     new_vehicle_id:     Optional[int] = None
     transfer_remaining: bool          = False  # True: 현재 운행 취소 + 새 운행 생성
+
+
+class TripProgressUpdate(BaseModel):
+    phase: Optional[str] = None
+    waypoint_index: Optional[int] = None
+    event: Optional[str] = None  # arrived | departed | completed
+    event_time: Optional[str] = None
+
+
+TRIP_PHASES = {
+    "waiting",
+    "en_route_to_loading",
+    "loading_arrived",
+    "loading_completed",
+    "en_route_to_unloading",
+    "unloading_arrived",
+    "unloading_completed",
+    "completed",
+    "cancelled",
+}
+
+
+def _phase_from_waypoint_event(waypoint: dict, event: str) -> str:
+    is_loading = waypoint.get("type") == "loading"
+    if event == "arrived":
+        return "loading_arrived" if is_loading else "unloading_arrived"
+    if event in ("departed", "completed"):
+        return "loading_completed" if is_loading else "unloading_completed"
+    raise HTTPException(400, "event는 arrived, departed, completed 중 하나여야 합니다.")
 
 
 @router.patch("/trips/{trip_id}/reassign", status_code=200)
@@ -483,10 +638,16 @@ async def reassign_trip(
     if not req.new_driver_id and req.new_vehicle_id is None:
         raise HTTPException(400, "교체할 기사 ID 또는 차량 ID를 입력해주세요.")
 
-    _r = await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
     t = _r.scalar_one_or_none()
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    if not t.driver or t.driver.organization_id != current_user.organization_id:
+        raise HTTPException(403, "다른 조직 운행은 교체할 수 없습니다.")
     if t.status not in (TripStatus.scheduled, TripStatus.in_progress):
         raise HTTPException(400, "완료되거나 취소된 운행은 교체할 수 없습니다.")
 
@@ -506,8 +667,25 @@ async def reassign_trip(
             raise HTTPException(403, "다른 조직의 기사로 교체할 수 없습니다.")
 
         if req.transfer_remaining:
+            if req.new_vehicle_id is not None:
+                vehicle = (await db.execute(
+                    select(Vehicle).where(
+                        Vehicle.id == req.new_vehicle_id,
+                        Vehicle.organization_id == current_user.organization_id,
+                    )
+                )).scalar_one_or_none()
+                if not vehicle:
+                    raise HTTPException(404, "차량을 찾을 수 없습니다.")
+                if not vehicle.is_active:
+                    raise HTTPException(400, "비활성화된 차량입니다.")
             # 현재 운행 취소 후 새 기사에게 잔여 경유지로 새 운행 생성
-            t.status = TripStatus.cancelled
+            await _cancel_trip_and_deliveries(
+                db,
+                t,
+                reason="기사·차량 교체로 기존 배차 취소",
+                cancelled_by=str(current_user.id),
+                org_id=current_user.organization_id,
+            )
             chosen_vehicle = req.new_vehicle_id if req.new_vehicle_id is not None else t.vehicle_id
             new_trip = Trip(
                 driver_id=new_driver_uuid,
@@ -519,6 +697,28 @@ async def reassign_trip(
             db.add(new_trip)
             await db.flush()
             new_trip_id = str(new_trip.id)
+            delivery_ids = []
+            for w in list(t.waypoints or []):
+                raw_delivery_id = w.get("delivery_id") if isinstance(w, dict) else None
+                if not raw_delivery_id:
+                    continue
+                try:
+                    delivery_ids.append(uuid_lib.UUID(str(raw_delivery_id)))
+                except ValueError:
+                    pass
+            if delivery_ids:
+                await db.execute(
+                    update(Delivery)
+                    .where(
+                        Delivery.id.in_(delivery_ids),
+                        Delivery.organization_id == current_user.organization_id,
+                    )
+                    .values(
+                        trip_id=new_trip.id,
+                        assigned_to=new_driver_uuid,
+                        status=DeliveryStatus.in_progress,
+                    )
+                )
         else:
             existing = (await db.execute(
                 select(Trip).where(
@@ -560,9 +760,95 @@ async def reassign_trip(
     }
 
 
+@router.patch("/trips/{trip_id}/progress")
+async def update_trip_progress(
+    trip_id: str,
+    req: TripProgressUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    앱에서 상차/하차 진행 이벤트를 기록합니다.
+
+    body 예시:
+      {"waypoint_index": 0, "event": "arrived"}
+      {"waypoint_index": 0, "event": "departed"}
+      {"phase": "en_route_to_unloading"}
+    """
+    import uuid as uuid_lib
+
+    _r = await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )
+    t = _r.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "운행을 찾을 수 없습니다.")
+    _assert_trip_access(t, current_user)
+    if t.status in (TripStatus.completed, TripStatus.cancelled):
+        raise HTTPException(400, "완료/취소된 운행은 진행 상태를 변경할 수 없습니다.")
+
+    event_time = req.event_time or datetime.utcnow().isoformat()
+    wps = list(t.waypoints or [])
+    phase = req.phase
+
+    if req.waypoint_index is not None:
+        idx = int(req.waypoint_index)
+        if idx < 0 or idx >= len(wps):
+            raise HTTPException(400, "waypoint_index가 범위를 벗어났습니다.")
+        event = req.event or "arrived"
+        if event not in ("arrived", "departed", "completed"):
+            raise HTTPException(400, "event는 arrived, departed, completed 중 하나여야 합니다.")
+        key = "arrived_at" if event == "arrived" else "departed_at"
+        wps[idx][key] = event_time
+        phase = phase or _phase_from_waypoint_event(wps[idx], event)
+        t.waypoints = wps
+        flag_modified(t, "waypoints")
+
+    if not phase:
+        raise HTTPException(400, "phase 또는 waypoint_index/event를 입력해주세요.")
+    if phase not in TRIP_PHASES:
+        raise HTTPException(400, f"올바르지 않은 phase: {phase}")
+
+    if t.status == TripStatus.scheduled:
+        t.status = TripStatus.in_progress
+        t.started_at = t.started_at or datetime.utcnow()
+    t.current_phase = phase
+    t.phase_updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(t)
+
+    if t.driver and t.driver.organization_id:
+        await manager.broadcast_to_org(t.driver.organization_id, {
+            "type": "trip.progress_updated",
+            "trip_id": trip_id,
+            "driver_id": str(t.driver_id),
+            "current_phase": t.current_phase,
+            "waypoint_index": req.waypoint_index,
+            "event": req.event,
+        })
+
+    return {
+        "trip_id": trip_id,
+        "status": t.status,
+        "current_phase": t.current_phase,
+        "phase_updated_at": t.phase_updated_at.isoformat() if t.phase_updated_at else None,
+        "waypoints": _trip_waypoints_for_response(t),
+    }
+
+
 def _trip_waypoints_for_response(t: Trip) -> list[dict]:
     wp = t.waypoints or []
     response_wp = [dict(w) for w in wp]
+    deliveries = t.__dict__.get("deliveries") or []
+    deliveries_by_id = {str(d.id): d for d in deliveries}
+    for w in response_wp:
+        delivery_id = w.get("delivery_id")
+        delivery = deliveries_by_id.get(str(delivery_id)) if delivery_id else None
+        if delivery:
+            _apply_delivery_to_waypoint(w, delivery)
     if t.dest_name and t.dest_lat is not None and t.dest_lon is not None:
         has_dest_waypoint = any(_same_unloading_point(w, t.dest_lat, t.dest_lon) for w in response_wp)
         if not has_dest_waypoint:
@@ -579,6 +865,8 @@ def _trip_schema(t: Trip) -> dict:
         "dest_name": t.dest_name, "dest_lat": t.dest_lat, "dest_lon": t.dest_lon,
         "waypoints": wp, "optimized_route": t.optimized_route,
         "status": t.status, "departure_time": t.departure_time,
+        "current_phase": t.current_phase or "waiting",
+        "phase_updated_at": t.phase_updated_at.isoformat() + "Z" if t.phase_updated_at else None,
         "is_emergency": t.is_emergency, "created_at": t.created_at.isoformat() + "Z",
         "started_at": t.started_at.isoformat() + "Z" if t.started_at else None,
         "completed_at": t.completed_at.isoformat() + "Z" if t.completed_at else None,

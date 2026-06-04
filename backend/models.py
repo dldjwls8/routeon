@@ -231,6 +231,8 @@ class Trip(Base):
     optimized_route = Column(JSONB)
     status          = Column(SAEnum(TripStatus), nullable=False,
                               default=TripStatus.scheduled)
+    current_phase   = Column(String(40), nullable=False, default="waiting")
+    phase_updated_at = Column(DateTime)
     is_emergency    = Column(Boolean, default=False)
     cancel_requested        = Column(Boolean, nullable=False, default=False)
     cancel_request_reason   = Column(Text, nullable=True)
@@ -263,6 +265,8 @@ class Delivery(Base):
     pickup_lon       = Column(Float, nullable=True)
     shipper_name     = Column(String(100), nullable=True)    # 화주명
     contact_name     = Column(String(100), nullable=True)    # 담당자명
+    contact_phone    = Column(String(20), nullable=True)     # 담당자 연락처
+    shipper_phone    = Column(String(20), nullable=True)     # 화주 연락처
     mixed_load       = Column(Boolean, default=False, nullable=False)
     recipient_name   = Column(String(100), nullable=True)    # 수신자(고객사명)
     cargo_type       = Column(String(100), nullable=True)    # 화물 종류
