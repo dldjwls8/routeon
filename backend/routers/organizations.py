@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import (
-    User, Delivery, Trip, Vehicle, RestStop, Location, Organization,
+    User, Delivery, Trip, Vehicle, RestStop, Location, Organization, AppSetting,
     Conversation, Message, Preset,
     DeliveryStatus, TripStatus, RestStopType, UserRole, OrgStatus
 )
@@ -32,9 +32,18 @@ from services import kakao_mobility
 from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
-from core.utils import _haversine, _haversine_km, _coord_to_address
+from core.utils import _haversine, _haversine_km, _coord_to_address, normalize_phone
 
 router = APIRouter()
+
+ORG_AUTO_APPROVE_KEY = "organization_auto_approve"
+
+
+async def _org_auto_approve_enabled(db: AsyncSession) -> bool:
+    setting = (await db.execute(
+        select(AppSetting).where(AppSetting.key == ORG_AUTO_APPROVE_KEY)
+    )).scalar_one_or_none()
+    return bool((setting.value or {}).get("enabled")) if setting else False
 
 class OrgCreate(BaseModel):
     name:     str   # 기업명
@@ -83,11 +92,14 @@ async def create_organization(
         if not _o.scalar_one_or_none():
             break
 
-    # 기업 생성 (심사 중)
+    auto_approve = await _org_auto_approve_enabled(db)
+
+    # 기업 생성
     org = Organization(
         name   = name,
         org_code = org_code,
-        status = OrgStatus.pending_review,
+        status = OrgStatus.approved if auto_approve else OrgStatus.pending_review,
+        reviewed_at = datetime.utcnow() if auto_approve else None,
     )
     db.add(org)
     await db.flush()  # org.id 확보
@@ -108,7 +120,7 @@ async def create_organization(
         username        = username,
         password_hash   = hash_password(password),
         role            = UserRole.admin,
-        phone           = phone,
+        phone           = normalize_phone(phone),
         email           = email,
         organization_id = org.id,
     )
@@ -117,6 +129,9 @@ async def create_organization(
     await db.refresh(org)
     await db.refresh(admin)
 
+    if auto_approve and admin.email:
+        asyncio.create_task(send_approved(admin.email, org.name, org.org_code))
+
     return {
         "org_id":           org.id,
         "org_name":         org.name,
@@ -124,7 +139,7 @@ async def create_organization(
         "status":           org.status,
         "admin_id":         str(admin.id),
         "admin_username":   admin.username,
-        "message":          "기업 등록 완료. 서류 심사 후 이용 가능합니다.",
+        "message":          "기업 등록 완료. 자동 승인되었습니다." if auto_approve else "기업 등록 완료. 서류 심사 후 이용 가능합니다.",
     }
 
 
@@ -159,6 +174,39 @@ async def list_organizations(
         }
         for o in orgs
     ]
+
+
+class SuperAdminSettings(BaseModel):
+    organization_auto_approve: bool
+
+
+@router.get("/superadmin/settings")
+async def get_superadmin_settings(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """슈퍼 관리자: 루트온 전역 운영 설정 조회"""
+    return {"organization_auto_approve": await _org_auto_approve_enabled(db)}
+
+
+@router.patch("/superadmin/settings")
+async def update_superadmin_settings(
+    req: SuperAdminSettings,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """슈퍼 관리자: 기업 가입 신청 자동 승인 on/off"""
+    setting = (await db.execute(
+        select(AppSetting).where(AppSetting.key == ORG_AUTO_APPROVE_KEY)
+    )).scalar_one_or_none()
+    value = {"enabled": bool(req.organization_auto_approve)}
+    if setting:
+        setting.value = value
+        setting.updated_at = datetime.utcnow()
+    else:
+        db.add(AppSetting(key=ORG_AUTO_APPROVE_KEY, value=value))
+    await db.commit()
+    return {"organization_auto_approve": value["enabled"]}
 
 
 @router.get("/superadmin/organizations/{org_id}/doc")
@@ -271,7 +319,7 @@ async def create_superadmin_account(
         username      = req.username,
         password_hash = hash_password(req.password),
         role          = UserRole.superadmin,
-        phone         = req.phone,
+        phone         = normalize_phone(req.phone),
     )
     db.add(user)
     await db.commit()

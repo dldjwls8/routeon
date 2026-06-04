@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import Customer, User
 from auth import require_admin
+from core.utils import normalize_phone
 
 router = APIRouter()
 
@@ -79,7 +80,7 @@ async def create_customer(
         organization_id = current_user.organization_id,
         name            = req.name.strip(),
         contact         = req.contact,
-        phone           = req.phone,
+        phone           = normalize_phone(req.phone),
         address         = req.address,
         memo            = req.memo,
         temporary       = req.temporary,
@@ -110,7 +111,7 @@ async def update_customer(
 
     if req.name     is not None: c.name     = req.name.strip()
     if req.contact  is not None: c.contact  = req.contact
-    if req.phone    is not None: c.phone    = req.phone
+    if req.phone    is not None: c.phone    = normalize_phone(req.phone)
     if req.address  is not None: c.address  = req.address
     if req.memo     is not None: c.memo     = req.memo
     if req.temporary is not None: c.temporary = req.temporary

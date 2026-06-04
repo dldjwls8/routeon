@@ -32,7 +32,7 @@ from services import kakao_mobility
 from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
-from core.utils import _haversine, _haversine_km, _coord_to_address
+from core.utils import _haversine, _haversine_km, _coord_to_address, normalize_phone
 
 router = APIRouter()
 
@@ -89,6 +89,8 @@ async def create_delivery(
         except ValueError:
             raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
 
+    contact_phone = normalize_phone(req.contact_phone)
+    shipper_phone = normalize_phone(req.shipper_phone) or contact_phone
     delivery = Delivery(
         organization_id  = current_user.organization_id,
         address          = req.address,
@@ -103,8 +105,8 @@ async def create_delivery(
         pickup_lon       = req.pickup_lon,
         shipper_name     = req.shipper_name,
         contact_name     = req.contact_name,
-        contact_phone    = req.contact_phone,
-        shipper_phone    = req.shipper_phone or req.contact_phone,
+        contact_phone    = contact_phone,
+        shipper_phone    = shipper_phone,
         mixed_load       = req.mixed_load,
     )
     db.add(delivery)
@@ -129,6 +131,8 @@ async def create_deliveries_batch(
                 deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
             except ValueError:
                 raise HTTPException(400, f"deadline 형식 오류: {req.deadline}")
+        contact_phone = normalize_phone(req.contact_phone)
+        shipper_phone = normalize_phone(req.shipper_phone) or contact_phone
         d = Delivery(
             organization_id=current_user.organization_id,
             address=req.address, lat=req.lat, lon=req.lon, deadline=deadline,
@@ -136,8 +140,8 @@ async def create_deliveries_batch(
             cargo_weight_ton=req.cargo_weight_ton,
             pickup_address=req.pickup_address, pickup_lat=req.pickup_lat,
             pickup_lon=req.pickup_lon, shipper_name=req.shipper_name,
-            contact_name=req.contact_name, contact_phone=req.contact_phone,
-            shipper_phone=req.shipper_phone or req.contact_phone,
+            contact_name=req.contact_name, contact_phone=contact_phone,
+            shipper_phone=shipper_phone,
             mixed_load=req.mixed_load,
         )
         db.add(d)
@@ -235,9 +239,9 @@ async def update_delivery(
     if req.shipper_name is not None:
         delivery.shipper_name = req.shipper_name
     if req.contact_phone is not None:
-        delivery.contact_phone = req.contact_phone
+        delivery.contact_phone = normalize_phone(req.contact_phone)
     if req.shipper_phone is not None:
-        delivery.shipper_phone = req.shipper_phone
+        delivery.shipper_phone = normalize_phone(req.shipper_phone)
     if req.deadline is not None:
         try:
             delivery.deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")

@@ -32,7 +32,7 @@ from services import kakao_mobility
 from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
-from core.utils import _haversine, _haversine_km, _coord_to_address
+from core.utils import _haversine, _haversine_km, _coord_to_address, normalize_phone
 
 router = APIRouter()
 
@@ -111,7 +111,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         password_hash   = hash_password(req.password),
         role            = actual_role,
         name            = req.name,
-        phone           = req.phone,
+        phone           = normalize_phone(req.phone),
         organization_id = org.id,
     )
     db.add(user)
@@ -241,7 +241,7 @@ async def update_me(
 
     # 전화번호 변경
     if req.phone:
-        current_user.phone = req.phone
+        current_user.phone = normalize_phone(req.phone)
 
     await db.commit()
     await db.refresh(current_user)
@@ -309,7 +309,7 @@ async def update_user(
     if req.name is not None:
         user.name = req.name
     if req.phone is not None:
-        user.phone = req.phone
+        user.phone = normalize_phone(req.phone)
     if req.driver_status is not None:
         user.driver_status = req.driver_status
     if 'vehicle_id' in req.model_fields_set:

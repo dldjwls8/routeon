@@ -85,12 +85,12 @@ routeon/
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,245줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (5,364줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (5,415줄, dashboard.html에서 분리)
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
-    ├── stats.html          레거시 진입점 → dashboard.html?main=stats&page=trip-stats
+    ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
     ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
-    └── superadmin.html     슈퍼 관리자 (기업 심사)
+    └── superadmin.html     슈퍼 관리자 (기업 심사·전역 운영 설정)
 ```
 
 ### 컨테이너
@@ -373,7 +373,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 인증
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `POST /auth/register` | 없음 | 기사 가입 (조직코드 필수, pending 처리) |
+| `POST /auth/register` | 없음 | 기사 가입 (조직코드 필수, 기업 설정에 따라 pending 또는 driver 처리) |
 | `POST /auth/login` | 없음 | 로그인 → JWT |
 | `GET /auth/me` | 로그인 | 내 정보 |
 | `PATCH /auth/me` | 로그인 | 전화번호/비밀번호 변경 |
@@ -392,7 +392,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 기업(Organizations)
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `POST /organizations` | 없음 | 기업 등록 + 관리자 계정 생성 (사업자서류 첨부 필수) |
+| `POST /organizations` | 없음 | 기업 등록 + 관리자 계정 생성 (사업자서류 첨부 필수). 슈퍼관리자 자동 수락 ON이면 즉시 approved |
 | `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 + `auto_approve_drivers` 조회 |
 | `POST /organizations/regen-code` | 관리자 | 조직코드 재발급 |
 | `GET /organizations/lookup?org_code=` | 없음 | 조직코드로 기업명 조회 |
@@ -405,6 +405,8 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `GET /superadmin/organizations/{id}/doc` | 슈퍼관리자 | 기업 첨부 서류 다운로드 |
 | `POST /superadmin/organizations/{id}/approve` | 슈퍼관리자 | 기업 승인 + 이메일 알림 |
 | `POST /superadmin/organizations/{id}/reject` | 슈퍼관리자 | 기업 반려 + 사유 저장 + 이메일 알림 |
+| `GET /superadmin/settings` | 슈퍼관리자 | 전역 운영 설정 조회 (`organization_auto_approve`) |
+| `PATCH /superadmin/settings` | 슈퍼관리자 | 기업 가입 신청 자동 수락 토글 `{organization_auto_approve: bool}` |
 | `POST /superadmin/create-account` | 슈퍼관리자 | 계정 직접 생성 |
 
 ### 운행/경로
@@ -510,7 +512,7 @@ settings.html 구조 (관리자 전용):
 통합 대시보드 진입점:
 - 기사 관리: `/dashboard.html?main=basic&page=drivers`
 - 차량 관리: `/dashboard.html?main=basic&page=vehicles`
-- 운행 통계: `/dashboard.html?main=stats&page=trip-stats`
+- 운행 통계: `/dashboard.html?main=schedule&page=trip-stats`
 - `drivers.html`, `vehicles.html`, `stats.html`은 북마크/기존 링크 호환용 리다이렉트 파일만 유지한다.
 
 chat.html 구조:

@@ -77,6 +77,17 @@ class Organization(Base):
 
 
 # ────────────────────────────────────────────────
+# app_settings  (전역 운영 설정)
+# ────────────────────────────────────────────────
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key        = Column(String(80), primary_key=True)
+    value      = Column(JSONB, nullable=False, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+# ────────────────────────────────────────────────
 # users
 # ────────────────────────────────────────────────
 class User(Base):

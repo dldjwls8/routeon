@@ -1,4 +1,5 @@
 import math
+import re
 from typing import Any
 
 import httpx
@@ -24,6 +25,30 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlat, dlon = rlat2 - rlat1, rlon2 - rlon1
     h = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
     return R * 2 * math.asin(math.sqrt(h))
+
+
+def normalize_phone(value: Any) -> str | None:
+    """전화번호를 저장/표시 공통 형식으로 정규화한다."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        return None
+    if digits.startswith("82") and len(digits) >= 11:
+        digits = "0" + digits[2:]
+    if digits.startswith("02"):
+        if len(digits) == 9:
+            return f"02-{digits[2:5]}-{digits[5:]}"
+        if len(digits) == 10:
+            return f"02-{digits[2:6]}-{digits[6:]}"
+    if len(digits) == 10:
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+    if len(digits) == 11:
+        return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+    return raw
 
 async def _coord_to_address(lat: float, lon: float) -> str:
     """카카오 역지오코딩 — 좌표 → 도로명주소(없으면 지번주소) 반환. 실패 시 좌표 문자열 폴백."""

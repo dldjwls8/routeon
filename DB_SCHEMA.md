@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-04 (v1.0.77 기준, 스키마 변경 없음)
+> 최종 검토: 2026-06-04 (v1.0.78 기준, `app_settings` 전역 설정 테이블 추가)
 
 ---
 
@@ -37,6 +37,20 @@
 | `reviewed_at` | DATETIME | | 심사 완료 시각 |
 | `auto_approve_drivers` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사 자동승인 여부 — ON 시 가입 즉시 `driver` 역할 부여 (기본: 수동 승인) |
 | `created_at` | DATETIME | NOT NULL | |
+
+---
+
+### `app_settings`
+
+루트온 전역 운영 설정. 현재 슈퍼관리자 콘솔의 기업 가입 신청 자동 수락 토글을 저장한다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `key` | VARCHAR(80) | PK | 설정 키. 현재 `organization_auto_approve` 사용 |
+| `value` | JSONB | NOT NULL DEFAULT `{}` | 설정 값. 예: `{"enabled": true}` |
+| `updated_at` | DATETIME | NOT NULL | 마지막 갱신 시각 |
+
+`organization_auto_approve.enabled=true`이면 `POST /organizations`가 신규 기업을 `pending_review`가 아닌 `approved`로 즉시 생성하고 `reviewed_at`을 기록한다.
 
 ---
 
@@ -185,6 +199,8 @@
 | `deadline` | DATETIME | | 희망 도착 시각 |
 | `completed_at` | DATETIME | | GPS 50m 자동 완료 또는 수동 완료 시각 |
 | `created_at` | DATETIME | NOT NULL | |
+
+> 프론트 오더 목록/상세의 `접수시간`은 이 `created_at` 값을 표시한다.
 
 ---
 

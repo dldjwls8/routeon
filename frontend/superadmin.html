@@ -156,11 +156,10 @@
     }
 
     .topbar-logo {
-      font-family: var(--mono);
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: 0.05em;
+      display: block;
+      width: 128px;
+      height: 24px;
+      object-fit: contain;
     }
 
     .topbar-divider {
@@ -418,6 +417,75 @@
       max-width: 440px;
     }
 
+    .settings-panel {
+      max-width: 720px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 22px 24px;
+      border-radius: 4px;
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .setting-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .setting-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .toggle {
+      position: relative;
+      display: inline-flex;
+      width: 52px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle span {
+      position: absolute;
+      inset: 0;
+      cursor: pointer;
+      background: var(--border2);
+      border: 1px solid var(--border2);
+      border-radius: 999px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .toggle span::before {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: var(--text);
+      transition: transform 0.15s;
+    }
+
+    .toggle input:checked + span {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .toggle input:checked + span::before {
+      transform: translateX(24px);
+      background: #111;
+    }
+
     /* ── 로딩 ── */
     .spinner {
       display: inline-block;
@@ -457,7 +525,7 @@
 <div id="main-screen">
   <div class="topbar">
     <div class="topbar-left">
-      <div class="topbar-logo">RouteOn</div>
+      <img class="topbar-logo" src="./routeon_logo.png" alt="RouteOn">
       <div class="topbar-divider"></div>
       <div class="topbar-role">Super Admin Console</div>
     </div>
@@ -470,6 +538,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('pending')"  id="tab-pending">심사 대기</div>
     <div class="tab"        onclick="switchTab('all')"      id="tab-all">전체 기업</div>
+    <div class="tab"        onclick="switchTab('settings')" id="tab-settings">운영 설정</div>
     <div class="tab"        onclick="switchTab('create')"   id="tab-create">슈퍼어드민 계정 생성</div>
   </div>
 
@@ -482,10 +551,32 @@
           <div class="section-title" id="pane-title">심사 대기 기업</div>
           <div class="section-count" id="pane-count"></div>
         </div>
-        <button class="btn-refresh" onclick="loadOrgs()">↺ 새로고침</button>
+        <button type="button" class="btn-refresh" onclick="loadOrgs(event)">↺ 새로고침</button>
       </div>
       <div class="org-list" id="org-list">
         <div class="empty-state"><span class="spinner"></span></div>
+      </div>
+    </div>
+
+    <!-- 운영 설정 탭 -->
+    <div id="pane-settings" style="display:none;">
+      <div class="section-header">
+        <div>
+          <div class="section-title">운영 설정</div>
+          <div class="section-count">루트온 전체 정책</div>
+        </div>
+      </div>
+      <div class="settings-panel">
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">기업 가입 신청 자동 수락</div>
+            <div class="setting-desc">켜면 신규 기업 가입 신청이 서류 심사 대기 없이 즉시 승인 상태로 생성됩니다.</div>
+          </div>
+          <label class="toggle" title="기업 가입 신청 자동 수락">
+            <input type="checkbox" id="org-auto-approve-toggle">
+            <span aria-hidden="true"></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -537,9 +628,35 @@
   let token = localStorage.getItem('sa_token') || '';
   let currentTab = 'pending';
   let rejectTargetId = null;
+  let orgAutoApprove = false;
 
   function authHeaders() {
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function escapeJsString(str) {
+    return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
+  }
+
+  function escapeJsAttr(str) {
+    return escapeHtml(escapeJsString(str));
+  }
+
+  function normalizePhone(value) {
+    const raw = String(value || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('02')) {
+      if (digits.length === 9) return `${digits.slice(0,2)}-${digits.slice(2,5)}-${digits.slice(5)}`;
+      if (digits.length === 10) return `${digits.slice(0,2)}-${digits.slice(2,6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 10) return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+    if (digits.length === 11) return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+    return raw;
   }
 
   // ── 로그인 ──────────────────────────────────────
@@ -581,6 +698,7 @@
   function showMain() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-screen').style.display  = 'flex';
+    loadSettings();
     loadOrgs();
   }
 
@@ -608,19 +726,49 @@
   // ── 탭 전환 ──────────────────────────────────────
   function switchTab(tab) {
     currentTab = tab;
-    ['pending', 'all', 'create'].forEach(t => {
+    ['pending', 'all', 'settings', 'create'].forEach(t => {
       document.getElementById(`tab-${t}`)?.classList.remove('active');
     });
     document.getElementById(`tab-${tab}`)?.classList.add('active');
 
-    document.getElementById('pane-orgs').style.display   = tab !== 'create' ? 'block' : 'none';
+    document.getElementById('pane-orgs').style.display   = (tab === 'pending' || tab === 'all') ? 'block' : 'none';
+    document.getElementById('pane-settings').style.display = tab === 'settings' ? 'block' : 'none';
     document.getElementById('pane-create').style.display = tab === 'create' ? 'block' : 'none';
 
-    if (tab !== 'create') loadOrgs();
+    if (tab === 'settings') loadSettings();
+    if (tab === 'pending' || tab === 'all') loadOrgs();
+  }
+
+  async function loadSettings() {
+    const res = await fetch(`${API}/superadmin/settings`, { headers: authHeaders() });
+    if (!res.ok) return;
+    const settings = await res.json();
+    orgAutoApprove = !!settings.organization_auto_approve;
+    const toggle = document.getElementById('org-auto-approve-toggle');
+    if (toggle) {
+      toggle.checked = orgAutoApprove;
+      toggle.onchange = saveOrgAutoApprove;
+    }
+  }
+
+  async function saveOrgAutoApprove(e) {
+    const enabled = !!e.target.checked;
+    const res = await fetch(`${API}/superadmin/settings`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ organization_auto_approve: enabled }),
+    });
+    if (!res.ok) {
+      e.target.checked = orgAutoApprove;
+      alert('설정 저장 실패');
+      return;
+    }
+    orgAutoApprove = enabled;
   }
 
   // ── 기업 목록 ──────────────────────────────────────
-  async function loadOrgs() {
+  async function loadOrgs(event) {
+    if (event) event.preventDefault();
     const listEl = document.getElementById('org-list');
     listEl.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
 
@@ -652,10 +800,10 @@
         <div class="org-card" id="org-card-${o.id}">
           <div class="org-card-top">
             <div>
-              <div class="org-name">${o.name}</div>
+              <div class="org-name">${escapeHtml(o.name)}</div>
               <div class="org-meta">
                 <div class="org-meta-item">ID<span>${o.id}</span></div>
-                <div class="org-meta-item">CODE<span>${o.org_code}</span></div>
+                <div class="org-meta-item">CODE<span>${escapeHtml(o.org_code)}</span></div>
                 <div class="org-meta-item">등록일<span>${o.created_at.substring(0,10)}</span></div>
                 ${o.reviewed_at ? `<div class="org-meta-item">심사일<span>${o.reviewed_at.substring(0,10)}</span></div>` : ''}
               </div>
@@ -665,18 +813,18 @@
 
           <div class="org-actions">
             ${o.doc_filename
-              ? `<button class="btn-action btn-doc" onclick="downloadDoc(${o.id})">📄 ${o.doc_filename}</button>`
+              ? `<button type="button" class="btn-action btn-doc" onclick="downloadDoc(${o.id})">📄 ${escapeHtml(o.doc_filename)}</button>`
               : `<span style="font-size:12px; color:var(--muted);">첨부파일 없음</span>`
             }
             ${canAct
-              ? `<button class="btn-action btn-approve-org" onclick="approveOrg(${o.id}, '${o.name}')">✅ 승인</button>
-                 <button class="btn-action btn-reject-org"  onclick="openRejectModal(${o.id}, '${o.name}')">✕ 반려</button>`
-              : `<button class="btn-action btn-disabled" disabled>처리 완료</button>`
+              ? `<button type="button" class="btn-action btn-approve-org" onclick="approveOrg(${o.id}, '${escapeJsAttr(o.name)}')">✅ 승인</button>
+                 <button type="button" class="btn-action btn-reject-org"  onclick="openRejectModal(${o.id}, '${escapeJsAttr(o.name)}')">✕ 반려</button>`
+              : `<button type="button" class="btn-action btn-disabled" disabled>처리 완료</button>`
             }
           </div>
 
           ${o.status === 'rejected' && o.reject_reason
-            ? `<div class="reject-reason-box">반려 사유: ${o.reject_reason}</div>` : ''}
+            ? `<div class="reject-reason-box">반려 사유: ${escapeHtml(o.reject_reason)}</div>` : ''}
         </div>
       `;
     }).join('');
@@ -749,7 +897,7 @@
   // ── 슈퍼어드민 계정 생성 ──────────────────────────
   async function createSuperAdmin() {
     const username = document.getElementById('sa-username').value.trim();
-    const phone    = document.getElementById('sa-phone').value.trim();
+    const phone    = normalizePhone(document.getElementById('sa-phone').value);
     const password = document.getElementById('sa-password').value;
 
     if (!username || !password) return alert('아이디와 비밀번호를 입력해주세요.');

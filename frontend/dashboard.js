@@ -286,7 +286,29 @@
     me: null,
   };
 
-  async function loadRealData() {
+  function captureScrollState() {
+    const main = document.getElementById('mainContent');
+    const inner = main?.querySelector('.page-scroll-main, .master-detail-list, .page-viewport-inner');
+    return {
+      windowY: window.scrollY || document.documentElement.scrollTop || 0,
+      mainTop: main?.scrollTop || 0,
+      innerTop: inner?.scrollTop || 0,
+    };
+  }
+
+  function restoreScrollState(state) {
+    if (!state) return;
+    requestAnimationFrame(() => {
+      const main = document.getElementById('mainContent');
+      const inner = main?.querySelector('.page-scroll-main, .master-detail-list, .page-viewport-inner');
+      if (main) main.scrollTop = state.mainTop || 0;
+      if (inner) inner.scrollTop = state.innerTop || 0;
+      window.scrollTo(0, state.windowY || 0);
+    });
+  }
+
+  async function loadRealData(opts = {}) {
+    const scrollState = opts.preserveScroll !== false ? captureScrollState() : null;
     try {
       const hdrs = getAuthHeaders();
 
@@ -499,6 +521,7 @@
           tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
           contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
           mixed_load: !!d.mixed_load,
+          created_at: d.created_at || '',
         }));
         // 캘린더에 오더 이벤트 추가
         deliveries.forEach(d => {
@@ -593,6 +616,7 @@
 
       // 페이지 재렌더링
       renderPage();
+      restoreScrollState(scrollState);
       if (currentPage === 'dashboard') showDashboardMap();
 
     } catch (e) {
@@ -613,16 +637,16 @@
       { id: 'bulk-dispatch', label: '일괄 자동 배차' },
       { id: 'dispatch-assign', label: '단건·수동 배차' },
     ]},
-    { id: 'schedule', label: '일정·업무', pages: [
+    { id: 'schedule', label: '일정·통계', pages: [
       { id: 'schedule-calendar', label: '캘린더' },
       { id: 'schedule-gantt', label: '간트' },
       { id: 'schedule-milestones', label: '마일스톤' },
+      { id: 'trip-stats', label: '사후 통계' },
     ]},
     { id: 'customers', label: '고객관리', pages: [
       { id: 'customer-list', label: '고객 관리' },
       { id: 'customer-loc', label: '고객 위치' },
     ]},
-    { id: 'stats', label: '운행 통계', pages: [{ id: 'trip-stats', label: '사후 통계' }] },
     { id: 'basic', label: '기본정보', pages: [
       { id: 'drivers', label: '자기사' },
       { id: 'vehicles', label: '차량' },
@@ -707,8 +731,9 @@
 
   function applyInitialQueryState() {
     const params = new URLSearchParams(location.search);
-    const requestedMain = params.get('main');
+    let requestedMain = params.get('main');
     const requestedPage = params.get('page');
+    if (requestedMain === 'stats') requestedMain = 'schedule';
     if (requestedMain) {
       const group = NAV.find(g => g.id === requestedMain);
       if (group) {
@@ -774,6 +799,13 @@
     if (!latestAt) return '—';
     const d = new Date(latestAt);
     if (Number.isNaN(d.getTime())) return latestAt;
+    return d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDateTimeShort(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).replace('T', ' ').slice(0, 16);
     return d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
@@ -886,8 +918,8 @@
       pickup_lon: r.pickup_lon ?? null,
       shipper_name: r.customer || null,
       contact_name: r.contact || null,
-      contact_phone: r.contact || null,
-      shipper_phone: r.contact || null,
+      contact_phone: normalizePhone(r.contact) || null,
+      shipper_phone: normalizePhone(r.contact) || null,
       mixed_load: !!r.mixed_load,
     }));
     const res = await fetch(`${API}/deliveries/batch`, {
@@ -920,6 +952,7 @@
         tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
         contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
         mixed_load: !!d.mixed_load,
+        created_at: d.created_at || '',
       });
     });
     return true;
@@ -1231,7 +1264,7 @@
       const form = $('#tempCustForm');
       if (!form) return;
       const name  = form.querySelector('[name="name"]').value.trim();
-      const phone = form.querySelector('[name="phone"]').value.trim();
+      const phone = normalizePhone(form.querySelector('[name="phone"]').value);
       const memo  = form.querySelector('[name="memo"]').value.trim() || '당일 의뢰';
       const today = todayStr();
       const res = await fetch(`${API}/customers`, {
@@ -1364,7 +1397,7 @@
     $('#inlineDetailBack', root).onclick = () => { selectedCustomerId = null; customerDetailTab = 'info'; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
       const contact = $('#custContact', root).value.trim();
-      const phone   = $('#custPhone', root).value.trim();
+      const phone   = normalizePhone($('#custPhone', root).value);
       const address = $('#custAddress', root).value.trim();
       const res = await fetch(`${API}/customers/${c.id}`, {
         method: 'PATCH',
@@ -1630,6 +1663,7 @@
           <label>수신자</label><span>${o.recipient || '—'}</span>
           <label>화물</label><span>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</span>
           <label>시간창</label><span>${o.window}</span>
+          <label>접수시간</label><span>${formatDateTimeShort(o.created_at)}</span>
           <label>연락처</label><span>${o.contact || '—'}</span>
           <label>상차</label><span>${o.pickup}</span>
           <label>하차</label><span>${o.delivery}</span>
@@ -1919,6 +1953,24 @@
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function normalizePhone(value) {
+    const raw = String(value || '').trim();
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('82') && digits.length >= 11) {
+      const local = `0${digits.slice(2)}`;
+      if (local.length === 10) return `${local.slice(0,3)}-${local.slice(3,6)}-${local.slice(6)}`;
+      if (local.length === 11) return `${local.slice(0,3)}-${local.slice(3,7)}-${local.slice(7)}`;
+    }
+    if (digits.startsWith('02')) {
+      if (digits.length === 9) return `${digits.slice(0,2)}-${digits.slice(2,5)}-${digits.slice(5)}`;
+      if (digits.length === 10) return `${digits.slice(0,2)}-${digits.slice(2,6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 10) return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+    if (digits.length === 11) return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+    return raw;
+  }
+
   function toast(msg, type) {
     const t = $('#toast');
     t.textContent = msg || '저장되었습니다';
@@ -1994,7 +2046,6 @@
   const NAV_ICONS = {
     dashboard: '▦',
     dispatch: '▣',
-    stats: '↗',
     basic: '◎',
     customers: '◇',
     orders: '☰',
@@ -2299,7 +2350,7 @@
         const res = await fetch(`${API}/auth/register`, {
           method: 'POST',
           headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: fd.username, password: fd.password, phone: fd.phone, name: fd.name, org_code: org.org_code || '', role: 'driver' }),
+          body: JSON.stringify({ username: fd.username, password: fd.password, phone: normalizePhone(fd.phone), name: fd.name, org_code: org.org_code || '', role: 'driver' }),
         });
         if (!res.ok) { const e = await res.json(); toast(e.detail || '등록 실패'); return; }
         toast(`기사 «${fd.name}» 등록 완료 · 승인 후 앱 이용 가능`);
@@ -2507,7 +2558,7 @@
           name: document.getElementById('sfName').value.trim(),
           username: document.getElementById('sfUsername').value.trim(),
           password: document.getElementById('sfPassword').value,
-          phone: document.getElementById('sfPhone').value.trim(),
+          phone: normalizePhone(document.getElementById('sfPhone').value),
           org_code: orgCode,
           role: 'admin',
         };
@@ -2575,7 +2626,7 @@
       const tab = activePanel?.dataset.panel;
 
       if (tab === 'info') {
-        const phone = activePanel.querySelector('[name="phone"]').value.trim();
+        const phone = normalizePhone(activePanel.querySelector('[name="phone"]').value);
         if (!phone) { toast('전화번호를 입력하세요', 'error'); return; }
         const res = await fetch(`${API}/auth/me`, {
           method: 'PATCH',
@@ -2692,7 +2743,7 @@
       if (!form) return;
       const name    = form.querySelector('[name="name"]').value.trim();
       const contact = form.querySelector('[name="contact"]').value.trim();
-      const phone   = form.querySelector('[name="phone"]').value.trim();
+      const phone   = normalizePhone(form.querySelector('[name="phone"]').value);
       const address = form.querySelector('[name="address"]').value.trim();
       if (!name) { toast('고객명을 입력하세요'); return; }
       const body = { name, contact: contact || null, phone: phone || null, address: address || null };
@@ -3192,8 +3243,8 @@
         lat: ord.pickup_lat,
         lon: ord.pickup_lon,
         shipper_name: ord.customer || null,
-        contact_phone: ord.contact || null,
-        shipper_phone: ord.contact || null,
+        contact_phone: normalizePhone(ord.contact) || null,
+        shipper_phone: normalizePhone(ord.contact) || null,
       }],
       unloadings: [{
         name: ord.delivery || '하차지',
@@ -3204,8 +3255,8 @@
         cargo_type: ord.cargo || null,
         cargo_weight_ton: parseFloat(String(ord.tons || '').replace(/[^0-9.]/g, '')) || null,
         shipper_name: ord.customer || null,
-        contact_phone: ord.contact || null,
-        shipper_phone: ord.contact || null,
+        contact_phone: normalizePhone(ord.contact) || null,
+        shipper_phone: normalizePhone(ord.contact) || null,
       }],
     };
   }
@@ -4392,7 +4443,7 @@
       row.recipient = form.querySelector('[name="recipient"]').value.trim();
       row.cargo = form.querySelector('[name="cargo"]').value.trim();
       row.tons = form.querySelector('[name="tons"]').value.trim();
-      row.contact = form.querySelector('[name="contact"]').value.trim();
+      row.contact = normalizePhone(form.querySelector('[name="contact"]').value);
       row.latestAt = readDesiredArrival(form, 'pending_latest_at_date', 'pending_latest_at_hour');
       const mixedChecked = form.querySelector('input[name="intake-mixed-edit"]:checked');
       row.mixed_load = mixedChecked ? mixedChecked.value === '1' : false;
@@ -4469,7 +4520,7 @@
           const recipient = form.querySelector('[name="recipient"]').value.trim();
           const cargo = form.querySelector('[name="cargo"]').value.trim();
           const tonsStr = form.querySelector('[name="tons"]').value.trim();
-          const contact = form.querySelector('[name="contact"]').value.trim();
+          const contact = normalizePhone(form.querySelector('[name="contact"]').value);
           const customer = form.querySelector('[name="customer"]').value;
           const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
           // 주소 변경 시 좌표 재조회
@@ -4488,8 +4539,8 @@
             cargo_type: cargo || undefined,
             cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
             contact_name: contact || undefined,
-            contact_phone: contact || undefined,
-            shipper_phone: contact || undefined,
+            contact_phone: normalizePhone(contact) || undefined,
+            shipper_phone: normalizePhone(contact) || undefined,
             shipper_name: customer || undefined,
             deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
           });
@@ -5109,7 +5160,7 @@
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>
             <thead><tr>
-              <th>오더번호</th><th>혼적</th><th>화주</th><th>상차</th><th>하차</th><th>화물</th><th>시간창</th><th>기사</th><th>상태</th><th></th>
+              <th>오더번호</th><th>혼적</th><th>화주</th><th>상차</th><th>하차</th><th>화물</th><th>시간창</th><th>접수시간</th><th>기사</th><th>상태</th><th></th>
             </tr></thead>
             <tbody>${rows.length ? rows.map(o => {
               const editable = orderIsEditable(o);
@@ -5123,11 +5174,11 @@
               <tr class="${rowCls}" data-order-id="${o.id}">
                 <td>${o.id}</td><td>${mixedLoadBadge(isMixedLoad(o))}</td><td>${o.customer}</td><td>${o.pickup}</td><td>${o.delivery}</td>
                 <td>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</td>
-                <td>${o.window}</td><td>${o.driver || '—'}</td><td>${statusCell}</td>
+                <td>${o.window}</td><td>${formatDateTimeShort(o.created_at)}</td><td>${o.driver || '—'}</td><td>${statusCell}</td>
                 <td><button type="button" class="btn btn-sm edit-order" data-order-id="${o.id}">수정</button></td>
               </tr>`;
             }).join('') : `
-              <tr><td colspan="10" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
+              <tr><td colspan="11" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
           ${paginationHtml(allRows.length, orderPage, 'orders')}

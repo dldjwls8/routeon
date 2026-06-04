@@ -93,9 +93,9 @@
       padding: 0;
     }
     .brand-mark {
-      width: 36px; height: 36px;
-      background: linear-gradient(135deg, var(--lime) 0%, #8bc34a 100%);
-      clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+      width: 112px;
+      height: 24px;
+      object-fit: contain;
     }
     .brand-text { font-weight: 700; font-size: 18px; letter-spacing: -.02em; }
     .brand-text small { display: block; font-size: 11px; font-weight: 500; opacity: .55; margin-top: 1px; }
