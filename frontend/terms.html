@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RouteOn 이용약관</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#0c0e12; --surface:#171b23; --card:#1c2029; --border:rgba(255,255,255,.1); --text:#e8eaef; --muted:#8b93a7; --lime:#c6f135; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { min-height: 100vh; background: var(--bg); color: var(--text); font-family: 'Noto Sans KR', sans-serif; line-height: 1.7; }
+    header { border-bottom: 1px solid var(--border); background: rgba(12,14,18,.92); position: sticky; top: 0; backdrop-filter: blur(12px); }
+    nav { max-width: 980px; margin: 0 auto; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { color: var(--text); text-decoration: none; font-weight: 800; letter-spacing: .01em; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .nav-links a, .back-link { color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 7px 11px; font-size: 13px; font-weight: 600; }
+    .nav-links a:hover, .back-link:hover { color: var(--text); border-color: rgba(198,241,53,.35); }
+    main { max-width: 980px; margin: 0 auto; padding: 52px 24px 64px; }
+    .eyebrow { color: var(--lime); font-size: 12px; font-weight: 800; letter-spacing: .08em; margin-bottom: 10px; }
+    h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.15; margin-bottom: 14px; }
+    .lead { color: var(--muted); max-width: 720px; margin-bottom: 28px; }
+    section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-top: 14px; }
+    h2 { font-size: 18px; margin-bottom: 10px; }
+    p, li { color: var(--muted); font-size: 14px; }
+    ul { padding-left: 18px; }
+    strong { color: var(--text); }
+    footer { border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a class="brand" href="/index.html">RouteOn</a>
+      <div class="nav-links">
+        <a href="/privacy.html">개인정보 처리방침</a>
+        <a href="/copyright.html">저작권 안내</a>
+        <a href="/contact.html">문의</a>
+      </div>
+    </nav>
+  </header>
+  <main>
+    <div class="eyebrow">TERMS</div>
+    <h1>이용약관</h1>
+    <p class="lead">RouteOn은 화물 운송 관제, 오더 관리, 배차 최적화, 기사 앱 연동을 검증하기 위한 졸업작품 프로젝트입니다. 본 약관은 시연 및 테스트 환경 이용 기준을 설명합니다.</p>
+
+    <section>
+      <h2>1. 서비스 목적</h2>
+      <p>RouteOn은 관리자 웹과 기사 앱을 통해 오더 접수, 차량·기사 관리, 자동 배차, 운행 상태 확인 흐름을 검증하는 프로젝트입니다. 실제 운송 계약, 결제, 상업 운행을 전제로 하지 않습니다.</p>
+    </section>
+    <section>
+      <h2>2. 계정 이용</h2>
+      <ul>
+        <li>관리자, 기사, 슈퍼관리자 계정은 허가된 팀원과 시연 관계자만 사용할 수 있습니다.</li>
+        <li>테스트 계정 정보는 외부에 공유하지 않으며, 계정 오용이 의심되면 비밀번호를 변경하거나 계정을 비활성화할 수 있습니다.</li>
+        <li>기업 및 기사 승인 기능은 프로젝트 검증 목적의 접근 제어로 운영됩니다.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>3. 데이터 입력 기준</h2>
+      <ul>
+        <li>실제 고객 개인정보, 실제 운송 계약 정보, 결제 정보는 입력하지 않는 것을 원칙으로 합니다.</li>
+        <li>주소, 위치, 차량, 오더 데이터는 기능 검증을 위한 테스트 값 사용을 권장합니다.</li>
+        <li>사용자가 입력한 테스트 데이터는 오류 재현과 기능 개선을 위해 확인될 수 있습니다.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>4. 배차 및 경로 결과</h2>
+      <p>자동 배차와 경로 최적화 결과는 시연 및 검증용입니다. 실제 운송 의사결정, 운임 산정, 법적 책임 판단의 단독 근거로 사용하지 않습니다.</p>
+    </section>
+    <section>
+      <h2>5. 변경 및 중단</h2>
+      <p>프로젝트 개발 과정에서 기능, 화면, API, 데이터 구조는 사전 고지 없이 변경될 수 있습니다. 발표·검증 목적상 서버가 일시 중단될 수 있습니다.</p>
+    </section>
+    <section>
+      <h2>6. 문의</h2>
+      <p>이용 중 오류나 계정 문제가 있으면 <a class="back-link" href="/contact.html">문의 페이지</a>를 통해 확인 범위를 전달해 주세요.</p>
+    </section>
+  </main>
+  <footer>© 2026 RouteOn Team. 졸업작품 프로젝트.</footer>
+</body>
+</html>

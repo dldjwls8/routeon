@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.80 기준, 스키마 변경 없음 — 오더·배차 UI/API 매핑 최신화)
+> 최종 검토: 2026-06-05 (v1.0.81 기준, 스키마 변경 없음 — footer 법적 안내 정적 페이지 추가)
 
 ---
 
@@ -384,6 +384,10 @@ cancelled 처리 시:
 | `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
 
 > v1.0.80 기준 일괄 자동 배차의 기사별 오더 배정 상태와 단건·수동 배차의 다중 선택 상태는 모두 프론트 임시 상태다. 최종 확정 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다.
+
+### 법적 안내 페이지와 DB
+`terms.html`, `privacy.html`, `copyright.html`, `contact.html`은 정적 프론트 페이지다.
+footer 링크와 안내 페이지 내용은 DB에 저장하지 않으며, 약관 동의 이력·문의 접수 테이블도 현재 스키마에 없다.
 
 ### users ID 타입
 | 테이블 | PK 타입 | 프론트 비교 방식 |
