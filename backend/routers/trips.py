@@ -44,7 +44,8 @@ class WaypointSchema(BaseModel):
     task_group:       Optional[int] = None
     recipient_name:   Optional[str] = None   # 수신자(고객사명) — unloading 전용
     cargo_type:       Optional[str] = None   # 화물 종류
-    cargo_weight_ton: Optional[float] = None # 화물 톤수
+    cargo_size:       Optional[str] = None   # 화물 규격
+    cargo_weight_ton: Optional[float] = None # 과거 톤수 값(호환용)
     shipper_name:     Optional[str] = None   # 화주명
     contact_name:     Optional[str] = None   # 담당자명
     contact_phone:    Optional[str] = None   # 담당자 연락처
@@ -85,6 +86,7 @@ def _dest_waypoint(name: str, lat: float, lon: float) -> dict:
         "task_group": None,
         "recipient_name": None,
         "cargo_type": None,
+        "cargo_size": None,
         "cargo_weight_ton": None,
         "shipper_name": None,
         "contact_name": None,
@@ -99,6 +101,7 @@ def _apply_delivery_to_waypoint(w: dict, delivery: Delivery) -> None:
     w["order_no"] = w.get("order_no") or f"RO-{stamp}-{str(delivery.id).replace('-', '')[-6:].upper()}"
     w["recipient_name"] = w.get("recipient_name") or delivery.recipient_name
     w["cargo_type"] = w.get("cargo_type") or delivery.cargo_type
+    w["cargo_size"] = w.get("cargo_size") or delivery.cargo_size
     w["cargo_weight_ton"] = (
         w.get("cargo_weight_ton")
         if w.get("cargo_weight_ton") is not None

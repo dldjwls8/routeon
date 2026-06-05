@@ -84,8 +84,8 @@ routeon/
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
-    ├── dashboard.css       대시보드 스타일 (2,351줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (5,732줄, dashboard.html에서 분리)
+    ├── dashboard.css       대시보드 스타일 (dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (dashboard.html에서 분리)
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
@@ -122,8 +122,8 @@ routeon/
   "type": "loading", "task_group": 0,
   "shipper_name": "화주명", "contact_name": "담당자명",
   "contact_phone": "010-0000-0000", "shipper_phone": "02-000-0000",
-  "recipient_name": "수신자명", "cargo_type": "파렛트",
-  "cargo_weight_ton": 2.0, "delivery_id": "uuid",
+  "recipient_name": "수신자명", "cargo_type": "식품",
+  "cargo_size": "5톤", "cargo_weight_ton": 2.0, "delivery_id": "uuid",
   "order_no": "RO-260605-A1B2C3"
 }
 ```
@@ -131,7 +131,10 @@ routeon/
 - `task_group`: 같은 그룹의 loading-unloading 쌍을 OR-Tools pickup_deliveries 제약으로 묶음.
   `null`이면 자유 최적화 (긴급 배차 등). 운행 생성 패널과 자동 배차 모두 자동 부여.
 - `shipper_name` / `contact_name` / `contact_phone` / `shipper_phone`: 화주·담당자 연락처. 기사 앱 Trip API 응답에 포함.
-- `recipient_name` / `cargo_type` / `cargo_weight_ton`: 수신자·화물 종류·톤수. unloading 전용. 배차 시 Delivery 원본에서 복사.
+- `recipient_name`: 수신자. unloading 전용. 배차 시 Delivery 원본에서 복사.
+- `cargo_type`: 화물 종류. 관리자 웹 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 드롭다운 기준.
+- `cargo_size`: 화물 규격. `5톤`, `3파레트` 같은 자유 텍스트이며 신규 오더·배차·기사 앱 표시는 이 값을 기준으로 한다.
+- `cargo_weight_ton`: 과거 톤수 값 호환용. 신규 프론트 입력은 숫자 파싱 없이 `cargo_size`로 전달한다.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 - `order_no`: 표시용 오더번호. DB 컬럼이 아니라 `/deliveries`/`/trips` 응답에서 `created_at`과 Delivery UUID 기반으로 계산되는 `RO-YYMMDD-XXXXXX` 형식.
 

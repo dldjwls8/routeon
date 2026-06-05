@@ -15,6 +15,7 @@
     return `${proto}//${location.host}`;
   }
   const API = apiBase();
+  const CARGO_TYPE_OPTIONS = ['식품', '원자재/에너지', '화학/소재', '잡화', '기계/전자', '기타'];
 
   /* ── 탑바 드롭다운 ── */
   function _openDropdown(id) {
@@ -167,11 +168,31 @@
     return `<td class="route-cell"><strong>${pickup || '—'}</strong> ▶ ${delivery || '—'}</td>`;
   }
 
+  function cargoTypeOptionsHtml(selected = '') {
+    const cur = String(selected || '').trim();
+    const custom = cur && !CARGO_TYPE_OPTIONS.includes(cur) ? [cur] : [];
+    return [''].concat(custom, CARGO_TYPE_OPTIONS).map(v => {
+      const label = v || '화물 종류 선택';
+      return `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`;
+    }).join('');
+  }
+
+  function cargoTypeSelectHtml(name, selected = '', attrs = '') {
+    return `<select name="${name}"${attrs}>${cargoTypeOptionsHtml(selected)}</select>`;
+  }
+
+  function formatCargoSizeFromApi(d) {
+    if (d?.cargo_size) return String(d.cargo_size);
+    if (d?.cargo_weight_ton != null && d.cargo_weight_ton !== '') return `${d.cargo_weight_ton}톤`;
+    return '';
+  }
+
   function dispatchStopTooltip(item) {
     const parts = [];
     if (item.name) parts.push(item.name);
     if (item.address) parts.push(item.address);
     if (item.cargo_id) parts.push(`cargo_id: ${item.cargo_id}`);
+    if (item.cargo_size) parts.push(`규격 ${item.cargo_size}`);
     if (item.lat != null && item.lon != null) parts.push(`${item.lat}, ${item.lon}`);
     if (item.cargo_weight_kg != null) parts.push(`${item.cargo_weight_kg} kg`);
     if (item.tw) parts.push(`마감 ${formatTwClose(item.tw)}`);
@@ -180,11 +201,11 @@
     return parts.join(' · ').replace(/"/g, '&quot;');
   }
 
-  function formatDispatchTons(item) {
+  function formatDispatchSize(item) {
+    if (item.cargo_size) return String(item.cargo_size);
     if (item.tons != null && item.tons !== '') {
       if (typeof item.tons === 'number') return `${item.tons}톤`;
-      const ts = String(item.tons);
-      return ts.includes('톤') ? ts : `${ts}톤`;
+      return String(item.tons);
     }
     if (item.cargo_weight_kg != null) return `${(item.cargo_weight_kg / 1000).toFixed(1)}톤`;
     const cargo = item.cargo || '';
@@ -207,7 +228,7 @@
       shipper: item.shipper || item.customer || placeShortLabel(item.name) || '—',
       pickup,
       delivery,
-      tons: formatDispatchTons(item),
+      tons: formatDispatchSize(item),
       window: item.window || (item.tw && item.tw.includes('T') ? item.tw.split('T')[1]?.slice(0, 5) : null) || item.latestAt || '—',
       status: item.status || '배차대기',
       tooltip: dispatchStopTooltip(item),
@@ -274,7 +295,7 @@
     return tableScrollWrap(`<table>
       <thead>
         <tr>
-          <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
+          <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
         </tr>
       </thead>
       <tbody>${dispatchListTableRows(stops, { rowClass: 'order-row-clickable' })}</tbody>
@@ -550,7 +571,7 @@
           driver: DATA.drivers.find(dr => dr.id === d.assigned_to)?.name || null,
           recipient: d.recipient_name || '',
           cargo: d.cargo_type || '',
-          tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
+          tons: formatCargoSizeFromApi(d),
           contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
           mixed_load: !!d.mixed_load,
           created_at: d.created_at || '',
@@ -936,7 +957,7 @@
       deadline: r.latestAt ? r.latestAt.replace('T', ' ').slice(0, 16) : null,
       recipient_name: r.recipient || null,
       cargo_type: r.cargo || null,
-      cargo_weight_ton: r.tons ? parseFloat(r.tons) || null : null,
+      cargo_size: r.tons || null,
       pickup_address: r.pickup || null,
       pickup_lat: r.pickup_lat ?? null,
       pickup_lon: r.pickup_lon ?? null,
@@ -961,6 +982,7 @@
     saved.forEach(d => {
       DATA.orders.unshift({
         id: d.id,
+        order_no: d.order_no || null,
         customer: d.shipper_name || '—',
         status: statusMap[d.status] || '접수',
         pickup: d.pickup_address || '—',
@@ -973,7 +995,7 @@
         driver: null,
         recipient: d.recipient_name || '',
         cargo: d.cargo_type || '',
-        tons: d.cargo_weight_ton != null ? `${d.cargo_weight_ton}톤` : '',
+        tons: formatCargoSizeFromApi(d),
         contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
         mixed_load: !!d.mixed_load,
         created_at: d.created_at || '',
@@ -1369,9 +1391,9 @@
   }
 
   function downloadIntakeExcelTemplate() {
-    const headers = ['화주명', '상차지', '하차지', '수취인', '연락처', '화물종류', '중량톤', '희망도착일시', '혼재여부'];
+    const headers = ['화주명', '상차지', '하차지', '수취인', '연락처', '화물종류', '규격', '희망도착일시', '혼재여부'];
     const rows = [
-      ['예시화주', '부산광역시 해운대구 센텀중앙로 90', '부산광역시 사하구 감천로 203', '김수신', '010-1234-5678', '박스', '1.5', '2026-06-05 14:00', 'N'],
+      ['예시화주', '부산광역시 해운대구 센텀중앙로 90', '부산광역시 사하구 감천로 203', '김수신', '010-1234-5678', '식품', '5톤', '2026-06-05 14:00', 'N'],
     ];
 
     if (window.XLSX) {
@@ -1398,7 +1420,7 @@
     if (!history?.length) return '<p class="empty-hint">배송 이력 없음</p>';
     return `<div class="drawer-history-wrap">
       <table class="drawer-history-table">
-        <thead><tr><th>날짜</th><th>오더번호</th><th>상·하차</th><th>톤수</th><th>상태</th></tr></thead>
+        <thead><tr><th>날짜</th><th>오더번호</th><th>상·하차</th><th>규격</th><th>상태</th></tr></thead>
         <tbody>${history.map(h => `
           <tr>
             <td>${h.date}</td>
@@ -2239,13 +2261,12 @@
     DATA.orders.forEach(o => {
       const label = (o.cargo || '').trim();
       if (!label) return;
-      const tonsNum = parseFloat(String(o.tons || '').replace(/[^0-9.]/g, '')) || 0;
-      cargoMap[label] = (cargoMap[label] || 0) + tonsNum;
+      cargoMap[label] = (cargoMap[label] || 0) + 1;
     });
     const cargoChips = Object.entries(cargoMap)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map(([label, tot]) => ({ label, kg: tot > 0 ? `${parseFloat(tot.toFixed(1))}t` : '' }));
+      .map(([label, count]) => ({ label, count }));
     root.innerHTML = `
         ${pageChromeHtml('dashboard', {
           title: '관제 대시보드',
@@ -2256,7 +2277,7 @@
             <div class="dash-widget">
               <h2>오늘 배송 진행</h2>
               <div class="dash-cargo-chips">
-                ${cargoChips.length ? cargoChips.map(c => `<span class="dash-cargo-chip">${c.label}${c.kg ? ' ' + c.kg : ''}</span>`).join('') : '<span class="text-muted-hint">접수된 화물 없음</span>'}
+                ${cargoChips.length ? cargoChips.map(c => `<span class="dash-cargo-chip">${c.label} ${c.count}건</span>`).join('') : '<span class="text-muted-hint">접수된 화물 없음</span>'}
               </div>
               <div class="dash-gauge-wrap">
                 <div class="dash-gauge" style="--pct:${pct}">
@@ -3089,7 +3110,7 @@
                 ${tableScrollWrap(`<table class="bulk-pool-table">
                   <thead><tr>
                     <th><input type="checkbox" id="chkAllBulkPool" ${allPoolSelected ? 'checked' : ''} aria-label="전체 선택"></th>
-                    <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
+                    <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
                   </tr></thead>
                   <tbody id="bulkOrderPoolBody">
                     ${pool.length ? dispatchListTableRows(pool, {
@@ -3177,7 +3198,7 @@
               <p class="field-label">미배정 ${res.unassigned.length}건</p>
               ${tableScrollWrap(`<table>
                 <thead><tr>
-                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th><th>사유</th>
+                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th><th>사유</th>
                 </tr></thead>
                 <tbody>
                   ${res.unassigned.map((u, i) => {
@@ -3472,7 +3493,7 @@
         delivery_id: ord.id,
         recipient_name: ord.recipient || null,
         cargo_type: ord.cargo || null,
-        cargo_weight_ton: parseFloat(String(ord.tons || '').replace(/[^0-9.]/g, '')) || null,
+        cargo_size: ord.tons || null,
         shipper_name: ord.customer || null,
         contact_phone: normalizePhone(ord.contact) || null,
         shipper_phone: normalizePhone(ord.contact) || null,
@@ -3701,7 +3722,7 @@
           ${tableScrollWrap(`<table>
             <thead>
               <tr>
-                <th><input type="checkbox" id="chkAllPending" ${unassigned.length && dispatchPendingSelectedIds.length === unassigned.length ? 'checked' : ''} aria-label="전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
+                <th><input type="checkbox" id="chkAllPending" ${unassigned.length && dispatchPendingSelectedIds.length === unassigned.length ? 'checked' : ''} aria-label="전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
               </tr>
             </thead>
             <tbody id="pendingIntakeBody">
@@ -3770,7 +3791,7 @@
             <thead>
               <tr>
                 <th><input type="checkbox" id="chkAllDispatch" checked aria-label="전체 선택"></th>
-                <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
+                <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
               </tr>
             </thead>
             <tbody>
@@ -4010,8 +4031,8 @@
             <label>상차지 주소 *</label><input id="addOrdPickup" required placeholder="상차지 주소">
             <label>하차지 주소 *</label><input id="addOrdDelivery" required placeholder="하차지 주소">
             <label>화주</label><input id="addOrdShipper" placeholder="화주명">
-            <label>화물 종류</label><input id="addOrdCargo" placeholder="일반화물">
-            <label>중량(톤)</label><input id="addOrdWeight" type="number" step="0.1" min="0" placeholder="0.0">
+            <label>화물 종류</label><select id="addOrdCargo">${cargoTypeOptionsHtml()}</select>
+            <label>규격</label><input id="addOrdSize" placeholder="예: 5톤, 3파레트">
             <label>희망 도착</label>
             <div>${desiredArrivalFieldsHtml({ dateName: 'dispatch_latest_at_date', hourName: 'dispatch_latest_at_hour', hint: true })}</div>
           </div>
@@ -4034,7 +4055,7 @@
               contact_phone: null,
               shipper_phone: null,
               cargo_type: document.getElementById('addOrdCargo')?.value?.trim() || null,
-              cargo_weight_ton: parseFloat(document.getElementById('addOrdWeight')?.value) || null,
+              cargo_size: document.getElementById('addOrdSize')?.value?.trim() || null,
               deadline,
             };
             const res = await fetch(`${API}/deliveries`, {
@@ -4691,8 +4712,8 @@
           <label>상차지 *</label><input name="pickup" required value="${row.pickup || ''}">
           <label>하차지 *</label><input name="delivery" required value="${row.delivery || ''}">
           <label>수신자</label><input name="recipient" value="${row.recipient || ''}">
-          <label>화물</label><input name="cargo" value="${row.cargo || ''}">
-          <label>톤수</label><input name="tons" value="${row.tons || ''}">
+          <label>화물 종류</label>${cargoTypeSelectHtml('cargo', row.cargo || '')}
+          <label>규격</label><input name="tons" value="${row.tons || ''}" placeholder="예: 5톤, 3파레트">
           <label>연락처</label><input name="contact" value="${row.contact || ''}">
           <label>희망 도착</label>
           <div>${desiredArrivalFieldsHtml({ value: row.latestAt || '', dateName: 'pending_latest_at_date', hourName: 'pending_latest_at_hour', hint: true })}</div>
@@ -4763,8 +4784,8 @@
           <label>상차지 *</label><input name="pickup" required value="${o.pickup || ''}"${ro}>
           <label>하차지 *</label><input name="delivery" required value="${o.delivery || ''}"${ro}>
           <label>수신자</label><input name="recipient" value="${o.recipient || ''}"${ro}>
-          <label>화물</label><input name="cargo" value="${o.cargo || ''}"${ro}>
-          <label>톤수</label><input name="tons" value="${o.tons || ''}"${ro}>
+          <label>화물 종류</label>${cargoTypeSelectHtml('cargo', o.cargo || '', ro)}
+          <label>규격</label><input name="tons" value="${o.tons || ''}" placeholder="예: 5톤, 3파레트"${ro}>
           <label>연락처</label><input name="contact" value="${o.contact || ''}"${ro}>
           <label>희망 도착</label>
           <div>${desiredArrivalFieldsHtml({ value: o.window === '—' ? '' : (o.window || ''), dateName: 'order_latest_at_date', hourName: 'order_latest_at_hour', disabled: !!ro, hint: true })}</div>
@@ -4802,7 +4823,7 @@
             pickup_lon: coordPu?.lon ?? null,
             recipient_name: recipient || undefined,
             cargo_type: cargo || undefined,
-            cargo_weight_ton: tonsStr ? (parseFloat(tonsStr) || null) : undefined,
+            cargo_size: tonsStr || undefined,
             contact_name: contact || undefined,
             contact_phone: normalizePhone(contact) || undefined,
             shipper_phone: normalizePhone(contact) || undefined,
@@ -5139,7 +5160,7 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row';
     row.dataset.extraDelivery = seq;
-    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신자(고객사명)" data-intake-field="recipient_${taskNum}_extra_${seq}"><input type="text" class="intake-field" name="cargo_${taskNum}_extra_${seq}" placeholder="화물 종류" data-intake-field="cargo_${taskNum}_extra_${seq}"><input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="톤수" data-intake-field="tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
+    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신자(고객사명)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     deliveryBlock.insertBefore(row, addBtn);
     row.querySelector('.intake-field').focus();
@@ -5201,8 +5222,8 @@
           ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 2)}
           <div class="delivery-fields">
             <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신자(고객사명)" tabindex="${t + 3}" data-intake-field="recipient_${taskNum}">
-            <input type="text" class="intake-field" name="cargo_${taskNum}" placeholder="화물 종류" tabindex="${t + 4}" data-intake-field="cargo_${taskNum}">
-            <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="톤수" tabindex="${t + 5}" data-intake-field="tons_${taskNum}">
+            ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 4}" data-intake-field="cargo_${taskNum}"`)}
+            <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="규격 예: 5톤, 3파레트" tabindex="${t + 5}" data-intake-field="tons_${taskNum}">
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
         </div>
@@ -5310,7 +5331,7 @@
           pickup:     ['상차지','출발지','pickup','pickupaddress'],
           delivery:   ['하차지','도착지','주소','delivery','address'],
           cargo:      ['화물종류','화물','cargo','cargotype'],
-          tons:       ['중량','톤','중량톤','tons','cargoweightton'],
+          tons:       ['규격','화물규격','중량','톤','중량톤','tons','cargosize','cargoweightton'],
           latestAt:   ['희망도착','마감일','deadline','latestat','희망도착일시'],
           mixed_load: ['혼재','혼재여부','mixedload','혼재화물'],
         };

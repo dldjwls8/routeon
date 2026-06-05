@@ -137,6 +137,9 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS shipper_phone VARCHAR(20);"
         ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS cargo_size VARCHAR(100);"
+        ))
         await conn.execute(text("""
             UPDATE deliveries d
                SET organization_id = u.organization_id

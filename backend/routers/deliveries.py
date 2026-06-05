@@ -43,6 +43,7 @@ class DeliveryCreate(BaseModel):
     deadline:         Optional[str]   = None
     recipient_name:   Optional[str]   = None
     cargo_type:       Optional[str]   = None
+    cargo_size:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
     pickup_address:   Optional[str]   = None
     pickup_lat:       Optional[float] = None
@@ -66,6 +67,7 @@ class DeliveryUpdate(BaseModel):
     pickup_lon:       Optional[float] = None
     recipient_name:   Optional[str]   = None
     cargo_type:       Optional[str]   = None
+    cargo_size:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
     contact_name:     Optional[str]   = None
     shipper_name:     Optional[str]   = None
@@ -105,6 +107,7 @@ async def create_delivery(
         deadline         = deadline,
         recipient_name   = req.recipient_name,
         cargo_type       = req.cargo_type,
+        cargo_size       = req.cargo_size,
         cargo_weight_ton = req.cargo_weight_ton,
         pickup_address   = req.pickup_address,
         pickup_lat       = req.pickup_lat,
@@ -143,6 +146,7 @@ async def create_deliveries_batch(
             organization_id=current_user.organization_id,
             address=req.address, lat=req.lat, lon=req.lon, deadline=deadline,
             recipient_name=req.recipient_name, cargo_type=req.cargo_type,
+            cargo_size=req.cargo_size,
             cargo_weight_ton=req.cargo_weight_ton,
             pickup_address=req.pickup_address, pickup_lat=req.pickup_lat,
             pickup_lon=req.pickup_lon, shipper_name=req.shipper_name,
@@ -238,6 +242,8 @@ async def update_delivery(
         delivery.recipient_name = req.recipient_name
     if req.cargo_type is not None:
         delivery.cargo_type = req.cargo_type
+    if req.cargo_size is not None:
+        delivery.cargo_size = req.cargo_size
     if req.cargo_weight_ton is not None:
         delivery.cargo_weight_ton = req.cargo_weight_ton
     if req.contact_name is not None:
@@ -370,6 +376,7 @@ def _delivery_schema(d: Delivery) -> dict:
         "mixed_load":       d.mixed_load,
         "recipient_name":   d.recipient_name,
         "cargo_type":       d.cargo_type,
+        "cargo_size":       d.cargo_size,
         "cargo_weight_ton": d.cargo_weight_ton,
         "status":           d.status,
         "sequence":         d.sequence,

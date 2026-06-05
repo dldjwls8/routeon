@@ -1539,7 +1539,8 @@
     .intake-compact .stop-label { margin-bottom: 6px; font-size: 12px; }
     .intake-compact .place-search { padding: 8px 32px 8px 10px; font-size: 13px; }
     .intake-compact .delivery-fields { gap: 8px; margin-top: 6px; }
-    .intake-compact .delivery-fields input { padding: 8px 10px; font-size: 12px; }
+    .intake-compact .delivery-fields input,
+    .intake-compact .delivery-fields select { padding: 8px 10px; font-size: 12px; }
     .intake-compact .task-meta-divider { margin-top: 8px; padding-top: 8px; }
     .intake-compact .intake-mixed-hint { font-size: 11px; display: block; margin-top: 4px; line-height: 1.35; }
     .desired-arrival-row {
@@ -1700,7 +1701,8 @@
       gap: 10px;
       margin-top: 10px;
     }
-    .delivery-fields input {
+    .delivery-fields input,
+    .delivery-fields select {
       width: 100%;
       padding: 10px 12px;
       border: 1px solid var(--dark-border);

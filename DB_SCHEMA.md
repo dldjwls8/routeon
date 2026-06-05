@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.86 기준, 배차지정 2패널 UI 전환 — DB 컬럼 추가 없음)
+> 최종 검토: 2026-06-05 (v1.0.87 기준, 화물 규격 `cargo_size` 컬럼 추가)
 
 ---
 
@@ -126,7 +126,7 @@
 | `dest_name` | VARCHAR(200) | | 도착지 이름 (nullable — 기사가 /optimize 시 자동 결정 가능) |
 | `dest_lat` | FLOAT | | 도착지 위도 |
 | `dest_lon` | FLOAT | | 도착지 경도 |
-| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"recipient_name":str\|null,"cargo_type":str\|null,"cargo_weight_ton":float\|null,"shipper_name":str\|null,"contact_name":str\|null,"contact_phone":str\|null,"shipper_phone":str\|null,"delivery_id":uuid\|null,"order_no":str\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]`. `dest_*` 목적지가 별도 입력된 수동 Trip은 신규 생성 시 동일 좌표 중복 없이 `type="unloading"` waypoint로 보강되며, 기존 Trip 조회 응답도 같은 방식으로 보강됨 |
+| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"recipient_name":str\|null,"cargo_type":str\|null,"cargo_size":str\|null,"cargo_weight_ton":float\|null,"shipper_name":str\|null,"contact_name":str\|null,"contact_phone":str\|null,"shipper_phone":str\|null,"delivery_id":uuid\|null,"order_no":str\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]`. `dest_*` 목적지가 별도 입력된 수동 Trip은 신규 생성 시 동일 좌표 중복 없이 `type="unloading"` waypoint로 보강되며, 기존 Trip 조회 응답도 같은 방식으로 보강됨 |
 | `vehicle_height_m` | FLOAT | | 차량 높이 오버라이드 |
 | `vehicle_weight_kg` | FLOAT | | 총중량 오버라이드 |
 | `vehicle_length_cm` | FLOAT | | 차량 길이 오버라이드 |
@@ -192,8 +192,9 @@
 | `shipper_phone` | VARCHAR(20) | NULLABLE | 화주 연락처. 미입력 시 API 응답은 `contact_phone`으로 폴백 |
 | `mixed_load` | BOOLEAN | NOT NULL DEFAULT FALSE | 혼적 여부 |
 | `recipient_name` | VARCHAR(100) | NULLABLE | 수신자(고객사명) |
-| `cargo_type` | VARCHAR(100) | NULLABLE | 화물 종류 |
-| `cargo_weight_ton` | FLOAT | NULLABLE | 화물 톤수 |
+| `cargo_type` | VARCHAR(100) | NULLABLE | 화물 종류. 관리자 웹 신규 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 선택지 기준 |
+| `cargo_size` | VARCHAR(100) | NULLABLE | 화물 규격. 예: `5톤`, `3파레트` |
+| `cargo_weight_ton` | FLOAT | NULLABLE | 과거 화물 톤수 값. 신규 프론트 입력은 `cargo_size` 사용, 이 컬럼은 호환용 |
 | `status` | deliverystatus | NOT NULL DEFAULT 'pending' | |
 | `sequence` | INTEGER | | 최적화 후 배송 순서 |
 | `deadline` | DATETIME | | 희망 도착 시각 |

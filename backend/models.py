@@ -281,7 +281,8 @@ class Delivery(Base):
     mixed_load       = Column(Boolean, default=False, nullable=False)
     recipient_name   = Column(String(100), nullable=True)    # 수신자(고객사명)
     cargo_type       = Column(String(100), nullable=True)    # 화물 종류
-    cargo_weight_ton = Column(Float, nullable=True)          # 화물 톤수
+    cargo_size       = Column(String(100), nullable=True)    # 화물 규격(예: 5톤, 3파레트)
+    cargo_weight_ton = Column(Float, nullable=True)          # 과거 톤수 값(호환용)
     status           = Column(SAEnum(DeliveryStatus),
                                default=DeliveryStatus.pending, nullable=False)
     sequence         = Column(Integer)
