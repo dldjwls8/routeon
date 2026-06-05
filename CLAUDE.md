@@ -507,7 +507,8 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 프론트엔드 진입점:
 - 관리자: `/dashboard.html` 기사 카드의 💬 버튼 클릭 → `/chat.html?driver_id=xxx` 새 탭으로 열기
 - 기사: `/driver.html` → 같은 조직 관리자 목록에서 선택, 기본값은 첫 번째 관리자
-- 로그인 후 `role === "driver"`는 `/driver.html`, 그 외 관리 계정은 `/dashboard.html`로 이동한다.
+- 로그인 후 `role === "driver"`는 `/driver.html`, `role === "superadmin"`은 `/superadmin.html`, `role === "admin"`은 `/dashboard.html`로 이동한다.
+- `superadmin`은 기업 소속 관리자 계정이 아니라 루트온 운영자 계정이므로 기업 대시보드와 기업-기사 채팅 화면 접근 대상에서 제외한다.
 
 settings.html 구조 (관리자 전용):
 - 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
@@ -566,7 +567,7 @@ dashboard.html 채팅 알림 WS:
 - `convDriverMap` (conversation_id → driver_id) 으로 대화방과 기사 카드를 매핑
 - 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
 - 대시보드 탑바의 메시지 버튼은 `/chat.html`로 이동한다. 미읽음 메시지가 있으면 기존 알림 점과 동일하게 메시지 버튼에도 배지를 표시한다.
-- 관리자 웹 세션 가드는 `admin`과 `superadmin` 모두 대시보드 접근을 허용한다.
+- 관리자 웹 세션 가드는 `admin`만 대시보드 접근을 허용한다. `superadmin`은 `/superadmin.html` 전용이다.
 
 Android 앱 채팅 구현 필수 사항:
 - `ws://168.138.45.63:8000/ws/chat?token={JWT}` 또는 Nginx 경유 `ws://kdu.duckdns.org/ws/chat?token={JWT}` 상시 연결 (채팅 화면 외에도 유지)

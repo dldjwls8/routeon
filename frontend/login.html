@@ -84,7 +84,14 @@
         localStorage.setItem('user_id', data.user_id);
         localStorage.setItem('username', data.username);
         localStorage.setItem('role', data.role);
-        window.location.href = data.role === 'driver' ? '/driver.html' : '/dashboard.html';
+        if (data.role === 'driver') {
+          window.location.href = '/driver.html';
+        } else if (data.role === 'superadmin') {
+          localStorage.setItem('sa_token', data.access_token);
+          window.location.href = '/superadmin.html';
+        } else {
+          window.location.href = '/dashboard.html';
+        }
       } else {
         alert(data.detail || '로그인에 실패했습니다.');
       }

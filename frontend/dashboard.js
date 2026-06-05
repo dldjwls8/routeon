@@ -59,7 +59,7 @@
   }
   function requireAdminSession() {
     const role = localStorage.getItem('role');
-    if (!getToken() || !['admin', 'superadmin'].includes(role)) {
+    if (!getToken() || role !== 'admin') {
       location.href = '/login.html'; return false;
     }
     return true;

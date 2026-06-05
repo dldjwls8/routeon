@@ -277,8 +277,24 @@
     async function init() {
       try {
         const r = await fetch(`${API}/auth/me`, { headers: authHdrs() });
-        if (r.ok) myUserId = (await r.json()).id;
-      } catch (_) {}
+        if (!r.ok) {
+          location.href = '/login.html';
+          return;
+        }
+        const me = await r.json();
+        if (me.role === 'superadmin') {
+          location.href = '/superadmin.html';
+          return;
+        }
+        if (!['admin', 'driver'].includes(me.role)) {
+          location.href = '/login.html';
+          return;
+        }
+        myUserId = me.id;
+      } catch (_) {
+        location.href = '/login.html';
+        return;
+      }
       await Promise.all([loadPartners(), loadConversations()]);
       renderList();
       connectWs();
