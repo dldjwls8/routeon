@@ -217,7 +217,8 @@
       cursor: pointer;
       font-size: 14px;
     }
-    .notif-btn-wrap { position: relative; }
+    .notif-btn-wrap,
+    .message-btn-wrap { position: relative; }
     .notif-dot {
       position: absolute; top: 2px; right: 2px;
       width: 8px; height: 8px;
@@ -1380,7 +1381,90 @@
       margin-bottom: 14px;
       height: 420px;
     }
-    .dash-map-card .map-placeholder { min-height: 320px; border-radius: var(--radius-md); }
+    .control-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(360px, .65fr);
+      gap: 16px;
+      align-items: stretch;
+      min-height: 620px;
+    }
+    @media (max-width: 1180px) {
+      .control-layout { grid-template-columns: 1fr; }
+    }
+    .control-map-panel,
+    .control-side-panel,
+    .control-table-card {
+      background: var(--dark-card);
+      border: 1px solid var(--dark-border);
+      border-radius: var(--radius-lg);
+    }
+    .control-map-panel {
+      overflow: hidden;
+      min-height: 620px;
+      display: flex;
+      flex-direction: column;
+    }
+    .control-map-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--dark-border);
+    }
+    .control-map-toolbar strong {
+      display: block;
+      font-size: 14px;
+      color: var(--t-text-strong);
+    }
+    .control-map-toolbar span {
+      display: block;
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--t-text-muted);
+    }
+    .control-map-card {
+      flex: 1;
+      min-height: 520px;
+      overflow: hidden;
+      background: var(--t-deep);
+    }
+    .control-side-panel {
+      padding: 14px;
+      overflow: hidden;
+    }
+    .control-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .control-metric-grid div {
+      border: 1px solid var(--dark-border);
+      border-radius: var(--radius-sm);
+      background: var(--t-row-hover);
+      padding: 12px;
+    }
+    .control-metric-grid span {
+      display: block;
+      font-size: 11px;
+      color: var(--t-text-muted);
+      margin-bottom: 6px;
+    }
+    .control-metric-grid strong {
+      font-size: 22px;
+      color: var(--t-text-strong);
+    }
+    .control-table-card {
+      overflow: hidden;
+    }
+    .control-table-card h2 {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--dark-border);
+      color: var(--t-text-strong);
+    }
     .dash-orders-card {
       background: var(--dark-card);
       border: 1px solid var(--dark-border);

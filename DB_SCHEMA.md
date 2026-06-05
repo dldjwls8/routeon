@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.87 기준, 화물 규격 `cargo_size` 컬럼 추가)
+> 최종 검토: 2026-06-05 (v1.0.88 기준, 운행관제·메시지 링크 변경은 DB 스키마 변경 없음)
 
 ---
 

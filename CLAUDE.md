@@ -519,6 +519,9 @@ settings.html 구조 (관리자 전용):
 - 탑바 ⚙ 버튼 또는 관리자 드롭다운 → `/settings.html` 이동
 
 통합 대시보드 진입점:
+- 메인 탭 순서: `대시보드` → `운행관제` → `배차지정` → `고객관리` → `일정·통계` → `기본정보`
+- 상세 차량 위치 확인은 `운행관제 > 실시간 차량 관제`에서 담당한다. 대시보드는 요약 지도와 핵심 현황을 유지한다.
+- 오더 접수/오더 목록은 독립 `오더관리` 메인 탭이 아니라 `배차지정` 하위 탭으로 통합한다. 기존 `main=orders` 쿼리는 `dispatch`로 호환 처리한다.
 - 기사 관리: `/dashboard.html?main=basic&page=drivers`
 - 차량 관리: `/dashboard.html?main=basic&page=vehicles`
 - 운행 통계: `/dashboard.html?main=schedule&page=trip-stats`
@@ -562,6 +565,8 @@ dashboard.html 채팅 알림 WS:
 - `chat.read` 수신 시: `reader_id === currentUserId`면 해당 기사 카드 배지 → 0
 - `convDriverMap` (conversation_id → driver_id) 으로 대화방과 기사 카드를 매핑
 - 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
+- 대시보드 탑바의 메시지 버튼은 `/chat.html`로 이동한다. 미읽음 메시지가 있으면 기존 알림 점과 동일하게 메시지 버튼에도 배지를 표시한다.
+- 관리자 웹 세션 가드는 `admin`과 `superadmin` 모두 대시보드 접근을 허용한다.
 
 Android 앱 채팅 구현 필수 사항:
 - `ws://168.138.45.63:8000/ws/chat?token={JWT}` 또는 Nginx 경유 `ws://kdu.duckdns.org/ws/chat?token={JWT}` 상시 연결 (채팅 화면 외에도 유지)

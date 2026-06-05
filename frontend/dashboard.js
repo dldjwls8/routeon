@@ -39,6 +39,7 @@
   });
 
   let map = null;
+  let _liveMapPage = null;
   let _driverMarkers = {};
   let _locationWS = null;
   let _chatWS = null;
@@ -57,7 +58,8 @@
     return t ? { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` } : { 'Content-Type': 'application/json' };
   }
   function requireAdminSession() {
-    if (!getToken() || localStorage.getItem('role') !== 'admin') {
+    const role = localStorage.getItem('role');
+    if (!getToken() || !['admin', 'superadmin'].includes(role)) {
       location.href = '/login.html'; return false;
     }
     return true;
@@ -657,7 +659,7 @@
       // 페이지 재렌더링
       renderPage();
       restoreScrollState(scrollState);
-      if (currentPage === 'dashboard') showDashboardMap();
+      if (isMapPage()) showLiveMap();
 
     } catch (e) {
       console.error('데이터 로드 오류:', e);
@@ -665,27 +667,26 @@
   }
 
 
-  const MAIN_WITH_SUB = ['orders', 'dispatch', 'schedule', 'basic', 'customers'];
+  const MAIN_WITH_SUB = ['dispatch', 'schedule', 'basic', 'customers'];
 
   const NAV = [
     { id: 'dashboard', label: '대시보드', pages: [{ id: 'dashboard', label: '요약' }] },
-    { id: 'orders', label: '오더관리', pages: [
-      { id: 'order-intake', label: '접수 창' },
+    { id: 'control', label: '운행관제', pages: [{ id: 'control-live', label: '실시간 차량 관제' }] },
+    { id: 'dispatch', label: '배차지정', pages: [
+      { id: 'order-intake', label: '오더 접수' },
       { id: 'order-list', label: '오더 목록' },
-    ]},
-    { id: 'dispatch', label: '배차·지정', pages: [
       { id: 'bulk-dispatch', label: '일괄 자동 배차' },
       { id: 'dispatch-assign', label: '단건·수동 배차' },
+    ]},
+    { id: 'customers', label: '고객관리', pages: [
+      { id: 'customer-list', label: '고객 관리' },
+      { id: 'customer-loc', label: '고객 위치' },
     ]},
     { id: 'schedule', label: '일정·통계', pages: [
       { id: 'schedule-calendar', label: '캘린더' },
       { id: 'schedule-gantt', label: '간트' },
       { id: 'schedule-milestones', label: '마일스톤' },
       { id: 'trip-stats', label: '사후 통계' },
-    ]},
-    { id: 'customers', label: '고객관리', pages: [
-      { id: 'customer-list', label: '고객 관리' },
-      { id: 'customer-loc', label: '고객 위치' },
     ]},
     { id: 'basic', label: '기본정보', pages: [
       { id: 'drivers', label: '자기사' },
@@ -765,13 +766,14 @@
   }
 
   function gotoPage(main, page) {
-    if (currentPage === 'dashboard' && page !== 'dashboard') hideDashboardMap();
+    if (isMapPage(currentPage) && !isMapPage(page)) hideLiveMap();
     currentMain = main;
     const group = NAV.find(g => g.id === main);
     currentPage = page || (group ? group.pages[0].id : NAV[0].pages[0].id);
     renderNav();
     renderPage();
-    if (currentPage === 'dashboard') setTimeout(showDashboardMap, 50);
+    const targetPage = currentPage;
+    if (isMapPage(targetPage)) setTimeout(() => showLiveMap(targetPage), 50);
   }
 
   function applyInitialQueryState() {
@@ -779,6 +781,7 @@
     let requestedMain = params.get('main');
     const requestedPage = params.get('page');
     if (requestedMain === 'stats') requestedMain = 'schedule';
+    if (requestedMain === 'orders') requestedMain = 'dispatch';
     if (requestedMain) {
       const group = NAV.find(g => g.id === requestedMain);
       if (group) {
@@ -2139,10 +2142,10 @@
 
   const NAV_ICONS = {
     dashboard: '▦',
+    control: '◎',
     dispatch: '▣',
-    basic: '◎',
+    basic: '◉',
     customers: '◇',
-    orders: '☰',
     schedule: '◷',
   };
 
@@ -2218,6 +2221,7 @@
   }
 
   function renderPage() {
+    if (isMapPage()) hideLiveMap();
     const main = $('#mainContent');
     main.innerHTML = '';
     applyPageTheme();
@@ -2228,6 +2232,7 @@
 
     switch (currentPage) {
       case 'dashboard': renderDashboard(root); break;
+      case 'control-live': renderControlLive(root); break;
       case 'bulk-dispatch': renderBulkDispatch(root); break;
       case 'dispatch-assign': renderDispatchAssign(root); break;
       case 'trip-stats': renderTripStats(root); break;
@@ -2246,7 +2251,7 @@
   }
 
   function renderDashboard(root) {
-    hideDashboardMap();
+    hideLiveMap();
     const orderTabs = ['전체', '접수', '배차', '운행중', '완료'];
     const filteredOrders = DATA.orders.filter(o => dashOrderTab === '전체' || o.status === dashOrderTab);
     const dashboardOrders = filteredOrders.slice(0, 5);
@@ -2269,8 +2274,8 @@
       .map(([label, count]) => ({ label, count }));
     root.innerHTML = `
         ${pageChromeHtml('dashboard', {
-          title: '관제 대시보드',
-          desc: '실시간 운행·오더 현황 요약',
+          title: '운영 대시보드',
+          desc: '오더·차량·운행 현황 요약',
         })}
         <div class="dash-layout">
           <aside class="dash-left" aria-label="요약 위젯">
@@ -2303,7 +2308,7 @@
             <div class="dash-widget">
               <h2>바로가기</h2>
               <div class="dash-quick-links">
-                <button type="button" class="dash-quick-link" data-goto-main="orders" data-goto-page="order-intake">
+                <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="order-intake">
                   <strong>접수 창</strong>
                 </button>
                 <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="bulk-dispatch">
@@ -2316,8 +2321,7 @@
             </div>
           </aside>
           <div class="dash-right">
-            <div class="dash-map-card" aria-label="지도">
-            </div>
+            <div class="dash-map-card" aria-label="요약 지도"></div>
             <div class="dash-orders-card">
               <div class="dash-orders-hd">
                 <h2>오더</h2>
@@ -2363,11 +2367,70 @@
     });
     const goOrderList = () => {
       if (dashOrderTab !== '전체') orderFilter = dashOrderTab;
-      gotoPage('orders', 'order-list');
+      gotoPage('dispatch', 'order-list');
     };
     root.querySelectorAll('[data-goto-orders]').forEach(tr => { tr.onclick = goOrderList; });
     $('#dashGoOrderList', root).onclick = goOrderList;
-    if (map) showDashboardMap();
+    if (map && isMapPage()) showLiveMap(currentPage);
+  }
+
+  function renderControlLive(root) {
+    const trips = Array.isArray(DATA.trips) ? DATA.trips : (DATA.statsTrips || []);
+    const vehiclesWithGps = DATA.vehicles.filter(v => v.driverId && v.start_lat != null && v.start_lon != null);
+    const runningTrips = trips.filter(t => ['운행중', '진행', 'in_progress'].includes(t.status));
+    const activeTrips = trips.filter(t => !['완료', '취소', 'completed', 'cancelled'].includes(t.status));
+    const gpsRows = DATA.vehicles.map(v => {
+      const d = DATA.drivers.find(x => x.id === v.driverId);
+      const hasGps = v.start_lat != null && v.start_lon != null;
+      return `
+        <tr>
+          <td>${v.plate || v.name || `차량 ${v.id}`}</td>
+          <td>${d?.name || v.driver || '미연결'}</td>
+          <td>${statusBadge(v.status || '가용')}</td>
+          <td>${hasGps ? `${Number(v.start_lat).toFixed(5)}, ${Number(v.start_lon).toFixed(5)}` : '위치 없음'}</td>
+          <td>${v.last_gps_at || (hasGps ? '등록 좌표' : '—')}</td>
+        </tr>`;
+    }).join('');
+    root.innerHTML = `
+      ${pageChromeHtml('control-live', {
+        title: '실시간 운행관제',
+        desc: '기사 앱 GPS와 차량 배정 정보를 기반으로 현재 위치를 확인합니다',
+      })}
+      <div class="control-layout">
+        <section class="control-map-panel" aria-label="실시간 차량 위치 지도">
+          <div class="control-map-toolbar">
+            <div>
+              <strong>차량 위치</strong>
+              <span>${vehiclesWithGps.length}대 위치 수신 · 운행 ${runningTrips.length}건</span>
+            </div>
+            <button type="button" class="btn btn-sm" id="controlRefresh">새로고침</button>
+          </div>
+          <div class="control-map-card" aria-label="지도"></div>
+        </section>
+        <aside class="control-side-panel" aria-label="관제 요약">
+          <div class="control-metric-grid">
+            <div><span>활성 운행</span><strong>${activeTrips.length}</strong></div>
+            <div><span>위치 수신</span><strong>${vehiclesWithGps.length}</strong></div>
+            <div><span>등록 차량</span><strong>${DATA.vehicles.length}</strong></div>
+            <div><span>등록 기사</span><strong>${DATA.drivers.length}</strong></div>
+          </div>
+          <div class="control-table-card">
+            <h2>차량별 최근 위치</h2>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>차량</th><th>기사</th><th>상태</th><th>좌표</th><th>수신</th></tr></thead>
+                <tbody>${gpsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">등록 차량이 없습니다</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>
+        </aside>
+      </div>`;
+    const refresh = root.querySelector('#controlRefresh');
+    if (refresh) refresh.onclick = (e) => {
+      e.preventDefault();
+      loadData({ preserveScroll: true });
+    };
+    setTimeout(() => showLiveMap('control-live'), 50);
   }
 
   function renderDrivers(root) {
@@ -5573,32 +5636,62 @@
 
   function onKakaoReady() {
     _kakaoReady = true;
-    initMap();
     connectLocationWebSocket();
-    if (currentPage === 'dashboard') showDashboardMap();
+    if (isMapPage()) showLiveMap(currentPage);
     else if (currentPage === 'customer-loc') initCustomerLocMap(document.getElementById('mainContent'));
     else if (currentPage === 'order-intake') bindPlaceSearch(document.getElementById('mainContent'));
     else if (currentPage === 'dispatch-assign') renderPage();
     else if (currentPage === 'bulk-dispatch') renderPage();
+    else initMap();
   }
 
-  function showDashboardMap() {
-    const mapCard = document.querySelector('.dash-map-card');
+  function isMapPage(page = currentPage) {
+    return page === 'dashboard' || page === 'control-live';
+  }
+
+  function showLiveMap(page = currentPage) {
+    const mapCard = document.querySelector(page === 'dashboard' ? '.dash-map-card' : '.control-map-card');
     const container = document.getElementById('map-container');
     if (!mapCard || !container) return;
-    mapCard.innerHTML = '';
+    const pageChanged = _liveMapPage !== page;
     container.style.display = 'block';
     container.style.position = 'relative';
     container.style.width = '100%';
     container.style.height = '100%';
-    mapCard.appendChild(container);
+    if (!mapCard.contains(container)) {
+      mapCard.innerHTML = '';
+      mapCard.appendChild(container);
+    }
+    if (pageChanged) {
+      const mapEl = document.getElementById('map');
+      if (mapEl) mapEl.innerHTML = '';
+      map = null;
+      _driverMarkers = {};
+      _liveMapPage = page;
+    }
+    if (!window.kakao?.maps) {
+      container.innerHTML = '<div id="map" style="width:100%;height:100%;"></div>';
+      const mapEl = document.getElementById('map');
+      if (mapEl) {
+        mapEl.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px">지도를 불러오는 중입니다</div>';
+      }
+      return;
+    }
+    if (!document.getElementById('map')) {
+      container.innerHTML = '<div id="map" style="width:100%;height:100%;"></div>';
+    }
+    if (!map) initMap();
     if (map) {
       kakao.maps.event.trigger(map, 'resize');
       renderVehicleLocationMarkers();
+      setTimeout(() => {
+        kakao.maps.event.trigger(map, 'resize');
+        renderVehicleLocationMarkers();
+      }, 120);
     }
   }
 
-  function hideDashboardMap() {
+  function hideLiveMap() {
     const container = document.getElementById('map-container');
     if (!container) return;
     document.body.appendChild(container);
@@ -5664,6 +5757,8 @@
     const total = Object.values(_driverUnread).reduce((s, n) => s + n, 0);
     const dot = document.getElementById('notifBadge');
     if (dot) dot.style.display = total > 0 ? '' : 'none';
+    const messageBadge = document.getElementById('messageBadge');
+    if (messageBadge) messageBadge.style.display = total > 0 ? '' : 'none';
 
     const drop = document.getElementById('notifDropdown');
     if (!drop) return;
@@ -5751,6 +5846,7 @@
     $('#brandHome').onclick = () => gotoPage('dashboard', 'dashboard');
     $('#modalOverlay').onclick = (e) => { if (e.target === $('#modalOverlay')) closeModal(); };
     // 탑바 버튼 이벤트
+    $('#messageBtn').onclick = () => { location.href = '/chat.html'; };
     $('#settingsBtn').onclick = () => { location.href = '/settings.html'; };
     $('#notifBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('notifDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('notifDropdown'); } };
     $('#userMenuBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('userDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('userDropdown'); } };
