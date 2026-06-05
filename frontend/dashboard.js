@@ -217,13 +217,13 @@
   function dispatchListTableRows(rows, opts = {}) {
     return rows.map((item, i) => {
       const n = normalizeDispatchListRow(item, i);
-      const selected = opts.selectedId === (item.id || item.order_id || n.orderId);
-      const rowCls = [opts.rowClass || 'order-row-clickable', selected ? 'selected' : ''].filter(Boolean).join(' ');
       const dataId = item.id || item.order_id || n.orderId;
+      const selected = opts.selectedId === dataId || (Array.isArray(opts.selectedIds) && opts.selectedIds.includes(dataId));
+      const rowCls = [opts.rowClass || 'order-row-clickable', selected ? 'selected' : ''].filter(Boolean).join(' ');
       const lead = opts.radioName
         ? `<td><input type="radio" name="${opts.radioName}" value="${dataId}" ${selected ? 'checked' : ''} aria-label="선택"></td>`
         : (opts.checkbox
-          ? `<td><input type="checkbox" class="${opts.checkboxClass || 'dispatch-chk'}" ${opts.checked !== false ? 'checked' : ''} data-id="${dataId}"></td>`
+          ? `<td><input type="checkbox" class="${opts.checkboxClass || 'dispatch-chk'}" ${(Array.isArray(opts.selectedIds) ? selected : opts.checked !== false) ? 'checked' : ''} data-id="${dataId}" aria-label="선택"></td>`
           : '');
       return `<tr class="${rowCls}" ${opts.dataAttr ? `data-${opts.dataAttr}="${dataId}"` : ''} title="${n.tooltip}">
         ${lead}
@@ -664,6 +664,7 @@
   let selectedCustomerId = null;
   let selectedTripId = null;
   let selectedOrderId = null;
+  let selectedOrderIds = [];
   let orderDetailTab = 'info';
   let selectedStaffId = null;
   let customerDetailTab = 'info';
@@ -683,11 +684,15 @@
   let bulkDispatchTab = 0;
   let bulkDepartureMode = 'distributed';
   let bulkAllowMixedLoad = true;
+  let bulkSelectedOrderIds = [];
+  let bulkSelectedDriverIds = [];
+  let bulkOrderAssignments = {};
   let dispatchPendingMixedOnly = false;
   let dashOrderTab = '전체';
   let pendingIntakes = [];
   let pendingIntakeSeq = 0;
   let dispatchPendingSelectedId = null;
+  let dispatchPendingSelectedIds = [];
   let dispatchManualVehicleId = null;
   let dispatchManualDriverId = null;
   let dispatchRegionSel = '전체';
@@ -2884,6 +2889,51 @@
     return '<span class="badge badge-muted">open_end</span>';
   }
 
+  function bulkAssignedOrderIds() {
+    const ids = new Set();
+    Object.values(bulkOrderAssignments).forEach(list => (list || []).forEach(id => ids.add(id)));
+    return ids;
+  }
+
+  function bulkOrderPool(stops) {
+    const assigned = bulkAssignedOrderIds();
+    return stops.filter(s => !assigned.has(s.id));
+  }
+
+  function bulkAvailableDrivers() {
+    return DATA.drivers.filter(d => d.status === '운행가능' || d.status === '운행중');
+  }
+
+  function bulkDriverVehicle(driverId) {
+    const driver = driverById(driverId);
+    return driver?.vehicleId ? vehicleById(driver.vehicleId) : DATA.vehicles.find(v => v.driverId === driverId) || null;
+  }
+
+  function bulkDriverCardsHtml(drivers) {
+    return drivers.map(d => {
+      const vehicle = bulkDriverVehicle(d.id);
+      const assigned = bulkOrderAssignments[String(d.id)] || [];
+      const picked = bulkSelectedDriverIds.includes(d.id);
+      return `
+        <div class="bulk-driver-card ${picked ? 'picked' : ''}" data-driver-id="${d.id}">
+          <div class="bulk-driver-card-hd">
+            <label class="bulk-driver-pick">
+              <input type="checkbox" class="bulk-driver-chk" data-id="${d.id}" ${picked ? 'checked' : ''} aria-label="${d.name} 선택">
+              <span class="bulk-driver-pick-text">
+                <strong>${d.name}</strong>
+                <span class="bulk-driver-vehicle">${vehicle ? `${vehicle.plate} · ${vehicle.tonnage || '—'}` : '연결 차량 없음'}</span>
+              </span>
+            </label>
+            ${statusBadge(d.status)}
+          </div>
+          <div class="bulk-driver-assigned">
+            <p class="field-label">배정 오더 ${assigned.length}건</p>
+            ${assigned.length ? assigned.map(id => `<span class="badge badge-muted">${id}</span>`).join(' ') : '<p class="bulk-driver-empty">아직 배정 없음</p>'}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
   function renderBulkDispatch(root) {
     DATA.bulkDispatch.stops = unassignedForDispatch();
     DATA.bulkDispatch.vehicles = DATA.dispatchFleet.map(f => {
@@ -2904,6 +2954,30 @@
     const plans = res.plans;
     const tabIdx = Math.min(bulkDispatchTab, plans.length - 1);
     const plan = plans[tabIdx] || plans[0];
+    const drivers = bulkAvailableDrivers();
+    const driverIds = new Set(drivers.map(d => d.id));
+    Object.keys(bulkOrderAssignments).forEach(id => {
+      if (!driverIds.has(Number(id))) delete bulkOrderAssignments[id];
+    });
+    const validStopIds = new Set(bd.stops.map(s => s.id));
+    Object.keys(bulkOrderAssignments).forEach(id => {
+      bulkOrderAssignments[id] = (bulkOrderAssignments[id] || []).filter(orderId => validStopIds.has(orderId));
+      if (!bulkOrderAssignments[id].length) delete bulkOrderAssignments[id];
+    });
+    bulkSelectedOrderIds = bulkSelectedOrderIds.filter(id => validStopIds.has(id) && !bulkAssignedOrderIds().has(id));
+    bulkSelectedDriverIds = bulkSelectedDriverIds.filter(id => driverIds.has(id));
+    const pool = bulkOrderPool(bd.stops);
+    const poolIds = pool.map(s => s.id);
+    const allPoolSelected = poolIds.length > 0 && poolIds.every(id => bulkSelectedOrderIds.includes(id));
+    const assignedCount = Object.values(bulkOrderAssignments).reduce((sum, list) => sum + (list?.length || 0), 0);
+    const assignedDriverCount = Object.values(bulkOrderAssignments).filter(list => list?.length).length;
+    const canAssign = bulkSelectedOrderIds.length > 0 && bulkSelectedDriverIds.length > 0;
+    const canRunBulk = assignedCount > 0 && assignedDriverCount > 0;
+    const driverBarLabel = !bulkSelectedDriverIds.length
+      ? '선택'
+      : bulkSelectedDriverIds.length === 1
+        ? (driverById(bulkSelectedDriverIds[0])?.name || '선택')
+        : `${bulkSelectedDriverIds.length}명`;
 
     const visitLi = (v) => {
       const cls = v.kind === 'rest' ? 'rest' : (v.kind === 'origin' || v.kind === 'end' ? v.kind : '');
@@ -2914,11 +2988,15 @@
       <div class="page-sticky-top">
       ${pageChromeHtml('bulk-dispatch', { desc: '다차량·다배송지 자동 배정 · 경로 미리보기' })}
       </div>
-      <div class="page-scroll-main">
-      <details class="dispatch-collapse" open>
-        <summary>설정 — 출발·배송지·차량</summary>
-        <div class="dispatch-collapse-bd">
-      <div class="card">
+      <div class="page-scroll-main page-bulk-dispatch">
+      <div class="bulk-dispatch-stack">
+      <div class="card bulk-setup-card" id="sec-bulk-setup">
+        <div class="card-hd card-hd--dispatch">
+          <div class="card-hd-lead">
+            <h2>오더·기사 배정</h2>
+            <span class="text-muted-hint" style="font-size:12px">미배정 오더를 선택해 기사별로 배정한 뒤 일괄 최적화</span>
+          </div>
+        </div>
         <div class="card-bd" style="padding-top:0">
           <p class="field-label">출발 방식</p>
           <div class="departure-mode" role="radiogroup" aria-label="출발 방식">
@@ -2943,52 +3021,65 @@
             <div class="map-placeholder map-short" style="margin-bottom:16px" id="bulkDepotMapPreview" aria-label="센터 위치 지도"></div>
           </div>
 
-          <p class="field-label" style="margin-top:16px">배송지 목록</p>
-          ${bulkStopsTableHtml(bd.stops)}
-          <p class="empty-hint" style="margin-top:8px;font-size:12px">${bd.stops.length}건 · 일괄 배차 대상</p>
-
           <label class="toolbar" style="margin-top:12px;font-size:13px;cursor:pointer">
             <input type="checkbox" id="bulkAllowMixed" ${bulkAllowMixedLoad ? 'checked' : ''}>
             혼적 허용 <span class="text-muted-hint">(동일 차량·복수 화주·화물)</span>
           </label>
 
-          <p class="field-label" style="margin-top:16px">가용 차량</p>
-          <ul class="checklist" id="bulkFleetList">
-            ${bd.vehicles.map(v => `
-              <li class="${v.available === false ? 'unavail' : ''}" data-bulk-row="${v.id}">
-                <input type="checkbox" id="bulk-v-${v.id}" checked ${v.available === false ? 'disabled' : ''}>
-                <label for="bulk-v-${v.id}">
-                  <div class="vehicle-bind-row">
-                    <span style="font-size:11px;color:var(--text-muted);min-width:48px">${v.label}</span>
-                    <select class="bulk-vehicle-select" data-bulk-row="${v.id}">
-                      ${vehicleSelectOptions(v.vehicleId)}
-                    </select>
-                    ${bulkEndPolicyBadge(v.end_policy)}
-                  </div>
-                  <div class="vehicle-preview bulk-vehicle-preview" data-bulk-row="${v.id}">
-                    <strong>${v.plate}</strong> · ${v.tonnage || '—'} · ${v.type || '—'} · max ${v.weight_kg} kg
-                    <div class="fleet-meta">
-                      <span>출발: 최근 GPS ${v.start_lat != null && v.start_lon != null ? `(${Number(v.start_lat).toFixed(2)}, ${Number(v.start_lon).toFixed(2)})` : '(미수신)'}</span>
-                      <span class="coord">${v.start_city || '—'} · GPS</span>
-                    </div>
-                  </div>
-                  <div class="vehicle-bind-row" style="margin-top:6px">
-                    <span style="font-size:11px;color:var(--text-muted);min-width:48px">기사</span>
-                    <select class="bulk-driver-select" data-bulk-row="${v.id}">
-                      ${driverSelectOptions(v.driverId)}
-                    </select>
-                  </div>
-                </label>
-              </li>`).join('')}
-          </ul>
+          <div class="dispatch-setup-grid bulk-assign-grid">
+            <div class="dispatch-setup-main dispatch-setup-main--stack">
+              <p class="field-label" style="margin-top:16px">미배정 오더 <span class="text-muted-hint" style="font-weight:400">· 행 클릭 또는 체크로 다중 선택</span></p>
+              <div id="bulkOrderPool">
+                ${tableScrollWrap(`<table class="bulk-pool-table">
+                  <thead><tr>
+                    <th><input type="checkbox" id="chkAllBulkPool" ${allPoolSelected ? 'checked' : ''} aria-label="전체 선택"></th>
+                    <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
+                  </tr></thead>
+                  <tbody id="bulkOrderPoolBody">
+                    ${pool.length ? dispatchListTableRows(pool, {
+                      rowClass: 'bulk-pool-row order-row-clickable',
+                      dataAttr: 'bulk-order-id',
+                      checkbox: true,
+                      checkboxClass: 'bulk-pool-chk',
+                      selectedIds: bulkSelectedOrderIds,
+                    }) : `
+                      <tr><td colspan="8" class="empty-hint" style="padding:16px">미배정 오더가 없습니다.</td></tr>`}
+                  </tbody>
+                </table>`)}
+              </div>
+              <p class="empty-hint dispatch-table-foot">${pool.length}건 미배정 · ${bulkSelectedOrderIds.length ? `<strong>${bulkSelectedOrderIds.length}</strong>건 선택` : '선택 없음'}</p>
+            </div>
+            <aside class="dispatch-setup-fleet" aria-label="가용 기사">
+              <div class="driver-panel bulk-driver-panel">
+                <div class="bulk-driver-panel-hd">
+                  <h3>가용 기사 <span class="text-muted-hint" style="font-weight:400;font-size:12px">· 체크로 다중 선택</span></h3>
+                  <label class="bulk-driver-select-all">
+                    <input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택">
+                    <span>전체</span>
+                  </label>
+                </div>
+                <input type="search" class="search bulk-driver-search" placeholder="기사 검색" id="bulkDriverSearch">
+                <div class="bulk-driver-list" id="bulkDriverList">${bulkDriverCardsHtml(drivers)}</div>
+              </div>
+            </aside>
+          </div>
 
-          <div class="card-actions">
-            <button type="button" class="btn btn-primary" id="runBulkDispatch">일괄 배차 실행</button>
+          <div class="bulk-setup-footer">
+            <div class="bulk-assign-bar ${canAssign ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
+              <span class="bulk-assign-bar-label">오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
+              <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
+              <span class="bulk-assign-bar-label">기사 <strong>${driverBarLabel}</strong></span>
+              <button type="button" class="btn btn-primary" id="bulkAssignToDriver" ${canAssign ? '' : 'disabled'}>기사에게 배정</button>
+            </div>
+            <div class="bulk-setup-exec">
+              <p class="bulk-pre-kpi">미배정 <strong>${pool.length}</strong>건 · 기사 배정 <strong>${assignedCount}</strong>건 · 배정 기사 <strong>${assignedDriverCount}</strong>명</p>
+              <div class="card-actions bulk-setup-actions">
+                <button type="button" class="btn btn-primary" id="runBulkDispatch" ${canRunBulk ? '' : 'disabled'}>일괄 배차 실행</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-        </div>
-      </details>
 
       <details class="dispatch-collapse" ${bulkDispatchRan ? 'open' : ''}>
         <summary>결과 — 차량별 방문 순서·미배정</summary>
@@ -3053,6 +3144,7 @@
       </div>
         </div>
       </details>
+      </div>
       </div>`;
 
     $('#bulkAllowMixed', root)?.addEventListener('change', (e) => {
@@ -3078,6 +3170,73 @@
           renderBulkDispatch(root);
         })
         .catch(() => toast('주소 변환 실패'));
+    });
+    $('#chkAllBulkPool', root)?.addEventListener('change', (e) => {
+      const ids = new Set(bulkSelectedOrderIds);
+      poolIds.forEach(id => e.target.checked ? ids.add(id) : ids.delete(id));
+      bulkSelectedOrderIds = [...ids];
+      renderBulkDispatch(root);
+    });
+    root.querySelectorAll('.bulk-pool-chk').forEach(chk => {
+      chk.onchange = (e) => {
+        const ids = new Set(bulkSelectedOrderIds);
+        e.target.checked ? ids.add(chk.dataset.id) : ids.delete(chk.dataset.id);
+        bulkSelectedOrderIds = [...ids];
+        renderBulkDispatch(root);
+      };
+    });
+    root.querySelectorAll('.bulk-pool-row').forEach(tr => {
+      tr.onclick = (e) => {
+        if (e.target.closest('input')) return;
+        const id = tr.dataset.bulkOrderId;
+        const ids = new Set(bulkSelectedOrderIds);
+        ids.has(id) ? ids.delete(id) : ids.add(id);
+        bulkSelectedOrderIds = [...ids];
+        renderBulkDispatch(root);
+      };
+    });
+    $('#chkAllBulkDrivers', root)?.addEventListener('change', (e) => {
+      bulkSelectedDriverIds = e.target.checked ? drivers.map(d => d.id) : [];
+      renderBulkDispatch(root);
+    });
+    root.querySelectorAll('.bulk-driver-chk').forEach(chk => {
+      chk.onchange = (e) => {
+        const id = Number(chk.dataset.id);
+        const ids = new Set(bulkSelectedDriverIds);
+        e.target.checked ? ids.add(id) : ids.delete(id);
+        bulkSelectedDriverIds = [...ids];
+        renderBulkDispatch(root);
+      };
+    });
+    root.querySelectorAll('.bulk-driver-card').forEach(card => {
+      card.onclick = (e) => {
+        if (e.target.closest('input')) return;
+        const id = Number(card.dataset.driverId);
+        const ids = new Set(bulkSelectedDriverIds);
+        ids.has(id) ? ids.delete(id) : ids.add(id);
+        bulkSelectedDriverIds = [...ids];
+        renderBulkDispatch(root);
+      };
+    });
+    $('#bulkDriverSearch', root)?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      root.querySelectorAll('.bulk-driver-card').forEach(card => {
+        card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+    $('#bulkAssignToDriver', root)?.addEventListener('click', () => {
+      if (!bulkSelectedOrderIds.length || !bulkSelectedDriverIds.length) return;
+      const orderIds = [...bulkSelectedOrderIds];
+      const driverIds = [...bulkSelectedDriverIds];
+      orderIds.forEach((orderId, idx) => {
+        const driverId = driverIds[idx % driverIds.length];
+        const key = String(driverId);
+        if (!bulkOrderAssignments[key]) bulkOrderAssignments[key] = [];
+        if (!bulkOrderAssignments[key].includes(orderId)) bulkOrderAssignments[key].push(orderId);
+      });
+      bulkSelectedOrderIds = [];
+      toast(`${orderIds.length}건을 기사 ${driverIds.length}명에게 배정했습니다`);
+      renderBulkDispatch(root);
     });
     root.querySelectorAll('.bulk-vehicle-select').forEach(sel => {
       sel.onchange = () => {
@@ -3113,13 +3272,12 @@
       };
     });
     $('#runBulkDispatch', root).onclick = async () => {
-      const checked = root.querySelectorAll('#bulkFleetList input:checked:not(:disabled)');
-      if (!checked.length) { toast('가용 차량을 1대 이상 선택하세요'); return; }
-      if (!bd.stops.length) { toast('배차할 배송 건이 없습니다. 접수창에서 오더를 등록하세요.'); return; }
-
+      if (!canRunBulk) { toast('기사별로 오더를 먼저 배정하세요'); return; }
       const tasks = [];
       const skipped = [];
-      bd.stops.forEach(stop => {
+      const assignedOrderIds = [...bulkAssignedOrderIds()];
+      assignedOrderIds.forEach(orderId => {
+        const stop = bd.stops.find(s => s.id === orderId);
         const ord = DATA.orders.find(o => o.id === stop.id);
         const task = dispatchTaskFromOrder(ord);
         if (!task) { skipped.push(stop.id); return; }
@@ -3127,14 +3285,15 @@
       });
       if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
 
-      const selectedRows = [];
-      checked.forEach(chk => {
-        const rowId = Number(chk.closest('li')?.dataset.bulkRow);
-        const row = bd.vehicles.find(v => v.id === rowId);
-        if (row?.driverId) selectedRows.push(row);
+      const driver_ids = Object.entries(bulkOrderAssignments)
+        .filter(([, ids]) => ids?.length)
+        .map(([driverId]) => driverId);
+      const vehicle_assignments = {};
+      driver_ids.forEach(driverId => {
+        const vehicle = bulkDriverVehicle(driverId);
+        if (vehicle?.id) vehicle_assignments[driverId] = Number(vehicle.id);
       });
-      const { driver_ids, vehicle_assignments } = dispatchVehicleAssignmentsFromRows(selectedRows);
-      if (!driver_ids.length) { toast('선택된 차량에 기사가 없습니다. 기사를 먼저 지정하세요.'); return; }
+      if (!driver_ids.length) { toast('배정된 기사가 없습니다.'); return; }
 
       const btn = $('#runBulkDispatch', root);
       btn.disabled = true;
@@ -3154,7 +3313,7 @@
         const trips = result.trips || [];
         _bulkDispatchTrips = trips;
         DATA.bulkDispatch.results = {
-          summary: { vehicles: trips.length, stops: tasks.length, unassigned: skipped.length },
+          summary: { vehicles: trips.length, stops: tasks.length, unassigned: skipped.length + pool.length },
           plans: trips.map(t => {
             const dv = driverById(t.driver_id);
             const vv = vehicleById(t.vehicle_id);
@@ -3174,6 +3333,7 @@
         };
         bulkDispatchRan = true;
         bulkDispatchTab = 0;
+        bulkOrderAssignments = {};
         toast(skipped.length
           ? `배차 완료 · ${trips.length}대 · ${tasks.length}건 (${skipped.length}건 좌표 미확인 제외)`
           : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
@@ -3448,8 +3608,16 @@
     const plan = plans[tabIdx] || plans[0];
     let unassigned = _allUnassigned.filter(_passRegion).filter(_passSite);
     if (dispatchPendingMixedOnly) unassigned = unassigned.filter(o => isMixedLoad(o));
+    const visiblePendingIds = new Set(unassigned.map(o => o.id));
+    dispatchPendingSelectedIds = dispatchPendingSelectedIds.filter(id => visiblePendingIds.has(id));
+    if (dispatchPendingSelectedId && !visiblePendingIds.has(dispatchPendingSelectedId)) dispatchPendingSelectedId = dispatchPendingSelectedIds[0] || null;
+    if (!dispatchPendingSelectedId && dispatchPendingSelectedIds.length) dispatchPendingSelectedId = dispatchPendingSelectedIds[0];
+    const selectedRows = unassigned.filter(o => dispatchPendingSelectedIds.includes(o.id));
     const selectedPending = unassigned.find(o => o.id === dispatchPendingSelectedId)
       || (dispatchPendingSelectedId ? unassignedForDispatch().find(o => o.id === dispatchPendingSelectedId) : null);
+    const hasManualSelection = selectedRows.length > 0;
+    const vehicleLabel = dispatchManualVehicleId ? (() => { const v = vehicleById(dispatchManualVehicleId); return v ? `${v.plate} · ${v.tonnage || '—'}` : '선택'; })() : '미선택';
+    const driverLabel = dispatchManualDriverId ? (driverById(dispatchManualDriverId)?.name || '선택') : '미선택';
     const assignIds = {
       vehicle: 'dispatchAssignVehicle',
       vehiclePreview: 'dispatchAssignVehiclePreview',
@@ -3468,7 +3636,7 @@
       <div class="card" id="sec-dispatch-pending">
         <div class="card-hd">
           <h2>미배차 건</h2>
-          <span style="font-size:12px;color:var(--text-muted)">접수 저장 · 접수 상태 오더</span>
+          <span style="font-size:12px;color:var(--text-muted)">접수 저장 · 행 클릭 또는 체크로 다중 선택</span>
           <label class="toolbar" style="margin-left:auto;font-size:12px;cursor:pointer;font-weight:normal">
             <input type="checkbox" id="dispatchMixedOnlyFilter" ${dispatchPendingMixedOnly ? 'checked' : ''}> 혼적만
           </label>
@@ -3477,17 +3645,18 @@
           ${tableScrollWrap(`<table>
             <thead>
               <tr>
-                <th></th><th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
+                <th><input type="checkbox" id="chkAllPending" ${unassigned.length && dispatchPendingSelectedIds.length === unassigned.length ? 'checked' : ''} aria-label="전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>톤수</th><th>시간창</th><th>상태</th>
               </tr>
             </thead>
             <tbody id="pendingIntakeBody">
               ${unassigned.length ? dispatchListTableRows(
                 unassigned.map(o => ({ ...o, status: o.status || '접수', customer: o.shipper })),
-                { rowClass: 'pending-row order-row-clickable', dataAttr: 'pending-id', radioName: 'pendingPick', selectedId: dispatchPendingSelectedId }
+                { rowClass: 'pending-row order-row-clickable bulk-pool-row', dataAttr: 'pending-id', checkbox: true, checkboxClass: 'pending-chk', selectedIds: dispatchPendingSelectedIds }
               ) : `
                 <tr><td colspan="8" class="empty-hint" style="padding:16px">${dispatchPendingMixedOnly ? '혼적 미배차 건이 없습니다.' : '미배차 건이 없습니다. 접수 창에서 저장하세요.'}</td></tr>`}
             </tbody>
           </table>`)}
+          <p class="empty-hint dispatch-table-foot" style="padding:0 16px 12px">${unassigned.length}건 · ${selectedRows.length ? `<strong>${selectedRows.length}</strong>건 선택` : '선택 없음'}</p>
         </div>
       </div>
 
@@ -3496,7 +3665,7 @@
         <div class="card-bd">
           ${selectedPending ? `
             <p class="field-label" style="margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-              <span><strong>${selectedPending.id}</strong> · ${placeShortLabel(selectedPending.pickup)} ▶ ${placeShortLabel(selectedPending.delivery)} · ${selectedPending.shipper || selectedPending.customer}</span>
+              <span><strong>${selectedRows.length}건 선택</strong> · 대표 ${selectedPending.id} · ${placeShortLabel(selectedPending.pickup)} ▶ ${placeShortLabel(selectedPending.delivery)} · ${selectedPending.shipper || selectedPending.customer}</span>
               <span style="font-weight:normal;font-size:12px">혼적 여부 <strong>${mixedLoadLabel(isMixedLoad(selectedPending))}</strong> ${mixedLoadBadge(isMixedLoad(selectedPending))}</span>
               <label style="font-weight:normal;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer">
                 <input type="checkbox" id="toggleSelectedMixed" ${isMixedLoad(selectedPending) ? 'checked' : ''}> 혼적 (편집)
@@ -3506,7 +3675,7 @@
               <div class="intake-main">
                 <div class="intake-actions">
                   <button type="button" class="btn" id="calcRouteAssign">경로 계산</button>
-                  <button type="button" class="btn btn-primary" id="confirmDispatchAssign">배정 확정</button>
+                  <button type="button" class="btn btn-primary" id="confirmDispatchAssign" ${hasManualSelection ? '' : 'disabled'}>배정 확정</button>
                 </div>
                 <div class="route-box" id="routeBoxAssign">
                   <strong>경로 미리보기</strong>
@@ -3521,6 +3690,14 @@
               ${manualAssignPanelHtml(assignIds)}
             </div>` : `
             <p class="empty-hint">위 「미배차 건」에서 건을 선택한 뒤 차량·기사를 지정하고 경로를 계산하세요.</p>`}
+          <div class="bulk-setup-footer manual-setup-footer">
+            <div class="bulk-assign-bar ${hasManualSelection ? '' : 'bulk-assign-bar--dim'}" id="manualAssignBar">
+              <span class="bulk-assign-bar-label">오더 <strong>${selectedRows.length}</strong>건</span>
+              <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
+              <span class="bulk-assign-bar-label">차량 <strong>${vehicleLabel}</strong></span>
+              <span class="bulk-assign-bar-label">기사 <strong>${driverLabel}</strong></span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3654,16 +3831,33 @@
 
     const pickPending = (id) => {
       dispatchPendingSelectedId = id;
+      if (!dispatchPendingSelectedIds.includes(id)) dispatchPendingSelectedIds = [id];
       renderDispatchAssign(root);
     };
     root.querySelectorAll('.pending-row').forEach(tr => {
       tr.onclick = (e) => {
         if (e.target.tagName === 'INPUT') return;
-        pickPending(tr.dataset.pendingId);
+        const id = tr.dataset.pendingId;
+        const ids = new Set(dispatchPendingSelectedIds);
+        ids.has(id) ? ids.delete(id) : ids.add(id);
+        dispatchPendingSelectedIds = [...ids];
+        dispatchPendingSelectedId = dispatchPendingSelectedIds.includes(id) ? id : (dispatchPendingSelectedIds[0] || null);
+        renderDispatchAssign(root);
       };
     });
-    root.querySelectorAll('input[name="pendingPick"]').forEach(radio => {
-      radio.onchange = () => { if (radio.checked) pickPending(radio.value); };
+    $('#chkAllPending', root)?.addEventListener('change', (e) => {
+      dispatchPendingSelectedIds = e.target.checked ? unassigned.map(o => o.id) : [];
+      dispatchPendingSelectedId = dispatchPendingSelectedIds[0] || null;
+      renderDispatchAssign(root);
+    });
+    root.querySelectorAll('.pending-chk').forEach(chk => {
+      chk.onchange = (e) => {
+        const ids = new Set(dispatchPendingSelectedIds);
+        e.target.checked ? ids.add(chk.dataset.id) : ids.delete(chk.dataset.id);
+        dispatchPendingSelectedIds = [...ids];
+        dispatchPendingSelectedId = e.target.checked ? chk.dataset.id : (dispatchPendingSelectedIds[0] || null);
+        renderDispatchAssign(root);
+      };
     });
     $('#dispatchMixedOnlyFilter', root)?.addEventListener('change', (e) => {
       dispatchPendingMixedOnly = e.target.checked;
@@ -3701,10 +3895,15 @@
         }
         const v = vehicleById(dispatchManualVehicleId);
         const d = driverById(dispatchManualDriverId);
-        const ordId = dispatchPendingSelectedId;
-        const ord = DATA.orders.find(o => o.id === ordId);
-        const task = dispatchTaskFromOrder(ord);
-        if (!task) {
+        const selectedIds = [...dispatchPendingSelectedIds];
+        const tasks = [];
+        const skipped = [];
+        selectedIds.forEach(ordId => {
+          const ord = DATA.orders.find(o => o.id === ordId);
+          const task = dispatchTaskFromOrder(ord);
+          task ? tasks.push(task) : skipped.push(ordId);
+        });
+        if (!tasks.length) {
           toast('상차지·하차지 좌표가 필요합니다. 오더를 수정해 좌표를 저장하세요');
           return;
         }
@@ -3712,7 +3911,7 @@
           method: 'POST',
           headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tasks: [task],
+            tasks,
             driver_ids: [dispatchManualDriverId],
             vehicle_assignments: { [dispatchManualDriverId]: Number(dispatchManualVehicleId) },
             departure_time: new Date().toISOString(),
@@ -3725,15 +3924,20 @@
         }
         const result = await res.json();
         const trips = result.trips || [];
-        applyDispatchTripsResult(trips);
-        if (ord) {
+        applyDispatchTripsResult(trips, skipped);
+        selectedIds.forEach(ordId => {
+          const ord = DATA.orders.find(o => o.id === ordId);
+          if (!ord) return;
           ord.status = '운행중';
           ord.driver = d?.name || '—';
-        }
-        const idx = pendingIntakes.findIndex(p => p.id === ordId);
-        if (idx >= 0) pendingIntakes.splice(idx, 1);
-        toast(`Trip 생성 완료 · ${v?.plate || ''} ${d ? '· ' + d.name : ''}`);
+        });
+        selectedIds.forEach(ordId => {
+          const idx = pendingIntakes.findIndex(p => p.id === ordId);
+          if (idx >= 0) pendingIntakes.splice(idx, 1);
+        });
+        toast(`Trip 생성 완료 · ${tasks.length}건 · ${v?.plate || ''} ${d ? '· ' + d.name : ''}`);
         dispatchPendingSelectedId = null;
+        dispatchPendingSelectedIds = [];
         _lastManualAssign = null;
         await loadRealData();
       };
@@ -5150,6 +5354,9 @@
     const statuses = ['전체', '접수', '배차대기', '배차', '운행중', '완료', '취소'];
     const allRows = DATA.orders.filter(o => orderMatchesFilter(o, orderFilter));
     const rows = allRows.slice((orderPage - 1) * PAGE_SIZE, orderPage * PAGE_SIZE);
+    const rowIds = rows.map(o => o.id);
+    selectedOrderIds = selectedOrderIds.filter(id => DATA.orders.some(o => o.id === id));
+    const allPageSelected = rowIds.length > 0 && rowIds.every(id => selectedOrderIds.includes(id));
     const selected = selectedOrderId ? orderById(selectedOrderId) : null;
     const detailTab = selected ? orderDetailTab : 'info';
     const listCard = `
@@ -5159,12 +5366,21 @@
           <div class="chips" id="orderChips">
             ${statuses.map(s => `<button type="button" class="chip ${orderFilter === s ? 'active' : ''}" data-f="${s}">${s}</button>`).join('')}
           </div>
+          <div class="order-list-selection-actions" aria-label="오더 선택 작업">
+            <button type="button" class="btn btn-sm" id="orderSelectVisible">${allPageSelected ? '현재 페이지 해제' : '현재 페이지 선택'}</button>
+            <button type="button" class="btn btn-sm" id="orderClearSelection" ${selectedOrderIds.length ? '' : 'disabled'}>선택 해제</button>
+          </div>
           <button type="button" class="btn btn-sm btn-primary" id="goOrderIntake" style="margin-left:auto">+ 접수 창</button>
+        </div>
+        <div class="order-bulk-bar ${selectedOrderIds.length ? '' : 'is-idle'}">
+          <span>선택 <strong>${selectedOrderIds.length}</strong>건</span>
+          <span class="text-muted-hint">행 클릭은 상세 보기, 체크박스는 일괄 선택</span>
+          <button type="button" class="btn btn-sm" id="orderGoDispatch" ${selectedOrderIds.length ? '' : 'disabled'}>선택 건 배차지정</button>
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>
             <thead><tr>
-              <th>오더번호</th><th>혼적</th><th>화주</th><th>상차</th><th>하차</th><th>화물</th><th>시간창</th><th>접수시간</th><th>기사</th><th>상태</th><th></th>
+              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>상차</th><th>하차</th><th>화물</th><th>시간창</th><th>접수시간</th><th>기사</th><th>상태</th><th></th>
             </tr></thead>
             <tbody>${rows.length ? rows.map(o => {
               const editable = orderIsEditable(o);
@@ -5172,17 +5388,19 @@
                 'order-row-clickable',
                 o.status === '취소' ? 'order-row-cancelled' : '',
                 selectedOrderId === o.id ? 'selected' : '',
+                selectedOrderIds.includes(o.id) ? 'picked' : '',
               ].filter(Boolean).join(' ');
               const statusCell = `${statusBadge(o.status)}${editable ? '<span class="badge-edit">수정</span>' : ''}`;
               return `
               <tr class="${rowCls}" data-order-id="${o.id}">
+                <td><input type="checkbox" class="order-list-chk" data-id="${o.id}" ${selectedOrderIds.includes(o.id) ? 'checked' : ''} aria-label="${o.id} 선택"></td>
                 <td>${o.id}</td><td>${mixedLoadBadge(isMixedLoad(o))}</td><td>${o.customer}</td><td>${o.pickup}</td><td>${o.delivery}</td>
                 <td>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</td>
                 <td>${o.window}</td><td>${formatDateTimeShort(o.created_at)}</td><td>${o.driver || '—'}</td><td>${statusCell}</td>
                 <td><button type="button" class="btn btn-sm edit-order" data-order-id="${o.id}">수정</button></td>
               </tr>`;
             }).join('') : `
-              <tr><td colspan="11" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
+              <tr><td colspan="12" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
           ${paginationHtml(allRows.length, orderPage, 'orders')}
@@ -5201,6 +5419,37 @@
     root.querySelectorAll('#orderChips .chip').forEach(chip => {
       chip.onclick = () => { orderPage = 1; orderFilter = chip.dataset.f; selectedOrderId = null; renderOrderList(root); };
     });
+    const syncOrderSelection = () => renderOrderList(root);
+    $('#chkAllOrdersPage', root)?.addEventListener('change', (e) => {
+      const ids = new Set(selectedOrderIds);
+      rowIds.forEach(id => e.target.checked ? ids.add(id) : ids.delete(id));
+      selectedOrderIds = [...ids];
+      syncOrderSelection();
+    });
+    $('#orderSelectVisible', root)?.addEventListener('click', () => {
+      const ids = new Set(selectedOrderIds);
+      const select = !allPageSelected;
+      rowIds.forEach(id => select ? ids.add(id) : ids.delete(id));
+      selectedOrderIds = [...ids];
+      syncOrderSelection();
+    });
+    $('#orderClearSelection', root)?.addEventListener('click', () => {
+      selectedOrderIds = [];
+      syncOrderSelection();
+    });
+    $('#orderGoDispatch', root)?.addEventListener('click', () => {
+      dispatchPendingSelectedIds = selectedOrderIds.filter(id => DATA.orders.some(o => o.id === id && o.status === '접수'));
+      dispatchPendingSelectedId = dispatchPendingSelectedIds[0] || null;
+      gotoPage('dispatch', 'dispatch-assign');
+    });
+    root.querySelectorAll('.order-list-chk').forEach(chk => {
+      chk.onchange = (e) => {
+        const ids = new Set(selectedOrderIds);
+        e.target.checked ? ids.add(chk.dataset.id) : ids.delete(chk.dataset.id);
+        selectedOrderIds = [...ids];
+        syncOrderSelection();
+      };
+    });
     root.querySelectorAll('.edit-order').forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
@@ -5210,7 +5459,7 @@
     });
     root.querySelectorAll('tbody tr[data-order-id]').forEach(tr => {
       tr.onclick = (e) => {
-        if (e.target.closest('.edit-order')) return;
+        if (e.target.closest('.edit-order') || e.target.closest('.order-list-chk')) return;
         orderDetailTab = 'info';
         selectOrder(tr.dataset.orderId);
       };

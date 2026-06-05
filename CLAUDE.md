@@ -84,8 +84,8 @@ routeon/
     ├── login.html
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
-    ├── dashboard.css       대시보드 스타일 (2,245줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (5,447줄, dashboard.html에서 분리)
+    ├── dashboard.css       대시보드 스타일 (2,278줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (5,696줄, dashboard.html에서 분리)
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
@@ -525,6 +525,11 @@ dashboard.html 관제 지도:
 - 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 연결 기사 기준으로 지도 마커를 즉시 표시한다.
 - 이후 `/ws/location` 수신 시 같은 마커 위치와 `DATA.vehicles[].start_lat/start_lon`, `last_gps_label`, `last_gps_at`을 함께 갱신한다.
 - 대시보드 오더 요약 카드는 상태 필터별 최대 5건만 표시하며, 전체 목록은 `오더관리 > 오더 목록` 페이지에서 페이지네이션으로 조회한다.
+
+dashboard.html 오더·배차 UI:
+- `오더관리 > 오더 목록`은 행 클릭을 상세 조회, 체크박스를 다중 선택으로 사용한다. 현재 페이지 선택/해제와 선택 해제 버튼을 제공하며, 선택한 접수 상태 오더는 `배차·지정 > 단건·수동 배차`로 전달할 수 있다.
+- `배차·지정 > 일괄 자동 배차`는 미배정 오더 풀에서 오더를 고르고 가용 기사 카드를 선택한 뒤 `기사에게 배정`으로 기사별 배정 묶음을 만든다. `일괄 배차 실행`은 배정된 오더/기사 기준으로 `/trips/auto-dispatch`를 호출한다.
+- `배차·지정 > 단건·수동 배차`는 미배차 건 체크박스 다중 선택을 지원한다. 선택한 여러 오더를 같은 차량·기사로 확정할 수 있으며, 좌표가 없는 건은 기존 배차 결과의 미배정 처리 흐름을 사용한다.
 
 dashboard.html 채팅 알림 WS:
 - WS /ws/chat 경량 연결 (수신 전용, 전송 없음) — `connectChatWebSocket()`

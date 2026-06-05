@@ -1387,6 +1387,39 @@
     .route-cell { font-size: 11px; color: var(--t-text-th); line-height: 1.45; }
     .route-cell strong { color: var(--t-text); font-weight: 600; }
 
+    .order-list-selection-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+      flex-wrap: wrap;
+    }
+    .order-bulk-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      border-top: 1px solid var(--dark-border);
+      border-bottom: 1px solid var(--dark-border);
+      background: rgba(198,241,53,.07);
+      color: var(--t-text);
+    }
+    .order-bulk-bar.is-idle {
+      background: var(--t-deep);
+      color: var(--t-text-muted);
+    }
+    .order-bulk-bar strong { color: var(--lime); }
+    .order-bulk-bar .btn { margin-left: auto; }
+    tr.picked td,
+    tr.bulk-pool-row.selected td {
+      background: rgba(198,241,53,.06);
+    }
+    tr.picked td:first-child,
+    tr.bulk-pool-row.selected td:first-child {
+      box-shadow: inset 3px 0 0 var(--lime);
+    }
+
     /* —— 접수 창 · 태스크 카드 (theme-app 다크) —— */
     .btn-excel {
       display: inline-flex;
