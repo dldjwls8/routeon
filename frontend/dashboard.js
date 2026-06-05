@@ -1724,9 +1724,50 @@
     </div>`;
   }
 
+  function formatOrderEventNote(event) {
+    if (!event) return '—';
+    const details = event.details || {};
+    if (details.changes) {
+      const labels = Object.values(details.changes).map(c => c.label).filter(Boolean);
+      return labels.length ? `${event.summary}: ${labels.join(', ')}` : event.summary;
+    }
+    if (details.reason) return `${event.summary} · ${details.reason}`;
+    return event.summary || event.event_type || '처리 기록';
+  }
+
+  function orderEventActorLabel(role) {
+    return ({ admin: '관리자', driver: '기사', superadmin: '슈퍼관리자' })[role] || '';
+  }
+
+  async function loadOrderEvents(orderId) {
+    const o = orderById(orderId);
+    if (!o || o._eventsLoading || o._eventsLoaded) return;
+    o._eventsLoading = true;
+    try {
+      const res = await fetch(`${API}/deliveries/${orderId}/events`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const events = await res.json();
+        o.changeHistory = events.map(ev => ({
+          at: formatDateTimeShort(ev.created_at),
+          user: ev.actor_name || orderEventActorLabel(ev.actor_role) || '시스템',
+          note: formatOrderEventNote(ev),
+        }));
+        o._eventsLoaded = true;
+      }
+    } catch (err) {
+      console.warn('오더 처리 기록 로드 실패', err);
+    } finally {
+      o._eventsLoading = false;
+    }
+    if (selectedOrderId === orderId) renderPage();
+  }
+
   function orderHistoryTableHtml(o) {
+    if (o._eventsLoading) {
+      return '<p class="empty-hint">처리 기록을 불러오는 중입니다.</p>';
+    }
     const hist = o.changeHistory?.length ? o.changeHistory : [
-      { at: '—', user: '—', note: '변경 이력 없음' },
+      { at: '—', user: '—', note: '처리 기록 없음' },
     ];
     return `<div class="data-table order-history-table">
       <table>
@@ -1751,7 +1792,7 @@
       <div class="tabs detail-tabs">
         <button type="button" class="tab ${tab === 'info' ? 'active' : ''}" data-tab="info">기본</button>
         <button type="button" class="tab ${tab === 'stops' ? 'active' : ''}" data-tab="stops">상·하차</button>
-        <button type="button" class="tab ${tab === 'hist' ? 'active' : ''}" data-tab="hist">변경 이력</button>
+        <button type="button" class="tab ${tab === 'hist' ? 'active' : ''}" data-tab="hist">처리 기록</button>
       </div>
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
@@ -1787,6 +1828,7 @@
     selectedOrderId = id;
     orderDetailTab = opts.tab || 'info';
     renderPage();
+    loadOrderEvents(id);
   }
 
   function staffById(id) {

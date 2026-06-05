@@ -33,6 +33,7 @@ from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
 from core.utils import _haversine, _haversine_km, _coord_to_address
+from services.order_events import record_order_event
 
 router = APIRouter()
 
@@ -132,6 +133,7 @@ async def _cancel_trip_and_deliveries(
     *,
     reason: Optional[str] = None,
     cancelled_by: Optional[str] = None,
+    actor_user: Optional[User] = None,
     org_id: Optional[int] = None,
     notify: bool = True,
 ) -> None:
@@ -142,6 +144,13 @@ async def _cancel_trip_and_deliveries(
     if reason is not None:
         t.cancel_request_reason = reason
 
+    affected_deliveries = (await db.execute(
+        select(Delivery).where(
+            Delivery.trip_id == t.id,
+            Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+        )
+    )).scalars().all()
+
     await db.execute(
         update(Delivery)
         .where(
@@ -150,6 +159,19 @@ async def _cancel_trip_and_deliveries(
         )
         .values(status=DeliveryStatus.cancelled)
     )
+
+    for delivery in affected_deliveries:
+        record_order_event(
+            db,
+            organization_id=org_id,
+            delivery_id=delivery.id,
+            trip_id=t.id,
+            actor=actor_user,
+            actor_id=cancelled_by,
+            event_type="trip.cancelled",
+            summary="운행 취소",
+            details={"reason": reason or ""},
+        )
 
     if notify and org_id:
         payload = {
@@ -291,6 +313,21 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
                 status=DeliveryStatus.in_progress,
             )
         )
+        for delivery_id in delivery_ids:
+            record_order_event(
+                db,
+                organization_id=current_user.organization_id,
+                delivery_id=delivery_id,
+                trip_id=t.id,
+                actor=current_user,
+                event_type="trip.assigned",
+                summary=f"배차 생성: {driver.name or driver.username}",
+                details={
+                    "driver_id": str(driver_uuid),
+                    "driver_name": driver.name or driver.username,
+                    "vehicle_id": req.vehicle_id,
+                },
+            )
     await db.commit()
     await db.refresh(t)
     return _trip_schema(t)
@@ -468,6 +505,16 @@ async def update_trip_status(
         for d in _rd.scalars().all():
             d.status       = DeliveryStatus.done_manual
             d.completed_at = datetime.utcnow()
+            record_order_event(
+                db,
+                organization_id=t.driver.organization_id if t.driver else current_user.organization_id,
+                delivery_id=d.id,
+                trip_id=t.id,
+                actor=current_user,
+                event_type="trip.completed",
+                summary="운행 완료",
+                details={"completed_at": d.completed_at.isoformat()},
+            )
     else:
         org_id = t.driver.organization_id if t.driver else current_user.organization_id
         cancel_reason = "기사 앱에서 운행 취소" if current_user.role == UserRole.driver else "관리자 웹에서 배차 취소"
@@ -476,6 +523,7 @@ async def update_trip_status(
             t,
             reason=cancel_reason,
             cancelled_by=str(current_user.id),
+            actor_user=current_user,
             org_id=org_id,
         )
 
@@ -523,6 +571,17 @@ async def request_trip_cancel(
 
     t.cancel_requested      = True
     t.cancel_request_reason = reason
+    for delivery in t.deliveries:
+        record_order_event(
+            db,
+            organization_id=current_user.organization_id,
+            delivery_id=delivery.id,
+            trip_id=t.id,
+            actor=current_user,
+            event_type="trip.cancel_requested",
+            summary="기사 취소 요청",
+            details={"reason": reason},
+        )
     await db.commit()
 
     if current_user.organization_id:
@@ -569,10 +628,22 @@ async def respond_trip_cancel(
             t,
             reason=t.cancel_request_reason,
             cancelled_by=str(current_user.id),
+            actor_user=current_user,
             org_id=current_user.organization_id,
         )
     else:
         t.cancel_requested = False
+        for delivery in t.deliveries:
+            record_order_event(
+                db,
+                organization_id=current_user.organization_id,
+                delivery_id=delivery.id,
+                trip_id=t.id,
+                actor=current_user,
+                event_type="trip.cancel_rejected",
+                summary="취소 요청 반려",
+                details={},
+            )
     t.cancel_request_reason = None
 
     await db.commit()
@@ -630,6 +701,14 @@ def _phase_from_waypoint_event(waypoint: dict, event: str) -> str:
     raise HTTPException(400, "event는 arrived, departed, completed 중 하나여야 합니다.")
 
 
+def _waypoint_event_summary(waypoint: dict, event: str) -> str:
+    is_loading = waypoint.get("type") == "loading"
+    place = waypoint.get("name") or ("상차지" if is_loading else "하차지")
+    if event == "arrived":
+        return f"{'상차' if is_loading else '하차'} 도착: {place}"
+    return f"{'상차' if is_loading else '하차'} 완료: {place}"
+
+
 @router.patch("/trips/{trip_id}/reassign", status_code=200)
 async def reassign_trip(
     trip_id: str,
@@ -645,7 +724,7 @@ async def reassign_trip(
 
     _r = await db.execute(
         select(Trip)
-        .options(selectinload(Trip.driver))
+        .options(selectinload(Trip.driver), selectinload(Trip.deliveries))
         .where(Trip.id == uuid_lib.UUID(trip_id))
     )
     t = _r.scalar_one_or_none()
@@ -689,6 +768,7 @@ async def reassign_trip(
                 t,
                 reason="기사·차량 교체로 기존 배차 취소",
                 cancelled_by=str(current_user.id),
+                actor_user=current_user,
                 org_id=current_user.organization_id,
             )
             chosen_vehicle = req.new_vehicle_id if req.new_vehicle_id is not None else t.vehicle_id
@@ -724,6 +804,22 @@ async def reassign_trip(
                         status=DeliveryStatus.in_progress,
                     )
                 )
+                for delivery_id in delivery_ids:
+                    record_order_event(
+                        db,
+                        organization_id=current_user.organization_id,
+                        delivery_id=delivery_id,
+                        trip_id=new_trip.id,
+                        actor=current_user,
+                        event_type="trip.reassigned",
+                        summary=f"잔여 운행 이관: {new_driver.name or new_driver.username}",
+                        details={
+                            "old_trip_id": trip_id,
+                            "new_trip_id": str(new_trip.id),
+                            "new_driver_id": str(new_driver_uuid),
+                            "new_vehicle_id": chosen_vehicle,
+                        },
+                    )
         else:
             existing = (await db.execute(
                 select(Trip).where(
@@ -734,6 +830,17 @@ async def reassign_trip(
             if existing:
                 raise HTTPException(409, "해당 기사에게 이미 진행 중인 배차가 있습니다.")
             t.driver_id = new_driver_uuid
+            for delivery in t.deliveries:
+                record_order_event(
+                    db,
+                    organization_id=current_user.organization_id,
+                    delivery_id=delivery.id,
+                    trip_id=t.id,
+                    actor=current_user,
+                    event_type="trip.reassigned",
+                    summary=f"기사 교체: {new_driver.name or new_driver.username}",
+                    details={"new_driver_id": str(new_driver_uuid)},
+                )
 
     if req.new_vehicle_id is not None and not req.transfer_remaining:
         vehicle = (await db.execute(
@@ -747,6 +854,17 @@ async def reassign_trip(
         if not vehicle.is_active:
             raise HTTPException(400, "비활성화된 차량입니다.")
         t.vehicle_id = req.new_vehicle_id
+        for delivery in t.deliveries:
+            record_order_event(
+                db,
+                organization_id=current_user.organization_id,
+                delivery_id=delivery.id,
+                trip_id=t.id,
+                actor=current_user,
+                event_type="trip.vehicle_changed",
+                summary=f"차량 교체: {req.new_vehicle_id}",
+                details={"new_vehicle_id": req.new_vehicle_id},
+            )
 
     await db.commit()
 
@@ -797,6 +915,8 @@ async def update_trip_progress(
     event_time = req.event_time or datetime.utcnow().isoformat()
     wps = list(t.waypoints or [])
     phase = req.phase
+    event_waypoint = None
+    event_name = None
 
     if req.waypoint_index is not None:
         idx = int(req.waypoint_index)
@@ -807,6 +927,8 @@ async def update_trip_progress(
             raise HTTPException(400, "event는 arrived, departed, completed 중 하나여야 합니다.")
         key = "arrived_at" if event == "arrived" else "departed_at"
         wps[idx][key] = event_time
+        event_waypoint = dict(wps[idx])
+        event_name = event
         phase = phase or _phase_from_waypoint_event(wps[idx], event)
         t.waypoints = wps
         flag_modified(t, "waypoints")
@@ -819,8 +941,38 @@ async def update_trip_progress(
     if t.status == TripStatus.scheduled:
         t.status = TripStatus.in_progress
         t.started_at = t.started_at or datetime.utcnow()
+        for delivery in t.deliveries:
+            record_order_event(
+                db,
+                organization_id=t.driver.organization_id if t.driver else current_user.organization_id,
+                delivery_id=delivery.id,
+                trip_id=t.id,
+                actor=current_user,
+                event_type="trip.started",
+                summary="기사 운행 시작",
+                details={"started_at": t.started_at.isoformat()},
+            )
     t.current_phase = phase
     t.phase_updated_at = datetime.utcnow()
+
+    if event_waypoint:
+        raw_delivery_id = event_waypoint.get("delivery_id")
+        record_order_event(
+            db,
+            organization_id=t.driver.organization_id if t.driver else current_user.organization_id,
+            delivery_id=raw_delivery_id,
+            trip_id=t.id,
+            actor=current_user,
+            event_type=f"trip.waypoint_{event_name}",
+            summary=_waypoint_event_summary(event_waypoint, event_name),
+            details={
+                "waypoint_index": req.waypoint_index,
+                "event": event_name,
+                "event_time": event_time,
+                "waypoint": event_waypoint,
+                "phase": phase,
+            },
+        )
 
     await db.commit()
     await db.refresh(t)
@@ -903,9 +1055,14 @@ async def update_waypoint_dwell(
     current_user: User = Depends(get_current_user),
 ):
     """경유지 도착/출발 시간 기록. body: {index, arrived_at?, departed_at?}"""
-    t = (await db.execute(select(Trip).where(Trip.id == uuid_lib.UUID(trip_id)))).scalar_one_or_none()
+    t = (await db.execute(
+        select(Trip)
+        .options(selectinload(Trip.driver))
+        .where(Trip.id == uuid_lib.UUID(trip_id))
+    )).scalar_one_or_none()
     if not t:
         raise HTTPException(status_code=404, detail="운행을 찾을 수 없습니다")
+    _assert_trip_access(t, current_user)
     wps = list(t.waypoints or [])
     idx = int(body.get("index", 0))
     if 0 <= idx < len(wps):
@@ -915,5 +1072,15 @@ async def update_waypoint_dwell(
             wps[idx]["departed_at"] = body["departed_at"]
         t.waypoints = wps
         flag_modified(t, "waypoints")
+        record_order_event(
+            db,
+            organization_id=t.driver.organization_id if t.driver else current_user.organization_id,
+            delivery_id=wps[idx].get("delivery_id") if isinstance(wps[idx], dict) else None,
+            trip_id=t.id,
+            actor=current_user,
+            event_type="trip.waypoint_dwell",
+            summary="경유지 도착·출발 시간 기록",
+            details={"waypoint_index": idx, "waypoint": wps[idx]},
+        )
         await db.commit()
     return {"ok": True}

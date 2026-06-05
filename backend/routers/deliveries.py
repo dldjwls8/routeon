@@ -18,7 +18,7 @@ from database import get_db
 from models import (
     User, Delivery, Trip, Vehicle, RestStop, Location, Organization,
     Conversation, Message, Preset,
-    DeliveryStatus, TripStatus, RestStopType, UserRole, OrgStatus
+    DeliveryStatus, TripStatus, RestStopType, UserRole, OrgStatus, OrderEvent
 )
 from auth import (
     hash_password, verify_password, create_token,
@@ -33,6 +33,7 @@ from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
 from core.utils import _haversine, _haversine_km, _coord_to_address, normalize_phone
+from services.order_events import order_event_schema, record_order_event
 
 router = APIRouter()
 
@@ -82,6 +83,45 @@ def _display_order_no(d: Delivery) -> str:
     return f"RO-{stamp}-{suffix}"
 
 
+_DELIVERY_EVENT_FIELDS = {
+    "status": "상태",
+    "address": "하차지",
+    "pickup_address": "상차지",
+    "recipient_name": "수신자",
+    "cargo_type": "화물 종류",
+    "cargo_size": "규격",
+    "contact_name": "담당자",
+    "contact_phone": "담당자 연락처",
+    "shipper_name": "화주",
+    "shipper_phone": "화주 연락처",
+    "deadline": "희망 도착",
+    "mixed_load": "혼적",
+    "assigned_to": "기사",
+    "trip_id": "운행",
+}
+
+
+def _event_value(value):
+    if hasattr(value, "value"):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value) if value is not None else None
+
+
+def _delivery_snapshot(d: Delivery) -> dict:
+    return {field: _event_value(getattr(d, field, None)) for field in _DELIVERY_EVENT_FIELDS}
+
+
+def _delivery_changes(before: dict, d: Delivery) -> dict:
+    after = _delivery_snapshot(d)
+    changes = {}
+    for field, label in _DELIVERY_EVENT_FIELDS.items():
+        if before.get(field) != after.get(field):
+            changes[field] = {"label": label, "before": before.get(field), "after": after.get(field)}
+    return changes
+
+
 @router.post("/deliveries", status_code=201)
 async def create_delivery(
     req: DeliveryCreate,
@@ -119,6 +159,16 @@ async def create_delivery(
         mixed_load       = req.mixed_load,
     )
     db.add(delivery)
+    await db.flush()
+    record_order_event(
+        db,
+        organization_id=current_user.organization_id,
+        delivery_id=delivery.id,
+        actor=current_user,
+        event_type="order.created",
+        summary="오더 접수",
+        details={"order_no": _display_order_no(delivery), "source": "admin_web"},
+    )
     await db.commit()
     await db.refresh(delivery)
     return _delivery_schema(delivery)
@@ -155,6 +205,16 @@ async def create_deliveries_batch(
             mixed_load=req.mixed_load,
         )
         db.add(d)
+        await db.flush()
+        record_order_event(
+            db,
+            organization_id=current_user.organization_id,
+            delivery_id=d.id,
+            actor=current_user,
+            event_type="order.created",
+            summary="오더 일괄 접수",
+            details={"order_no": _display_order_no(d), "source": "admin_web_batch"},
+        )
         deliveries.append(d)
     await db.commit()
     for d in deliveries:
@@ -194,6 +254,15 @@ async def assign_delivery(
 
     delivery.assigned_to = driver.id
     delivery.status      = DeliveryStatus.in_progress
+    record_order_event(
+        db,
+        organization_id=current_user.organization_id,
+        delivery_id=delivery.id,
+        actor=current_user,
+        event_type="order.assigned",
+        summary=f"기사 배정: {driver.name or driver.username}",
+        details={"driver_id": str(driver.id), "driver_name": driver.name or driver.username},
+    )
     await db.commit()
     await db.refresh(delivery)
     return _delivery_schema(delivery)
@@ -219,6 +288,7 @@ async def update_delivery(
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
     if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual):
         raise HTTPException(400, "완료된 배송은 수정할 수 없습니다.")
+    before = _delivery_snapshot(delivery)
     cancelled_now = False
     if req.status is not None:
         try:
@@ -285,6 +355,18 @@ async def update_delivery(
                     }
                     await manager.broadcast_replan_to_org(current_user.organization_id, payload)
                     await manager.broadcast_to_org(current_user.organization_id, payload)
+    changes = _delivery_changes(before, delivery)
+    if changes:
+        record_order_event(
+            db,
+            organization_id=current_user.organization_id,
+            delivery_id=delivery.id,
+            trip_id=delivery.trip_id,
+            actor=current_user,
+            event_type="order.cancelled" if cancelled_now else "order.updated",
+            summary="오더 취소" if cancelled_now else "오더 수정",
+            details={"changes": changes},
+        )
     await db.commit()
     await db.refresh(delivery)
     return _delivery_schema(delivery)
@@ -309,6 +391,17 @@ async def delete_delivery(
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
     if delivery.status == DeliveryStatus.done:
         raise HTTPException(400, "완료된 배송은 삭제할 수 없습니다.")
+    record_order_event(
+        db,
+        organization_id=current_user.organization_id,
+        delivery_id=delivery.id,
+        trip_id=delivery.trip_id,
+        actor=current_user,
+        event_type="order.deleted",
+        summary="오더 삭제",
+        details={"order_no": _display_order_no(delivery)},
+    )
+    await db.flush()
     await db.delete(delivery)
     await db.commit()
 
@@ -334,6 +427,32 @@ async def get_deliveries(
     _r = await db.execute(stmt)
     deliveries = _r.scalars().all()
     return [_delivery_schema(d) for d in deliveries]
+
+
+@router.get("/deliveries/{delivery_id}/events")
+async def get_delivery_events(
+    delivery_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """오더 처리 기록 조회"""
+    delivery_uuid = uuid_lib.UUID(delivery_id)
+    stmt = select(Delivery).where(Delivery.id == delivery_uuid)
+    if current_user.role != UserRole.driver:
+        stmt = stmt.where(Delivery.organization_id == current_user.organization_id)
+    _r = await db.execute(stmt)
+    delivery = _r.scalar_one_or_none()
+    if not delivery:
+        raise HTTPException(404, "배송을 찾을 수 없습니다.")
+    if current_user.role == UserRole.driver and delivery.assigned_to != current_user.id:
+        raise HTTPException(403, "접근 권한이 없습니다.")
+
+    events = (await db.execute(
+        select(OrderEvent)
+        .where(OrderEvent.delivery_id == delivery_uuid)
+        .order_by(OrderEvent.created_at.desc())
+    )).scalars().all()
+    return [order_event_schema(e) for e in events]
 
 
 @router.get("/deliveries/{delivery_id}")
@@ -412,6 +531,16 @@ async def manual_complete(
 
     delivery.status       = DeliveryStatus.done_manual
     delivery.completed_at = datetime.utcnow()
+    record_order_event(
+        db,
+        organization_id=current_user.organization_id,
+        delivery_id=delivery.id,
+        trip_id=delivery.trip_id,
+        actor=current_user,
+        event_type="order.completed_manual",
+        summary="기사 수동 완료",
+        details={"completed_at": delivery.completed_at.isoformat()},
+    )
     await db.commit()
 
     return {"id": delivery_id, "status": delivery.status}

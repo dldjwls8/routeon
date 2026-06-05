@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.89 기준, 슈퍼관리자·기업 관리자 역할 경계 수정은 DB 스키마 변경 없음)
+> 최종 검토: 2026-06-05 (v1.0.90 기준, 오더 처리 기록 `order_events` 추가)
 
 ---
 
@@ -209,6 +209,35 @@
 
 ---
 
+### `order_events`
+
+오더·운행 처리 기록. 오더 접수/수정/취소와 기사 앱 운행 이벤트를 운영자가 추적하기 위한 감사성 로그다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `id` | UUID | PK | |
+| `organization_id` | INTEGER | FK → organizations.id, INDEX | 소속 기업 |
+| `delivery_id` | UUID | FK → deliveries.id ON DELETE SET NULL, INDEX | 연결 오더. 삭제된 오더 기록 보존을 위해 NULL 허용 |
+| `trip_id` | UUID | FK → trips.id ON DELETE SET NULL, INDEX | 연결 운행 |
+| `actor_id` | UUID | FK → users.id ON DELETE SET NULL, INDEX | 처리자 |
+| `actor_role` | VARCHAR(20) | | 처리 당시 역할 (`admin`, `driver` 등) |
+| `actor_name` | VARCHAR(100) | | 처리 당시 표시명 |
+| `event_type` | VARCHAR(50) | NOT NULL, INDEX | 예: `order.created`, `order.updated`, `trip.waypoint_arrived` |
+| `summary` | VARCHAR(255) | NOT NULL | 화면 표시용 요약 |
+| `details` | JSONB | NOT NULL DEFAULT `{}` | 변경 필드, 취소 사유, waypoint 정보 등 |
+| `created_at` | DATETIME | NOT NULL, INDEX | 이벤트 발생 시각 |
+
+인덱스:
+- INDEX (`delivery_id`, `created_at`)
+- INDEX (`trip_id`, `created_at`)
+
+대표 이벤트:
+- `order.created`, `order.updated`, `order.cancelled`, `order.deleted`, `order.assigned`, `order.completed_manual`
+- `trip.assigned`, `trip.started`, `trip.cancel_requested`, `trip.cancel_rejected`, `trip.cancelled`, `trip.completed`
+- `trip.waypoint_arrived`, `trip.waypoint_departed`, `trip.waypoint_completed`, `trip.waypoint_dwell`
+
+---
+
 ### `customers`
 
 거래처 마스터. 조직 단위로 격리, 임시 화주(당일 의뢰용) 포함.
@@ -363,6 +392,7 @@ cancelled 처리 시:
 - `PATCH /trips/{id}/progress` body `{waypoint_index, event}` 또는 `{phase}`.
 - `event=arrived`는 해당 waypoint `arrived_at`, `event=departed|completed`는 `departed_at`을 기록.
 - loading waypoint는 `loading_arrived`/`loading_completed`, unloading waypoint는 `unloading_arrived`/`unloading_completed`로 `current_phase` 자동 계산.
+- `delivery_id`가 연결된 waypoint 진행 이벤트는 `order_events`에도 함께 저장되어 오더 상세 `처리 기록` 탭에 표시된다.
 
 ---
 

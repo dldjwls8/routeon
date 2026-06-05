@@ -296,6 +296,35 @@ class Delivery(Base):
 
 
 # ────────────────────────────────────────────────
+# order_events  (오더·운행 처리 기록)
+# ────────────────────────────────────────────────
+class OrderEvent(Base):
+    __tablename__ = "order_events"
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    delivery_id     = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"), nullable=True, index=True)
+    trip_id         = Column(UUID(as_uuid=True), ForeignKey("trips.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_id        = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_role      = Column(String(20), nullable=True)
+    actor_name      = Column(String(100), nullable=True)
+    event_type      = Column(String(50), nullable=False, index=True)
+    summary         = Column(String(255), nullable=False)
+    details         = Column(JSONB, nullable=False, default=dict)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    organization = relationship("Organization")
+    delivery     = relationship("Delivery")
+    trip         = relationship("Trip")
+    actor        = relationship("User")
+
+    __table_args__ = (
+        Index("ix_order_events_delivery_created", "delivery_id", "created_at"),
+        Index("ix_order_events_trip_created", "trip_id", "created_at"),
+    )
+
+
+# ────────────────────────────────────────────────
 # locations  (GPS 이동 이력 — TimescaleDB hypertable)
 # ────────────────────────────────────────────────
 class Location(Base):
