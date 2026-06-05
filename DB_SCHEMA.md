@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.81 기준, 스키마 변경 없음 — footer 법적 안내 정적 페이지 추가)
+> 최종 검토: 2026-06-05 (v1.0.82 기준, 스키마 변경 없음 — 오더 접수 엑셀 양식·임시 화주 UX 보강)
 
 ---
 
@@ -388,6 +388,11 @@ cancelled 처리 시:
 ### 법적 안내 페이지와 DB
 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`은 정적 프론트 페이지다.
 footer 링크와 안내 페이지 내용은 DB에 저장하지 않으며, 약관 동의 이력·문의 접수 테이블도 현재 스키마에 없다.
+
+### 오더 접수 엑셀 양식과 DB
+`오더관리 > 접수창`의 `양식 다운로드`는 프론트엔드에서 `.xlsx`/`.csv` 템플릿을 생성하는 기능이며 별도 테이블을 추가하지 않는다.
+엑셀 업로드 행은 기존 접수 대기열을 거쳐 `deliveries` 생성 API로 저장된다.
+`+ 임시 화주 추가`는 기존 `customers.temporary`, `customers.valid_date` 컬럼을 사용하는 흐름이며 v1.0.82에서 스키마 변경은 없다.
 
 ### users ID 타입
 | 테이블 | PK 타입 | 프론트 비교 방식 |

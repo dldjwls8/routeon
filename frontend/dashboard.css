@@ -1235,6 +1235,24 @@
     @media (max-width: 1100px) { .intake-layout-wrap { grid-template-columns: 1fr; } }
     .intake-main { min-width: 0; }
     .btn-excel-sm { padding: 8px 14px; font-size: 13px; box-shadow: none; }
+    .intake-customer-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .intake-customer-control .btn {
+      white-space: nowrap;
+      height: 36px;
+    }
+    @media (max-width: 720px) {
+      .intake-customer-control {
+        grid-template-columns: 1fr;
+      }
+      .intake-customer-control .btn {
+        width: 100%;
+      }
+    }
 
     /* Centered page column — renderPage() wraps every view */
     .page-center,

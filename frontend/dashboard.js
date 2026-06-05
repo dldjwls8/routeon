@@ -1249,7 +1249,10 @@
       const suffix = isTemporaryCustomer(c) ? ' · 임시' : '';
       return `<option value="${c.id}"${selected}>${c.name}${suffix}</option>`;
     }).join('');
-    return `${opts}<option value="__add_temp__">+ 임시 화주 추가</option>`;
+    const placeholder = DATA.customers.length
+      ? '<option value="" disabled>화주 선택</option>'
+      : '<option value="" disabled selected>등록된 화주 없음</option>';
+    return `${placeholder}${opts}<option value="__add_temp__">+ 임시 화주 추가</option>`;
   }
 
   function customerNameFromIntakeValue(value) {
@@ -1321,6 +1324,51 @@
       else if (selectEl.options.length > 1) selectEl.selectedIndex = 0;
       else selectEl.value = '';
     });
+  }
+
+  function openTempCustomerFromIntake(container, selectEl) {
+    openTempCustomerModal((created) => {
+      if (container?._pendingIntakes != null) container._intakeCustomerId = created.id;
+      if (selectEl) {
+        selectEl.innerHTML = intakeCustomerSelectOptions(created.id);
+        selectEl.value = String(created.id);
+        const contactInp = container.querySelector('[name="contact"]');
+        if (contactInp) contactInp.value = created.phone || '';
+        selectEl.focus();
+      }
+    });
+  }
+
+  function downloadBlob(filename, mime, content) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadIntakeExcelTemplate() {
+    const headers = ['화주명', '상차지', '하차지', '수취인', '연락처', '화물종류', '중량톤', '희망도착일시', '혼재여부'];
+    const rows = [
+      ['예시화주', '부산광역시 해운대구 센텀중앙로 90', '부산광역시 사하구 감천로 203', '김수신', '010-1234-5678', '박스', '1.5', '2026-06-05 14:00', 'N'],
+    ];
+
+    if (window.XLSX) {
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = headers.map(h => ({ wch: Math.max(14, h.length + 6) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '오더접수양식');
+      XLSX.writeFile(wb, `routeon_order_intake_template_${todayStr()}.xlsx`);
+      return;
+    }
+
+    const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = '\uFEFF' + [headers, ...rows].map(row => row.map(esc).join(',')).join('\n');
+    downloadBlob(`routeon_order_intake_template_${todayStr()}.csv`, 'text/csv;charset=utf-8', csv);
   }
 
   function customerMatchesListFilter(c, filter) {
@@ -5153,7 +5201,10 @@
           <div class="stop-block task-meta-divider">
             <div class="form-grid" style="max-width:100%;grid-template-columns:100px 1fr;gap:10px 12px">
               <label>화주(고객) *</label>
-              <select class="intake-field" name="customer" required tabindex="${t + 6}" data-intake-field="customer">${custOpts}</select>
+              <div class="intake-customer-control">
+                <select class="intake-field" name="customer" required tabindex="${t + 6}" data-intake-field="customer">${custOpts}</select>
+                <button type="button" class="btn btn-sm" data-temp-customer tabindex="-1">+ 임시 화주 추가</button>
+              </div>
               <label>희망 도착</label>
               <div>
                 ${desiredArrivalFieldsHtml({
@@ -5194,6 +5245,7 @@
               <h2>배송 접수</h2>
               <div class="intake-hd-meta">
                 <span class="intake-kbd-hint inline"><kbd>Enter</kbd> 다음 · 마지막 <kbd>Enter</kbd> 대기열 · <kbd>Alt+P</kbd> 상차지 · <kbd>Alt+D</kbd> 하차지</span>
+                <button type="button" class="btn btn-sm" id="excelTemplate">양식 다운로드</button>
                 <button type="button" class="btn-excel btn-excel-sm" id="excelImport">엑셀</button>
               </div>
             </div>
@@ -5219,6 +5271,8 @@
         </form>`;
 
     bindPendingIntakeActions(root);
+
+    $('#excelTemplate', root).onclick = downloadIntakeExcelTemplate;
 
     $('#excelImport', root).onclick = () => {
       const inp = document.createElement('input');
@@ -5312,6 +5366,9 @@
     });
     const custSel = root.querySelector('[name="customer"]');
     if (custSel) bindIntakeCustomerSelect(root, custSel);
+    root.querySelectorAll('[data-temp-customer]').forEach(btn => {
+      btn.onclick = () => openTempCustomerFromIntake(root, root.querySelector('[name="customer"]'));
+    });
 
     $('#addIntakeRow', root).onclick = () => {
       const active = document.activeElement;
