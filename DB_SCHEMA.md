@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.85 기준, 표시용 오더번호 API 응답 추가 — DB 컬럼 추가 없음)
+> 최종 검토: 2026-06-05 (v1.0.86 기준, 배차지정 2패널 UI 전환 — DB 컬럼 추가 없음)
 
 ---
 
@@ -387,7 +387,7 @@ cancelled 처리 시:
 | `done` / `done_manual` | `'완료'` | 미표시 |
 | `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
 
-> v1.0.80 기준 일괄 자동 배차의 기사별 오더 배정 상태와 단건·수동 배차의 다중 선택 상태는 모두 프론트 임시 상태다. 최종 확정 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다.
+> v1.0.86 기준 일괄 자동 배차의 좌측 `오더·기사 배정` 패널과 단건·수동 배차의 좌측 `미배차 건` 선택 상태는 모두 프론트 임시 상태다. 최종 확정 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 우측 결과 패널은 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
 
 ### 법적 안내 페이지와 DB
 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`은 정적 프론트 페이지다.

@@ -317,7 +317,7 @@
 
   function captureScrollState() {
     const main = document.getElementById('mainContent');
-    const inner = main?.querySelector('.page-scroll-main, .master-detail-list, .page-viewport-inner');
+    const inner = main?.querySelector('.page-scroll-main, .master-detail-list, .dispatch-work-pane, .dispatch-result-pane, .page-viewport-inner');
     return {
       windowY: window.scrollY || document.documentElement.scrollTop || 0,
       mainTop: main?.scrollTop || 0,
@@ -329,7 +329,7 @@
     if (!state) return;
     requestAnimationFrame(() => {
       const main = document.getElementById('mainContent');
-      const inner = main?.querySelector('.page-scroll-main, .master-detail-list, .page-viewport-inner');
+      const inner = main?.querySelector('.page-scroll-main, .master-detail-list, .dispatch-work-pane, .dispatch-result-pane, .page-viewport-inner');
       if (main) main.scrollTop = state.mainTop || 0;
       if (inner) inner.scrollTop = state.innerTop || 0;
       window.scrollTo(0, state.windowY || 0);
@@ -3044,8 +3044,8 @@
       <div class="page-sticky-top">
       ${pageChromeHtml('bulk-dispatch', { desc: '다차량·다배송지 자동 배정 · 경로 미리보기' })}
       </div>
-      <div class="page-scroll-main page-bulk-dispatch">
-      <div class="bulk-dispatch-stack">
+      <div class="page-body-fill dispatch-two-pane dispatch-two-pane--bulk page-bulk-dispatch">
+      <div class="dispatch-work-pane">
       <div class="card bulk-setup-card" id="sec-bulk-setup">
         <div class="card-hd card-hd--dispatch">
           <div class="card-hd-lead">
@@ -3136,11 +3136,13 @@
           </div>
         </div>
       </div>
+      </div>
 
-      <details class="dispatch-collapse" ${bulkDispatchRan ? 'open' : ''}>
-        <summary>결과 — 차량별 방문 순서·미배정</summary>
-        <div class="dispatch-collapse-bd">
-      <div class="card" id="bulkResultsCard" style="${bulkDispatchRan ? '' : 'opacity:.6'}">
+      <div class="dispatch-result-pane">
+      <div class="card dispatch-result-card" id="bulkResultsCard" style="${bulkDispatchRan ? '' : 'opacity:.6'}">
+        <div class="card-hd">
+          <h2>결과 — 차량별 방문 순서·미배정</h2>
+        </div>
         <div class="card-bd">
           ${bulkDispatchRan ? '' : '<p class="empty-hint" style="padding:0 0 12px">「일괄 배차 실행」 후 차량별 방문 순서·미배정·지도가 표시됩니다.</p>'}
           <div id="bulkResultsBlock" style="${bulkDispatchRan ? '' : 'display:none'}">
@@ -3197,9 +3199,6 @@
             </div>
           </div>
         </div>
-      </div>
-        </div>
-      </details>
       </div>
       </div>`;
 
@@ -3687,7 +3686,8 @@
       <div class="page-sticky-top">
       ${pageChromeHtml('dispatch-assign', { desc: '미배차 건 선택 · 차량·기사 · 경로 계산 · 배차 결과' })}
       </div>
-      <div class="page-scroll-main">
+      <div class="page-body-fill dispatch-two-pane dispatch-two-pane--manual">
+      <div class="dispatch-work-pane">
 
       <div class="card" id="sec-dispatch-pending">
         <div class="card-hd">
@@ -3829,10 +3829,9 @@
         </div>
       </details>
 
-      <details class="dispatch-collapse" ${dispatchRan ? 'open' : ''}>
-        <summary>배차 결과</summary>
-        <div class="dispatch-collapse-bd">
-      <div class="card" id="sec-dispatch-preview" style="${dispatchRan ? '' : 'opacity:.65'}">
+      </div>
+      <div class="dispatch-result-pane">
+      <div class="card dispatch-result-card" id="sec-dispatch-preview" style="${dispatchRan ? '' : 'opacity:.65'}">
         <div class="card-hd">
           <h2>배차 결과</h2>
           <div class="toolbar">
@@ -3880,8 +3879,7 @@
           </div>
         </div>
       </div>
-        </div>
-      </details>
+      </div>
       </div>`;
 
 
