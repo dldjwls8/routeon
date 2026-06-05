@@ -95,6 +95,8 @@ def _dest_waypoint(name: str, lat: float, lon: float) -> dict:
 
 
 def _apply_delivery_to_waypoint(w: dict, delivery: Delivery) -> None:
+    stamp = (delivery.created_at or datetime.utcnow()).strftime("%y%m%d")
+    w["order_no"] = w.get("order_no") or f"RO-{stamp}-{str(delivery.id).replace('-', '')[-6:].upper()}"
     w["recipient_name"] = w.get("recipient_name") or delivery.recipient_name
     w["cargo_type"] = w.get("cargo_type") or delivery.cargo_type
     w["cargo_weight_ton"] = (

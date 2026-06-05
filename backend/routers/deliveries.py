@@ -74,6 +74,12 @@ class DeliveryUpdate(BaseModel):
     deadline:         Optional[str]   = None
 
 
+def _display_order_no(d: Delivery) -> str:
+    stamp = (d.created_at or datetime.utcnow()).strftime("%y%m%d")
+    suffix = str(d.id).replace("-", "")[-6:].upper()
+    return f"RO-{stamp}-{suffix}"
+
+
 @router.post("/deliveries", status_code=201)
 async def create_delivery(
     req: DeliveryCreate,
@@ -349,6 +355,7 @@ def _delivery_schema(d: Delivery) -> dict:
     """Delivery 모델 → dict 변환 헬퍼"""
     return {
         "id":               str(d.id),
+        "order_no":         _display_order_no(d),
         "organization_id":  d.organization_id,
         "address":          d.address,
         "lat":              d.lat,

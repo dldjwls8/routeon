@@ -123,7 +123,8 @@ routeon/
   "shipper_name": "화주명", "contact_name": "담당자명",
   "contact_phone": "010-0000-0000", "shipper_phone": "02-000-0000",
   "recipient_name": "수신자명", "cargo_type": "파렛트",
-  "cargo_weight_ton": 2.0, "delivery_id": "uuid"
+  "cargo_weight_ton": 2.0, "delivery_id": "uuid",
+  "order_no": "RO-260605-A1B2C3"
 }
 ```
 - `type`: `"loading"` (상차지) | `"unloading"` (하차지)
@@ -132,6 +133,7 @@ routeon/
 - `shipper_name` / `contact_name` / `contact_phone` / `shipper_phone`: 화주·담당자 연락처. 기사 앱 Trip API 응답에 포함.
 - `recipient_name` / `cargo_type` / `cargo_weight_ton`: 수신자·화물 종류·톤수. unloading 전용. 배차 시 Delivery 원본에서 복사.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
+- `order_no`: 표시용 오더번호. DB 컬럼이 아니라 `/deliveries`/`/trips` 응답에서 `created_at`과 Delivery UUID 기반으로 계산되는 `RO-YYMMDD-XXXXXX` 형식.
 
 ### 비동기 패턴
 ```python
@@ -442,8 +444,8 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `PATCH /deliveries/{id}/assign` | 관리자 | 같은 조직 기사 배정 |
 | `PATCH /deliveries/{id}` | 관리자 | 배송지 수정·상태 변경. 마지막 진행 배송 취소 시 연결 Trip도 cancelled 처리 |
 | `DELETE /deliveries/{id}` | 관리자 | 같은 조직 배송 취소 |
-| `GET /deliveries` | 로그인 | 관리자: 같은 조직 배송 목록 / 기사: 본인 배정 배송 목록 |
-| `GET /deliveries/{id}` | 로그인 | 배송 상세 |
+| `GET /deliveries` | 로그인 | 관리자: 같은 조직 배송 목록 / 기사: 본인 배정 배송 목록. 응답에 표시용 `order_no` 포함 |
+| `GET /deliveries/{id}` | 로그인 | 배송 상세. 응답에 표시용 `order_no` 포함 |
 | `PATCH /deliveries/{id}/complete` | 기사 | 본인 배정 배송 수동 완료 |
 | `GET /address/coord?query=` | 없음 | 주소 → 좌표 변환 |
 | `POST /route/preview` | 관리자 | 경유지 순서대로 GraphHopper 실 도로 경로·거리·시간 반환. 좌표 없는 경유지 자동 스킵. 응답: `{distance_m, duration_sec, polyline: [[lat,lon],...]}` |
@@ -518,6 +520,7 @@ settings.html 구조 (관리자 전용):
 - 차량 관리: `/dashboard.html?main=basic&page=vehicles`
 - 운행 통계: `/dashboard.html?main=schedule&page=trip-stats`
 - `drivers.html`, `vehicles.html`, `stats.html`은 북마크/기존 링크 호환용 리다이렉트 파일만 유지한다.
+- 상단 메인 탭의 세부탭은 hover/focus 드롭다운 방식으로 표시한다. 메인 탭 클릭은 해당 그룹의 첫 세부 페이지로 이동한다.
 
 chat.html 구조:
 - 좌측: 채팅 가능 상대 목록 (GET /chat/partners) + unread 배지 + 이름 검색
@@ -534,6 +537,7 @@ dashboard.html 오더·배차 UI:
 - `오더관리 > 접수창`은 엑셀 업로드 버튼 옆 `양식 다운로드` 버튼을 제공한다. 템플릿 헤더는 `화주명`, `상차지`, `하차지`, `수취인`, `연락처`, `화물종류`, `중량톤`, `희망도착일시`, `혼재여부`이며 기존 업로드 매핑과 일치한다.
 - 접수창 화주 선택은 고객 마스터가 비어 있어도 `등록된 화주 없음` placeholder와 별도 `+ 임시 화주 추가` 버튼을 표시한다. 임시 화주 생성 후에는 select 옵션과 연락처 입력값을 즉시 갱신한다.
 - `오더관리 > 오더 목록`은 행 클릭을 상세 조회, 체크박스를 다중 선택으로 사용한다. 현재 페이지 선택/해제와 선택 해제 버튼을 제공하며, 선택한 접수 상태 오더는 `배차·지정 > 단건·수동 배차`로 전달할 수 있다.
+- 오더 목록 컬럼 순서는 `상태`, `접수 시간`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `시간창`, `오더번호` 순서를 기본으로 한다. 오더번호는 `RO-YYMMDD-XXXXXX` 표시 형식을 사용하고 상세 화면에서 원본 UUID도 확인할 수 있다.
 - `배차·지정 > 일괄 자동 배차`는 미배정 오더 풀에서 오더를 고르고 가용 기사 카드를 선택한 뒤 `기사에게 배정`으로 기사별 배정 묶음을 만든다. `일괄 배차 실행`은 배정된 오더/기사 기준으로 `/trips/auto-dispatch`를 호출한다.
 - `배차·지정 > 단건·수동 배차`는 미배차 건 체크박스 다중 선택을 지원한다. 선택한 여러 오더를 같은 차량·기사로 확정할 수 있으며, 좌표가 없는 건은 기존 배차 결과의 미배정 처리 흐름을 사용한다.
 

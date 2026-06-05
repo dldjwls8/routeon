@@ -203,7 +203,7 @@
       ? placeShortLabel(deliveryRaw)
       : (item.deliveryShort || placeShortLabel(item.name) || placeShortLabel(item.address));
     return {
-      orderId: item.order_id || item.id || `B-260601-${String(idx + 1).padStart(2, '0')}`,
+      orderId: displayOrderNo(item.order || item),
       shipper: item.shipper || item.customer || placeShortLabel(item.name) || '—',
       pickup,
       delivery,
@@ -212,6 +212,35 @@
       status: item.status || '배차대기',
       tooltip: dispatchStopTooltip(item),
     };
+  }
+
+  function orderDateStamp(value) {
+    const d = value ? new Date(value) : null;
+    const base = d && !Number.isNaN(d.getTime()) ? d : new Date();
+    return `${String(base.getFullYear()).slice(2)}${String(base.getMonth() + 1).padStart(2, '0')}${String(base.getDate()).padStart(2, '0')}`;
+  }
+
+  function displayOrderNo(orderLike, idx = 0) {
+    const raw = typeof orderLike === 'object'
+      ? (orderLike.order_no ?? orderLike.orderNo ?? orderLike.order_id ?? orderLike.id ?? orderLike.delivery_id ?? '')
+      : (orderLike ?? '');
+    const id = String(raw || '').trim();
+    const stamp = orderDateStamp(typeof orderLike === 'object' ? (orderLike.created_at || orderLike.createdAt) : null);
+    if (/^RO-\d{6}-[A-Z0-9]+$/i.test(id)) return id.toUpperCase();
+    const local = id.match(/^O-(\d{6})-(\d+)$/i);
+    if (local) return `RO-${local[1]}-${String(Number(local[2])).padStart(4, '0')}`;
+    if (/^\d+$/.test(id)) return `RO-${stamp}-${String(Number(id)).padStart(4, '0')}`;
+    if (id) return `RO-${stamp}-${id.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase()}`;
+    return `RO-${stamp}-${String(idx + 1).padStart(4, '0')}`;
+  }
+
+  function orderNoHtml(o, opts = {}) {
+    const shown = displayOrderNo(o);
+    const raw = String(o?.id ?? o?.order_id ?? '');
+    const sub = opts.raw !== false && raw && raw !== shown
+      ? `<small class="order-no-raw">ID ${raw.length > 12 ? `${raw.slice(0, 8)}…` : raw}</small>`
+      : '';
+    return `<span class="order-no" title="${raw || shown}"><strong>${shown}</strong>${sub}</span>`;
   }
 
   function dispatchListTableRows(rows, opts = {}) {
@@ -227,7 +256,7 @@
           : '');
       return `<tr class="${rowCls}" ${opts.dataAttr ? `data-${opts.dataAttr}="${dataId}"` : ''} title="${n.tooltip}">
         ${lead}
-        <td>${n.orderId}</td>
+        <td>${orderNoHtml(item, { raw: false })}</td>
         <td>${mixedLoadBadge(isMixedLoad(item))}</td>
         <td>${n.shipper}</td>
         ${routeCellHtml(n.pickup, n.delivery)}
@@ -508,6 +537,7 @@
         const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
         DATA.orders = deliveries.map(d => ({
           id: d.id,
+          order_no: d.order_no || null,
           customer: d.shipper_name || '—',
           status: deliveryStatusMap[d.status] || d.status,
           pickup: d.pickup_address || '—',
@@ -532,7 +562,7 @@
             DATA.scheduleEvents.push({
               date: eventDate, type: 'order',
               label: d.address || '배송',
-              orderId: d.id.slice(0, 8),
+              orderId: displayOrderNo({ id: d.id, created_at: d.created_at }),
             });
           }
         });
@@ -1700,7 +1730,7 @@
       </div>
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
-          <label>오더번호</label><span><code>${o.id}</code></span>
+          <label>오더번호</label><span>${orderNoHtml(o)} <code class="order-raw-code">${o.id}</code></span>
           <label>화주</label><span>${o.customer}</span>
           <label>수신자</label><span>${o.recipient || '—'}</span>
           <label>화물</label><span>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</span>
@@ -2096,7 +2126,7 @@
 
   /** 대시보드만 theme-dashboard, 접수·오더·배차 등은 theme-app(다크) */
   function syncSubNavLayout() {
-    document.body.classList.toggle('main-with-sub', MAIN_WITH_SUB.includes(currentMain));
+    document.body.classList.remove('main-with-sub');
   }
 
   function applyPageTheme() {
@@ -2142,13 +2172,15 @@
         gotoPage(group.id, group.pages[0].id);
       };
       item.appendChild(btn);
-      if (hasSub && isActive) {
+      if (hasSub) {
+        btn.setAttribute('aria-haspopup', 'true');
         const flyout = el('div', 'nav-sub-flyout');
-        flyout.setAttribute('role', 'group');
+        flyout.setAttribute('role', 'menu');
         flyout.setAttribute('aria-label', group.label + ' 하위 메뉴');
         group.pages.forEach(p => {
           const subBtn = el('button', 'nav-sub-btn' + (currentPage === p.id ? ' active' : ''), p.label);
           subBtn.type = 'button';
+          subBtn.setAttribute('role', 'menuitem');
           subBtn.dataset.page = p.id;
           subBtn.onclick = (e) => {
             e.stopPropagation();
@@ -2282,7 +2314,7 @@
                 <tbody>
                   ${dashboardOrders.length ? dashboardOrders.map(o => `
                     <tr data-goto-orders>
-                      <td>${o.id}</td>
+                      <td>${orderNoHtml(o, { raw: false })}</td>
                       <td>${o.customer}</td>
                       <td class="route-cell"><strong>${o.pickup}</strong><br>→ ${o.delivery}</td>
                       <td>${o.window}</td>
@@ -4116,7 +4148,7 @@
         <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">배송 건에 투입 <strong>차량</strong>과 <strong>기사</strong>를 각각 지정합니다.</p>
         <div class="form-grid" style="max-width:100%">
           <label>배송 건</label>
-          <select id="singleOrder"><option value="">— 선택 —</option>${unassigned.map(o => `<option value="${o.id}">${o.id.slice(0,8)} · ${placeShortLabel(o.pickup)} ▶ ${placeShortLabel(o.delivery)}</option>`).join('')}</select>
+          <select id="singleOrder"><option value="">— 선택 —</option>${unassigned.map(o => `<option value="${o.id}">${displayOrderNo(o)} · ${placeShortLabel(o.pickup)} ▶ ${placeShortLabel(o.delivery)}</option>`).join('')}</select>
           <label>투입 차량 *</label>
           <select id="singleVehicle">${vehicleSelectOptions(DATA.dispatchFleet[0]?.vehicleId)}</select>
           <label>연결 기사 *</label>
@@ -4725,10 +4757,10 @@
     // 완료·취소 상태는 조회 전용, 나머지는 상태 변경 가능 (접수 상태만 필드 전체 수정)
     const canSave = o.status !== '완료' && o.status !== '취소';
     const ro = orderIsEditable(o) ? '' : ' disabled';
-    openModal(`${canSave ? '오더 수정' : '오더 조회'} · ${o.id}`, `
+    openModal(`${canSave ? '오더 수정' : '오더 조회'} · ${displayOrderNo(o)}`, `
       <form id="orderEditForm">
         <div class="form-grid" style="max-width:100%">
-          <label>오더번호</label><input value="${o.id}" disabled>
+          <label>오더번호</label><input value="${displayOrderNo(o)}" title="${o.id}" disabled>
           <label>화주(고객) *</label><select name="customer" required${ro}>${custOpts}</select>
           <label>상차지 *</label><input name="pickup" required value="${o.pickup || ''}"${ro}>
           <label>하차지 *</label><input name="delivery" required value="${o.delivery || ''}"${ro}>
@@ -5416,7 +5448,7 @@
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>
             <thead><tr>
-              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>상차</th><th>하차</th><th>화물</th><th>시간창</th><th>접수시간</th><th>기사</th><th>상태</th><th></th>
+              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>시간창</th><th>오더번호</th><th></th>
             </tr></thead>
             <tbody>${rows.length ? rows.map(o => {
               const editable = orderIsEditable(o);
@@ -5430,13 +5462,19 @@
               return `
               <tr class="${rowCls}" data-order-id="${o.id}">
                 <td><input type="checkbox" class="order-list-chk" data-id="${o.id}" ${selectedOrderIds.includes(o.id) ? 'checked' : ''} aria-label="${o.id} 선택"></td>
-                <td>${o.id}</td><td>${mixedLoadBadge(isMixedLoad(o))}</td><td>${o.customer}</td><td>${o.pickup}</td><td>${o.delivery}</td>
+                <td>${statusCell}</td>
+                <td>${formatDateTimeShort(o.created_at)}</td>
+                <td>${mixedLoadBadge(isMixedLoad(o))}</td>
+                <td class="route-cell"><strong>${o.pickup || '—'}</strong><br>→ ${o.delivery || '—'}</td>
                 <td>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</td>
-                <td>${o.window}</td><td>${formatDateTimeShort(o.created_at)}</td><td>${o.driver || '—'}</td><td>${statusCell}</td>
+                <td>${o.customer}</td>
+                <td>${o.driver || '—'}</td>
+                <td>${o.window}</td>
+                <td>${orderNoHtml(o)}</td>
                 <td><button type="button" class="btn btn-sm edit-order" data-order-id="${o.id}">수정</button></td>
               </tr>`;
             }).join('') : `
-              <tr><td colspan="12" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
+              <tr><td colspan="11" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
           ${paginationHtml(allRows.length, orderPage, 'orders')}
@@ -5445,7 +5483,7 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('order-list', { desc: '좌측 목록 · 우측 상세 · 수정 버튼으로 편집' }),
       listCard,
-      selected ? inlineDetailCardHtml(`${selected.id} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), { saveLabel: '수정' }) : ''
+      selected ? inlineDetailCardHtml(`${displayOrderNo(selected)} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), { saveLabel: '수정' }) : ''
     );
     const goIntakeBtn = $('#goOrderIntake', root);
     if (goIntakeBtn) goIntakeBtn.onclick = () => {
