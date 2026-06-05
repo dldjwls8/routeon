@@ -2793,7 +2793,10 @@
           <label>고객명 *</label><input name="name" required value="${c?.name || ''}">
           <label>담당자</label><input name="contact" value="${c?.contact || ''}">
           <label>연락처</label><input name="phone" value="${c?.phone || ''}">
-          <label>주소</label><input name="address" value="${c?.address || ''}">
+          <label>주소</label>
+          <div class="place-search-wrap">
+            <input type="text" class="place-search" name="address" value="${c?.address || ''}" placeholder="주소 또는 장소 검색…" data-place-value="address">
+          </div>
         </div>
       </form>`, async () => {
       const form = $('#custModalForm');
@@ -2829,6 +2832,8 @@
       toast(isEdit ? '고객 정보 수정됨' : '고객이 등록됐습니다');
       renderPage();
     });
+    const form = $('#custModalForm');
+    if (form) bindPlaceSearch(form);
   }
 
   function renderCustomerLoc(root) {
@@ -4624,9 +4629,12 @@
           item.onmouseover = () => setActive(item);
           item.onmouseout  = () => { item.classList.remove('active'); item.style.background = 'transparent'; };
           item.onclick = () => {
-            inp.value = p.place_name;
+            inp.value = inp.dataset.placeValue === 'address'
+              ? (p.road_address_name || p.address_name || p.place_name)
+              : p.place_name;
             inp.dataset.lat = p.y;
             inp.dataset.lon = p.x;
+            inp.dataset.placeName = p.place_name;
             inp.dataset.address = p.road_address_name || p.address_name || '';
             removeDrop();
             inp.dispatchEvent(new Event('change', { bubbles: true }));
