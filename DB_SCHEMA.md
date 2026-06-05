@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.83 기준, 스키마 변경 없음 — 고객관리 주소 자동완성 추가)
+> 최종 검토: 2026-06-05 (v1.0.84 기준, 고객 마스터 좌표 컬럼 추가 — 고객관리 위치 지도 기준)
 
 ---
 
@@ -218,6 +218,8 @@
 | `contact` | VARCHAR(100) | NULLABLE | 담당자명 |
 | `phone` | VARCHAR(20) | NULLABLE | 연락처 |
 | `address` | VARCHAR(255) | NULLABLE | 주소 |
+| `lat` | FLOAT | NULLABLE | 고객 주소 위도. 고객관리 주소 자동완성 선택 시 저장 |
+| `lon` | FLOAT | NULLABLE | 고객 주소 경도. 고객관리 주소 자동완성 선택 시 저장 |
 | `memo` | TEXT | NULLABLE | 메모 |
 | `temporary` | BOOLEAN | NOT NULL DEFAULT FALSE | 임시 화주 여부 (당일 의뢰용) |
 | `valid_date` | DATE | NULLABLE | 임시 화주 유효일 (YYYY-MM-DD) |
@@ -395,8 +397,8 @@ footer 링크와 안내 페이지 내용은 DB에 저장하지 않으며, 약관
 `+ 임시 화주 추가`는 기존 `customers.temporary`, `customers.valid_date` 컬럼을 사용하는 흐름이며 v1.0.82에서 스키마 변경은 없다.
 
 ### 고객관리 주소 자동완성과 DB
-`고객관리 > 고객 관리`의 주소 자동완성은 프론트엔드 입력 보조 기능이다.
-선택된 주소 문자열은 기존 `customers.address`에 저장하며, 고객 마스터용 별도 좌표 컬럼은 현재 없다.
+`고객관리 > 고객 관리`의 주소 자동완성은 선택 주소 문자열을 `customers.address`, 좌표를 `customers.lat`/`customers.lon`에 저장한다.
+`고객관리 > 고객 위치` 지도는 오더 하차지 좌표가 아니라 고객 마스터의 `lat`/`lon`을 기준으로 마커를 표시한다.
 
 ### users ID 타입
 | 테이블 | PK 타입 | 프론트 비교 방식 |

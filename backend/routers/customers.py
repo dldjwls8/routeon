@@ -19,6 +19,8 @@ class CustomerCreate(BaseModel):
     contact:    Optional[str]  = None
     phone:      Optional[str]  = None
     address:    Optional[str]  = None
+    lat:        Optional[float] = None
+    lon:        Optional[float] = None
     memo:       Optional[str]  = None
     temporary:  bool           = False
     valid_date: Optional[str]  = None   # YYYY-MM-DD
@@ -29,6 +31,8 @@ class CustomerUpdate(BaseModel):
     contact:    Optional[str]  = None
     phone:      Optional[str]  = None
     address:    Optional[str]  = None
+    lat:        Optional[float] = None
+    lon:        Optional[float] = None
     memo:       Optional[str]  = None
     temporary:  Optional[bool] = None
     valid_date: Optional[str]  = None
@@ -41,6 +45,8 @@ def _schema(c: Customer) -> dict:
         "contact":    c.contact,
         "phone":      c.phone,
         "address":    c.address,
+        "lat":        c.lat,
+        "lon":        c.lon,
         "memo":       c.memo,
         "temporary":  c.temporary,
         "valid_date": c.valid_date.isoformat() if c.valid_date else None,
@@ -82,6 +88,8 @@ async def create_customer(
         contact         = req.contact,
         phone           = normalize_phone(req.phone),
         address         = req.address,
+        lat             = req.lat,
+        lon             = req.lon,
         memo            = req.memo,
         temporary       = req.temporary,
         valid_date      = _parse_date(req.valid_date),
@@ -111,8 +119,11 @@ async def update_customer(
 
     if req.name     is not None: c.name     = req.name.strip()
     if req.contact  is not None: c.contact  = req.contact
+    sent_fields = getattr(req, "model_fields_set", getattr(req, "__fields_set__", set()))
     if req.phone    is not None: c.phone    = normalize_phone(req.phone)
     if req.address  is not None: c.address  = req.address
+    if "lat" in sent_fields: c.lat = req.lat
+    if "lon" in sent_fields: c.lon = req.lon
     if req.memo     is not None: c.memo     = req.memo
     if req.temporary is not None: c.temporary = req.temporary
     if req.valid_date is not None:

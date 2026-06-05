@@ -560,6 +560,8 @@
           contact:         c.contact || '',
           phone:           c.phone || '',
           address:         c.address || '',
+          lat:             c.lat ?? null,
+          lon:             c.lon ?? null,
           memo:            c.memo || '',
           temporary:       !!c.temporary,
           valid_date:      c.valid_date || null,
@@ -567,21 +569,6 @@
           lastOrderDate:   null,
           shipmentHistory: [],
         }));
-        // 고유 하차지 좌표 → 위치 목록 파생 (customers 로드 후)
-        {
-          const seen = new Set();
-          DATA.locations = DATA.orders
-            .filter(o => o.lat && o.lon)
-            .reduce((acc, o) => {
-              const key = `${o.lat.toFixed(4)},${o.lon.toFixed(4)}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                const c = DATA.customers.find(x => x.name === o.customer || x.name === o.recipient);
-                acc.push({ id: acc.length + 1, label: o.delivery || '배송지', lat: o.lat, lon: o.lon, customerId: c?.id || null });
-              }
-              return acc;
-            }, []);
-        }
       }
 
       // 담당자(관리자) 목록
@@ -2795,7 +2782,7 @@
           <label>연락처</label><input name="phone" value="${c?.phone || ''}">
           <label>주소</label>
           <div class="place-search-wrap">
-            <input type="text" class="place-search" name="address" value="${c?.address || ''}" placeholder="주소 또는 장소 검색…" data-place-value="address">
+            <input type="text" class="place-search" name="address" value="${c?.address || ''}" placeholder="주소 또는 장소 검색…" data-place-value="address" data-lat="${c?.lat ?? ''}" data-lon="${c?.lon ?? ''}">
           </div>
         </div>
       </form>`, async () => {
@@ -2804,9 +2791,12 @@
       const name    = form.querySelector('[name="name"]').value.trim();
       const contact = form.querySelector('[name="contact"]').value.trim();
       const phone   = normalizePhone(form.querySelector('[name="phone"]').value);
-      const address = form.querySelector('[name="address"]').value.trim();
+      const addressEl = form.querySelector('[name="address"]');
+      const address = addressEl.value.trim();
+      const lat = address ? (addressEl.dataset.lat ? Number(addressEl.dataset.lat) : null) : null;
+      const lon = address ? (addressEl.dataset.lon ? Number(addressEl.dataset.lon) : null) : null;
       if (!name) { toast('고객명을 입력하세요'); return; }
-      const body = { name, contact: contact || null, phone: phone || null, address: address || null };
+      const body = { name, contact: contact || null, phone: phone || null, address: address || null, lat, lon };
       let res;
       if (isEdit) {
         res = await fetch(`${API}/customers/${c.id}`, {
@@ -2833,33 +2823,41 @@
       renderPage();
     });
     const form = $('#custModalForm');
-    if (form) bindPlaceSearch(form);
+    if (form) {
+      const addressEl = form.querySelector('[name="address"]');
+      addressEl?.addEventListener('input', () => {
+        delete addressEl.dataset.lat;
+        delete addressEl.dataset.lon;
+        delete addressEl.dataset.placeName;
+      });
+      bindPlaceSearch(form);
+    }
   }
 
   function renderCustomerLoc(root) {
     _miniMapInstance = null;
-    const custOpts = DATA.customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    const positioned = DATA.customers.filter(c => c.lat != null && c.lon != null);
+    const missingCount = DATA.customers.length - positioned.length;
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('customer-loc', { desc: '배송·상하차 지점 좌표 (마일리지 없음)' })}
+      ${pageChromeHtml('customer-loc', { desc: '고객 주소 좌표 · 고객 마스터 기준' })}
       </div>
       <div class="page-body-fill split" style="grid-template-columns:1fr 1fr;min-height:0">
         <div>
           <div class="card">
             <div class="card-hd">
               <h2>위치 목록</h2>
-              <span style="font-size:12px;color:var(--text-muted)">오더 하차지 주소 기준 자동 생성</span>
+              <span style="font-size:12px;color:var(--text-muted)">좌표 등록 ${positioned.length}건 · 미등록 ${missingCount}건</span>
             </div>
             <div class="card-bd">
-              <ul class="loc-list">${DATA.locations.map(l => {
-                const c = DATA.customers.find(x => x.id === l.customerId);
-                const custLink = c
-                  ? `<button type="button" class="link-btn cust-history-link" data-cid="${c.id}">${c.name}</button>`
-                  : '';
+              <ul class="loc-list">${positioned.length ? positioned.map(c => {
                 return `<li>
-                  <div><strong>${l.label}</strong><br><span class="coord">${custLink}${c ? ' · ' : ''}${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}</span></div>
+                  <div>
+                    <button type="button" class="link-btn cust-history-link" data-cid="${c.id}"><strong>${c.name}</strong></button>
+                    <br><span class="coord">${c.address || '주소 미입력'} · ${Number(c.lat).toFixed(4)}, ${Number(c.lon).toFixed(4)}</span>
+                  </div>
                 </li>`;
-              }).join('')}</ul>
+              }).join('') : '<li class="empty-hint">주소 자동완성으로 좌표가 등록된 고객이 없습니다.</li>'}</ul>
             </div>
           </div>
         </div>
@@ -2879,7 +2877,7 @@
         gotoPage('customers', 'customer-list');
       };
     });
-    // 배송지 좌표 마커 표시
+    // 고객 주소 좌표 마커 표시
     initCustomerLocMap(root);
   }
 
@@ -2897,44 +2895,17 @@
         level: 10,
       });
     }
-    const points = DATA.orders.filter(o => o.lat && o.lon);
+    const points = DATA.customers.filter(c => c.lat != null && c.lon != null);
     if (!points.length) return;
     const bounds = new kakao.maps.LatLngBounds();
-    points.forEach(o => {
-      const pos = new kakao.maps.LatLng(o.lat, o.lon);
-      const marker = new kakao.maps.Marker({ position: pos, map: _miniMapInstance, title: o.delivery });
+    points.forEach(c => {
+      const pos = new kakao.maps.LatLng(c.lat, c.lon);
+      const marker = new kakao.maps.Marker({ position: pos, map: _miniMapInstance, title: c.name });
       _miniMapMarkers.push(marker);
       bounds.extend(pos);
     });
     _miniMapInstance.setBounds(bounds);
     kakao.maps.event.trigger(_miniMapInstance, 'resize');
-  }
-
-  function locModal(l) {
-    const custOpts = `<option value="">— 없음 —</option>` + DATA.customers.map(c =>
-      `<option value="${c.id}" ${l && l.customerId === c.id ? 'selected' : ''}>${c.name}</option>`
-    ).join('');
-    openModal(l ? '위치 편집' : '위치 추가', `
-      <form id="locForm">
-        <div class="form-grid" style="max-width:100%">
-          <label>고객</label><select id="locCust">${custOpts}</select>
-          <label>라벨 *</label><input id="locLabel" required value="${l?.label || ''}">
-          <label>위도</label><input id="locLat" type="number" step="0.0001" value="${l?.lat ?? ''}" placeholder="37.4979">
-          <label>경도</label><input id="locLon" type="number" step="0.0001" value="${l?.lon ?? ''}" placeholder="127.0276">
-        </div>
-      </form>`, () => {
-      const label = document.getElementById('locLabel')?.value?.trim();
-      if (!label) { toast('라벨을 입력하세요'); return false; }
-      const lat = parseFloat(document.getElementById('locLat')?.value) || null;
-      const lon = parseFloat(document.getElementById('locLon')?.value) || null;
-      const custId = Number(document.getElementById('locCust')?.value) || null;
-      if (l) {
-        l.label = label; l.lat = lat; l.lon = lon; l.customerId = custId;
-      } else {
-        DATA.locations.push({ id: Date.now(), label, lat, lon, customerId: custId });
-      }
-      renderPage();
-    });
   }
 
   function bulkEndPolicyBadge(policy) {

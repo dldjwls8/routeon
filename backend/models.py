@@ -339,6 +339,8 @@ class Customer(Base):
     contact         = Column(String(100))      # 담당자명
     phone           = Column(String(20))
     address         = Column(String(255))
+    lat             = Column(Float)
+    lon             = Column(Float)
     memo            = Column(Text)
     temporary       = Column(Boolean, nullable=False, default=False)
     valid_date      = Column(Date)             # 임시 화주 유효일 (YYYY-MM-DD)

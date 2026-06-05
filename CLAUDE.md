@@ -85,7 +85,7 @@ routeon/
     ├── register.html       기업 등록 (사업자등록증 업로드 포함)
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (2,351줄, dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (5,761줄, dashboard.html에서 분리)
+    ├── dashboard.js        대시보드 JS 로직 (5,732줄, dashboard.html에서 분리)
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
@@ -455,8 +455,8 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /presets` | 관리자 | 프리셋 저장 `{name, waypoints}` |
 | `DELETE /presets/{id}` | 관리자 | 프리셋 삭제 (같은 조직만) |
 | `GET /customers` | 관리자 | 같은 조직 거래처 목록 |
-| `POST /customers` | 관리자 | 거래처 등록 `{name, contact?, phone?, address?, memo?, temporary, valid_date?}` |
-| `PATCH /customers/{id}` | 관리자 | 거래처 수정 |
+| `POST /customers` | 관리자 | 거래처 등록 `{name, contact?, phone?, address?, lat?, lon?, memo?, temporary, valid_date?}` |
+| `PATCH /customers/{id}` | 관리자 | 거래처 수정. `lat`/`lon` 명시 전달 시 `null`도 반영 |
 | `DELETE /customers/{id}` | 관리자 | 거래처 삭제 |
 | `WS /ws/location` | 로그인 | 실시간 위치 + 재경로 알림 WebSocket. 관리자→GPS 수신, 기사→replan_requested 수신 |
 
@@ -539,7 +539,8 @@ dashboard.html 오더·배차 UI:
 
 dashboard.html 고객관리 UI:
 - `고객관리 > 고객 관리`의 `+ 추가`/`수정` 모달 주소칸은 `bindPlaceSearch()` 기반 카카오 장소 자동완성을 사용한다.
-- 고객 주소칸은 `data-place-value="address"` 분기를 사용해 자동완성 선택 시 장소명 대신 도로명주소/지번주소를 우선 입력한다.
+- 고객 주소칸은 `data-place-value="address"` 분기를 사용해 자동완성 선택 시 장소명 대신 도로명주소/지번주소를 우선 입력하고, `customers.lat`/`customers.lon`에 좌표를 함께 저장한다.
+- `고객관리 > 고객 위치`는 오더 하차지 좌표가 아니라 고객 마스터의 `lat`/`lon` 기준으로 위치 목록과 지도 마커를 표시한다. 좌표가 없는 고객은 미등록 건수로 집계되며 지도에는 표시하지 않는다.
 
 footer 및 법적 안내 페이지:
 - `dashboard.html`, `index.html`, `intro.html` footer는 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`로 이동하는 링크를 제공한다.

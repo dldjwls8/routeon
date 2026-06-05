@@ -168,3 +168,11 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE trips ADD COLUMN IF NOT EXISTS phase_updated_at TIMESTAMP;"
         ))
+
+        # customers 주소 좌표 컬럼 추가
+        await conn.execute(text(
+            "ALTER TABLE customers ADD COLUMN IF NOT EXISTS lat FLOAT;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE customers ADD COLUMN IF NOT EXISTS lon FLOAT;"
+        ))
