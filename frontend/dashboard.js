@@ -5752,6 +5752,11 @@
     }
   }
 
+  function driverHasActiveTrip(driverId) {
+    const trips = Array.isArray(DATA.statsTrips) ? DATA.statsTrips : [];
+    return trips.some(t => t.driverId === driverId && t.status === '운행중');
+  }
+
   function renderVehicleLocationMarkers() {
     if (!map) return;
     const bounds = new kakao.maps.LatLngBounds();
@@ -5780,13 +5785,13 @@
           const d = DATA.drivers.find(x => x.id === (msg.driver_id || msg.user_id));
           if (d) {
             const v = DATA.vehicles.find(x => x.driverId === d.id);
-            if (v) {
+            if (v && driverHasActiveTrip(d.id)) {
               v.start_lat = Number(msg.lat);
               v.start_lon = Number(msg.lon);
               v.last_gps_label = `${Number(msg.lat).toFixed(2)}, ${Number(msg.lon).toFixed(2)}`;
               v.last_gps_at = '실시간';
+              updateDriverMarker(d.id, msg.lat, msg.lon, d.name);
             }
-            updateDriverMarker(d.id, msg.lat, msg.lon, d.name);
           }
         }
       } catch {}

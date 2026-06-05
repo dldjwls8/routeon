@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.90 기준, 오더 처리 기록 `order_events` 추가)
+> 최종 검토: 2026-06-05 (v1.0.91 기준, 차량 위치 스냅샷 컬럼 추가)
 
 ---
 
@@ -86,6 +86,9 @@
 | `length_cm` | FLOAT | | 차량 길이 (cm) |
 | `width_cm` | FLOAT | | 차량 폭 (cm) |
 | `status` | VARCHAR(20) | NOT NULL DEFAULT '가용' | 차량 운행 상태 — `가용` / `운행중` / `정비` |
+| `last_lat` | FLOAT | | 차량 마지막 위치 위도. 진행 중 운행 차량만 기사 GPS 수신 시 갱신 |
+| `last_lon` | FLOAT | | 차량 마지막 위치 경도 |
+| `last_gps_at` | DATETIME | | 차량 마지막 위치 확정/갱신 시각 |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | |
 | `created_at` | DATETIME | NOT NULL | |
 
@@ -382,11 +385,13 @@ scheduled/in_progress → cancelled: PATCH /trips/{id}/status?status=cancelled
 completed 처리 시:
 - trips.completed_at 자동 기록
 - 소속 deliveries 중 in_progress 건 → done_manual 일괄 처리
+- 연결 차량이 있으면 기사 최신 GPS를 `vehicles.last_lat/last_lon/last_gps_at`에 저장해 차량 마지막 위치로 고정
 
 cancelled 처리 시:
 - trips.current_phase → `cancelled`
 - 소속 deliveries 중 pending/in_progress 건 → cancelled
 - 기사 앱 WS에 `trip.cancelled` 이벤트 전송
+- 연결 차량이 있으면 기사 최신 GPS를 `vehicles.last_lat/last_lon/last_gps_at`에 저장해 차량 마지막 위치로 고정
 
 세부 진행 기록:
 - `PATCH /trips/{id}/progress` body `{waypoint_index, event}` 또는 `{phase}`.
@@ -405,10 +410,10 @@ cancelled 처리 시:
 | `vehicle_type` | `vehicle_type` | `type` | 정상 매핑 |
 | `plate_number` | `plate_number` | `plate` | 정상 매핑 |
 | 배정 기사 | `driver_id`, `driver_name` | `driverId`, `driver` | 같은 조직의 `users.vehicle_id == vehicles.id` 기사만 매핑 |
-| 최근 위치 | `last_gps` | `last_gps` | Redis 우선, miss 시 TimescaleDB 최근 기록 폴백 |
+| 최근 차량 위치 | `last_gps` | `last_gps` | `vehicles.last_lat/last_lon/last_gps_at` 스냅샷 기준 |
 
 > `vehicles` API는 `weight_kg`를 원본 필드로 반환하고, 프론트에서 `tonnage` 표시값을 파생한다. 과거 `max_load_kg` 접근으로 톤수가 `0.0톤`으로 보이던 문제는 v1.0.75에서 수정됨.
-> 대시보드 지도는 `last_gps`를 `DATA.vehicles[].start_lat/start_lon`으로 보존해 초기 마커를 표시하고, 이후 `/ws/location` 수신값으로 같은 마커와 프론트 GPS 표시값을 갱신한다.
+> 기사 마지막 위치는 `/location-logs/{user_id}`가 Redis 실시간값 또는 `locations` 최신 행으로 반환한다. 차량 마지막 위치는 `/vehicles` 응답의 `last_gps`이며, 진행 중 운행 차량만 기사 GPS로 갱신되고 운행 완료/취소 후에는 차량 스냅샷으로 고정된다.
 
 ### deliveries status 매핑
 | DB `status` | 프론트 표시 | 배차 탭 노출 조건 |

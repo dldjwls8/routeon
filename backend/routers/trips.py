@@ -144,6 +144,8 @@ async def _cancel_trip_and_deliveries(
     if reason is not None:
         t.cancel_request_reason = reason
 
+    await _freeze_vehicle_position_from_driver(db, vehicle_id=t.vehicle_id, driver_id=t.driver_id)
+
     affected_deliveries = (await db.execute(
         select(Delivery).where(
             Delivery.trip_id == t.id,
@@ -184,6 +186,39 @@ async def _cancel_trip_and_deliveries(
         }
         await manager.broadcast_replan_to_org(org_id, payload)
         await manager.broadcast_to_org(org_id, payload)
+
+
+async def _freeze_vehicle_position_from_driver(
+    db: AsyncSession,
+    *,
+    vehicle_id: Optional[int],
+    driver_id,
+) -> None:
+    if vehicle_id is None or driver_id is None:
+        return
+    vehicle = (await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))).scalar_one_or_none()
+    if not vehicle:
+        return
+
+    now = datetime.utcnow()
+    val = redis.get(f"location:{driver_id}")
+    if val:
+        lat_s, lon_s = val.split(",")
+        vehicle.last_lat = float(lat_s)
+        vehicle.last_lon = float(lon_s)
+        vehicle.last_gps_at = now
+        return
+
+    loc = (await db.execute(
+        select(Location)
+        .where(Location.user_id == driver_id)
+        .order_by(Location.recorded_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if loc:
+        vehicle.last_lat = loc.lat
+        vehicle.last_lon = loc.lon
+        vehicle.last_gps_at = loc.recorded_at
 
 
 @router.get("/trips")
@@ -494,6 +529,7 @@ async def update_trip_status(
         t.current_phase = "completed"
         t.phase_updated_at = datetime.utcnow()
         t.completed_at = datetime.utcnow()
+        await _freeze_vehicle_position_from_driver(db, vehicle_id=t.vehicle_id, driver_id=t.driver_id)
 
         # 소속 배송지 중 미완료 건 일괄 완료 처리
         _rd = await db.execute(
@@ -518,6 +554,7 @@ async def update_trip_status(
     else:
         org_id = t.driver.organization_id if t.driver else current_user.organization_id
         cancel_reason = "기사 앱에서 운행 취소" if current_user.role == UserRole.driver else "관리자 웹에서 배차 취소"
+        await _freeze_vehicle_position_from_driver(db, vehicle_id=t.vehicle_id, driver_id=t.driver_id)
         await _cancel_trip_and_deliveries(
             db,
             t,

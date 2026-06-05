@@ -238,12 +238,14 @@ await db.refresh(obj)
 ```
 Android 앱 → POST /location-logs (5초 주기) → Redis(TTL 5분)
                                              → locations(TimescaleDB 7일)
+                                             → 진행 중 운행 차량이면 vehicles.last_lat/last_lon 갱신
                                              → 50m 도착 감지 → Delivery.done
                                              → WS broadcast → 관리자 웹 마커
 관리자 웹  → WS /ws/location → 실시간 수신 → 지도 마커 업데이트
 기사 앱   → WS /ws/location → replan_requested 수신 (관리자 연결 풀과 별도 관리)
 관리자 웹  → GET /location-logs/{user_id} → Redis 실시간 위치 (is_realtime=true)
                                             → Redis miss 시 TimescaleDB 최근 기록 폴백 (is_realtime=false, recorded_at 포함)
+관리자 웹  → GET /vehicles → 차량 마지막 위치 스냅샷(last_gps). 운행 완료/취소 후에는 기사 GPS와 분리되어 고정
 관리자 웹  → 기사 패널 상단: 🟢 실시간 위치 / 🔘 마지막 기록 N분 전 배지 표시
 ```
 
@@ -394,7 +396,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 |-----------|------|------|
 | `GET /users?role=driver` | 관리자 | 같은 기업 유저 목록 |
 | `DELETE /users/{id}` | 관리자 | 유저 삭제 |
-| `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 같은 조직 연결 기사와 최신 GPS를 `driver_id`, `driver_name`, `last_gps`로 포함 |
+| `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 연결 기사(`driver_id`, `driver_name`)와 차량 위치 스냅샷 `last_gps` 포함 |
 | `POST /vehicles` | 관리자 | 같은 조직 차량 등록 (`organization_id` 자동 지정) |
 | `DELETE /vehicles/{id}` | 관리자 | 같은 조직 차량 비활성화 |
 
@@ -472,7 +474,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `GET /users?role=` | 관리자 | 같은 조직 사용자 목록. `role=driver/admin/pending` 필터 지원 |
 | `PATCH /users/{id}` | 관리자 | 기사/관리자 정보 수정. 기사 상태·배정 차량 변경 포함 |
 | `DELETE /users/{id}` | 관리자 | 같은 조직 사용자 삭제. 본인 삭제 불가 |
-| `GET /vehicles` | 관리자 | 같은 조직 활성 차량 목록. `last_gps`, `driver_id`, `driver_name` 포함 |
+| `GET /vehicles` | 관리자 | 같은 조직 활성 차량 목록. 차량 위치 스냅샷 `last_gps`, `driver_id`, `driver_name` 포함 |
 | `POST /vehicles` | 관리자 | 차량 등록 |
 | `PATCH /vehicles/{id}` | 관리자 | 차량 제원·상태·배정 기사 수정 |
 | `DELETE /vehicles/{id}` | 관리자 | 차량 비활성화 |
@@ -537,8 +539,8 @@ chat.html 구조:
 - dashboard.html에서 채팅 WS 연결 제거 — chat.html에서만 관리
 
 dashboard.html 관제 지도:
-- 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 연결 기사 기준으로 지도 마커를 즉시 표시한다.
-- 이후 `/ws/location` 수신 시 같은 마커 위치와 `DATA.vehicles[].start_lat/start_lon`, `last_gps_label`, `last_gps_at`을 함께 갱신한다.
+- 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 차량 위치 스냅샷 기준으로 지도 마커를 표시한다.
+- `/ws/location` 수신은 기사 실시간 위치 이벤트다. 진행 중 운행 차량만 화면 좌표와 서버 `vehicles.last_lat/last_lon`을 갱신하며, 운행 완료/취소 후 차량 스냅샷은 더 이상 기사 GPS를 따라가지 않는다.
 - 대시보드 오더 요약 카드는 상태 필터별 최대 5건만 표시하며, 전체 목록은 `오더관리 > 오더 목록` 페이지에서 페이지네이션으로 조회한다.
 
 dashboard.html 오더·배차 UI:

@@ -191,6 +191,9 @@ class Vehicle(Base):
     length_cm    = Column(Float)
     width_cm     = Column(Float)
     status       = Column(String(20), nullable=False, server_default='가용')
+    last_lat     = Column(Float)
+    last_lon     = Column(Float)
+    last_gps_at  = Column(DateTime)
     is_active    = Column(Boolean, nullable=False, default=True)
     created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
 

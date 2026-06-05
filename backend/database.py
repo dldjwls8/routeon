@@ -104,6 +104,15 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"
         ))
+        await conn.execute(text(
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS last_lat FLOAT;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS last_lon FLOAT;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS last_gps_at TIMESTAMP;"
+        ))
         await conn.execute(text("""
             UPDATE vehicles v
                SET organization_id = u.organization_id

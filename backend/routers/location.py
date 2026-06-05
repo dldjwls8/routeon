@@ -84,6 +84,22 @@ async def create_location_log(
     db.add(loc)
     await db.flush()
 
+    active_trip_for_vehicle = (await db.execute(
+        select(Trip).where(
+            Trip.driver_id == uuid_lib.UUID(req.user_id),
+            Trip.status == TripStatus.in_progress,
+            Trip.vehicle_id != None,
+        ).order_by(Trip.started_at.desc().nullslast(), Trip.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if active_trip_for_vehicle:
+        vehicle = (await db.execute(
+            select(Vehicle).where(Vehicle.id == active_trip_for_vehicle.vehicle_id)
+        )).scalar_one_or_none()
+        if vehicle:
+            vehicle.last_lat = req.lat
+            vehicle.last_lon = req.lon
+            vehicle.last_gps_at = loc.recorded_at
+
     # 3. 도착 감지 — 해당 기사의 in_progress 배송지 조회
     current = LatLng(lat=req.lat, lon=req.lon)
     _r = await db.execute(

@@ -143,24 +143,13 @@ async def _vehicle_schema(v: Vehicle, db: AsyncSession) -> dict:
         ).limit(1)
     )).scalar_one_or_none()
     gps = None
-    if driver:
-        val = redis.get(f"location:{driver.id}")
-        if val:
-            lat_s, lon_s = val.split(",")
-            gps = {"lat": float(lat_s), "lon": float(lon_s), "recorded_at": None}
-        else:
-            loc = (await db.execute(
-                select(Location)
-                .where(Location.user_id == driver.id)
-                .order_by(Location.recorded_at.desc())
-                .limit(1)
-            )).scalar_one_or_none()
-            if loc:
-                gps = {
-                    "lat": loc.lat,
-                    "lon": loc.lon,
-                    "recorded_at": loc.recorded_at.isoformat(),
-                }
+    if v.last_lat is not None and v.last_lon is not None:
+        gps = {
+            "lat": v.last_lat,
+            "lon": v.last_lon,
+            "recorded_at": v.last_gps_at.isoformat() if v.last_gps_at else None,
+            "source": "vehicle_snapshot",
+        }
     return {
         "id": v.id,
         "organization_id": v.organization_id,
