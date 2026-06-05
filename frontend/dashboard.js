@@ -5445,7 +5445,7 @@
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>
             <thead><tr>
-              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>상차</th><th>하차</th><th>화물</th><th>시간창</th><th>접수시간</th><th>기사</th><th>상태</th><th></th>
+              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>상태</th><th>접수 시간</th><th>혼적</th><th>상차</th><th>하차</th><th>화물</th><th>화주</th><th>기사</th><th>시간창</th><th>오더번호</th><th></th>
             </tr></thead>
             <tbody>${rows.length ? rows.map(o => {
               const editable = orderIsEditable(o);
@@ -5456,12 +5456,13 @@
                 selectedOrderIds.includes(o.id) ? 'picked' : '',
               ].filter(Boolean).join(' ');
               const statusCell = `${statusBadge(o.status)}${editable ? '<span class="badge-edit">수정</span>' : ''}`;
+              const orderIdShort = o.id.length > 8 ? `${o.id.slice(0, 8)}…` : o.id;
               return `
               <tr class="${rowCls}" data-order-id="${o.id}">
                 <td><input type="checkbox" class="order-list-chk" data-id="${o.id}" ${selectedOrderIds.includes(o.id) ? 'checked' : ''} aria-label="${o.id} 선택"></td>
-                <td>${o.id}</td><td>${mixedLoadBadge(isMixedLoad(o))}</td><td>${o.customer}</td><td>${o.pickup}</td><td>${o.delivery}</td>
-                <td>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</td>
-                <td>${o.window}</td><td>${formatDateTimeShort(o.created_at)}</td><td>${o.driver || '—'}</td><td>${statusCell}</td>
+                <td>${statusCell}</td><td>${formatDateTimeShort(o.created_at)}</td><td>${mixedLoadBadge(isMixedLoad(o))}</td><td>${o.pickup}</td><td>${o.delivery}</td>
+                <td>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</td><td>${o.customer}</td><td>${o.driver || '—'}</td><td>${o.window}</td>
+                <td title="${o.id}">${orderIdShort}</td>
                 <td><button type="button" class="btn btn-sm edit-order" data-order-id="${o.id}">수정</button></td>
               </tr>`;
             }).join('') : `

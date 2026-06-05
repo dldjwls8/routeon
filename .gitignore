@@ -39,4 +39,7 @@ Thumbs.db
 .vscode/
 *.swp
 .orchestrate/
+
+# Cursor (로컬 에이전트 규칙)
+.cursor/rules/feat-order-sequence-change.mdc
 docs/
