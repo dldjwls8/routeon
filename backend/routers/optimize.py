@@ -1,42 +1,26 @@
-import asyncio
-import httpx
-import shutil
 import uuid as uuid_lib
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlalchemy import select, or_, func, cast, Float, update, delete
-from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy import select
 from pydantic import BaseModel
 
 from database import get_db
 from models import (
-    User, Delivery, Trip, Vehicle, RestStop, Location, Organization,
-    Conversation, Message, Preset,
-    DeliveryStatus, TripStatus, RestStopType, UserRole, OrgStatus
+    User, Trip, Vehicle, RestStop, Delivery,
+    TripStatus, DeliveryStatus, UserRole,
 )
-from auth import (
-    hash_password, verify_password, create_token,
-    get_current_user, get_current_user_from_token,
-    require_admin, require_driver, require_superadmin,
-)
+from auth import get_current_user
 from services.optimizer import solve_tsp, validate_tsp_constraints
 from services.rest_stop_inserter import RouteNode, insert_rest_stops
-from services.email_service import send_approved, send_rejected
-from services import kakao_mobility
 from services import graphhopper as gh_svc
-from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
-from core.managers import manager, redis, chat_manager
-from core.utils import _haversine, _haversine_km, _coord_to_address
+from core.managers import manager, redis
+from core.utils import _coord_to_address
+from schemas import WaypointSchema
 
 router = APIRouter()
-
-from routers.trips import WaypointSchema, _trip_schema
 
 class ExtraStopSchema(BaseModel):
     stop_type: str   # waypoint | destination | rest_preferred

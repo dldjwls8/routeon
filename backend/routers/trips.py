@@ -1,13 +1,8 @@
-import asyncio
-import httpx
-import shutil
 import uuid as uuid_lib
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, or_, func, cast, Float, update, delete
@@ -21,38 +16,17 @@ from models import (
     DeliveryStatus, TripStatus, RestStopType, UserRole, OrgStatus
 )
 from auth import (
-    hash_password, verify_password, create_token,
     get_current_user, get_current_user_from_token,
     require_admin, require_driver, require_superadmin,
 )
-from services.optimizer import solve_tsp, validate_tsp_constraints
-from services.rest_stop_inserter import RouteNode, insert_rest_stops
-from services.email_service import send_approved, send_rejected
-from services import kakao_mobility
 from services import graphhopper as gh_svc
-from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
-from core.managers import manager, redis, chat_manager
-from core.utils import _haversine, _haversine_km, _coord_to_address
+from core.managers import manager, redis
+from schemas import WaypointSchema, trip_schema, _trip_waypoints_for_response
 from services.cargo_capacity import validate_vehicle_capacity_for_waypoints
 from services.order_events import record_order_event
 
 router = APIRouter()
 
-class WaypointSchema(BaseModel):
-    name:             str
-    lat:              float
-    lon:              float
-    type:             str            = "unloading"  # "loading" | "unloading"
-    task_group:       Optional[int] = None
-    recipient_name:   Optional[str] = None   # 수신자(고객사명) — unloading 전용
-    cargo_type:       Optional[str] = None   # 화물 종류
-    cargo_size:       Optional[str] = None   # 화물 규격
-    cargo_weight_ton: Optional[float] = None # 과거 톤수 값(호환용)
-    shipper_name:     Optional[str] = None   # 화주명
-    contact_name:     Optional[str] = None   # 담당자명
-    contact_phone:    Optional[str] = None   # 담당자 연락처
-    shipper_phone:    Optional[str] = None   # 화주 연락처
-    delivery_id:      Optional[str] = None   # Delivery UUID — auto-dispatch 연결용
 
 class TripCreate(BaseModel):
     driver_id:         str
@@ -67,52 +41,6 @@ class TripCreate(BaseModel):
     vehicle_length_cm: Optional[float] = None
     vehicle_width_cm:  Optional[float] = None
 
-
-def _same_unloading_point(w: dict, lat: float, lon: float) -> bool:
-    if w.get("type") == "loading":
-        return False
-    try:
-        w_lat = float(w.get("lat"))
-        w_lon = float(w.get("lon"))
-    except (TypeError, ValueError):
-        return False
-    return abs(w_lat - lat) < 1e-6 and abs(w_lon - lon) < 1e-6
-
-
-def _dest_waypoint(name: str, lat: float, lon: float) -> dict:
-    return {
-        "name": name,
-        "lat": lat,
-        "lon": lon,
-        "type": "unloading",
-        "task_group": None,
-        "recipient_name": None,
-        "cargo_type": None,
-        "cargo_size": None,
-        "cargo_weight_ton": None,
-        "shipper_name": None,
-        "contact_name": None,
-        "contact_phone": None,
-        "shipper_phone": None,
-        "delivery_id": None,
-    }
-
-
-def _apply_delivery_to_waypoint(w: dict, delivery: Delivery) -> None:
-    stamp = (delivery.created_at or datetime.utcnow()).strftime("%y%m%d")
-    w["order_no"] = w.get("order_no") or f"RO-{stamp}-{str(delivery.id).replace('-', '')[-6:].upper()}"
-    w["recipient_name"] = w.get("recipient_name") or delivery.recipient_name
-    w["cargo_type"] = w.get("cargo_type") or delivery.cargo_type
-    w["cargo_size"] = w.get("cargo_size") or delivery.cargo_size
-    w["cargo_weight_ton"] = (
-        w.get("cargo_weight_ton")
-        if w.get("cargo_weight_ton") is not None
-        else delivery.cargo_weight_ton
-    )
-    w["shipper_name"] = w.get("shipper_name") or delivery.shipper_name
-    w["contact_name"] = w.get("contact_name") or delivery.contact_name
-    w["contact_phone"] = w.get("contact_phone") or delivery.contact_phone
-    w["shipper_phone"] = w.get("shipper_phone") or delivery.shipper_phone or delivery.contact_phone
 
 
 def _assert_trip_access(t: Trip, current_user: User) -> None:
@@ -251,7 +179,7 @@ async def get_trips(
         stmt = stmt.where(Trip.status == status)
     stmt = stmt.order_by(Trip.created_at.desc())
     _r = await db.execute(stmt)
-    return [_trip_schema(t) for t in _r.scalars().all()]
+    return [trip_schema(t) for t in _r.scalars().all()]
 
 @router.post("/trips", status_code=201)
 async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
@@ -368,7 +296,7 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
             )
     await db.commit()
     await db.refresh(t)
-    return _trip_schema(t)
+    return trip_schema(t)
 
 @router.get("/trips/{trip_id}")
 async def get_trip(trip_id: str, db: AsyncSession = Depends(get_db),
@@ -383,7 +311,7 @@ async def get_trip(trip_id: str, db: AsyncSession = Depends(get_db),
     if not t:
         raise HTTPException(404, "운행을 찾을 수 없습니다.")
     _assert_trip_access(t, current_user)
-    return _trip_schema(t)
+    return trip_schema(t)
 
 
 @router.get("/trips/{trip_id}/polyline")
@@ -1036,41 +964,6 @@ async def update_trip_progress(
     }
 
 
-def _trip_waypoints_for_response(t: Trip) -> list[dict]:
-    wp = t.waypoints or []
-    response_wp = [dict(w) for w in wp]
-    deliveries = t.__dict__.get("deliveries") or []
-    deliveries_by_id = {str(d.id): d for d in deliveries}
-    for w in response_wp:
-        delivery_id = w.get("delivery_id")
-        delivery = deliveries_by_id.get(str(delivery_id)) if delivery_id else None
-        if delivery:
-            _apply_delivery_to_waypoint(w, delivery)
-    if t.dest_name and t.dest_lat is not None and t.dest_lon is not None:
-        has_dest_waypoint = any(_same_unloading_point(w, t.dest_lat, t.dest_lon) for w in response_wp)
-        if not has_dest_waypoint:
-            response_wp.append(_dest_waypoint(t.dest_name, t.dest_lat, t.dest_lon))
-    return response_wp
-
-
-def _trip_schema(t: Trip) -> dict:
-    wp = _trip_waypoints_for_response(t)
-    loadings   = sum(1 for w in wp if w.get("type") == "loading")
-    unloadings = sum(1 for w in wp if w.get("type") != "loading")
-    return {
-        "id": str(t.id), "driver_id": str(t.driver_id), "vehicle_id": t.vehicle_id,
-        "dest_name": t.dest_name, "dest_lat": t.dest_lat, "dest_lon": t.dest_lon,
-        "waypoints": wp, "optimized_route": t.optimized_route,
-        "status": t.status, "departure_time": t.departure_time,
-        "current_phase": t.current_phase or "waiting",
-        "phase_updated_at": t.phase_updated_at.isoformat() + "Z" if t.phase_updated_at else None,
-        "is_emergency": t.is_emergency, "created_at": t.created_at.isoformat() + "Z",
-        "started_at": t.started_at.isoformat() + "Z" if t.started_at else None,
-        "completed_at": t.completed_at.isoformat() + "Z" if t.completed_at else None,
-        "loading_count": loadings, "unloading_count": unloadings,
-        "cancel_requested": bool(t.cancel_requested),
-        "cancel_request_reason": t.cancel_request_reason,
-    }
 
 @router.patch("/trips/{trip_id}/safety")
 async def update_trip_safety(
