@@ -6,6 +6,16 @@
 
 ---
 
+## v1.0.94 (2026-06-06)
+### 백엔드 라우터 리팩터링 회귀 수정
+- **라우터 import 누락 복구**: `schemas.py` 분리와 라우터 import 정리 이후 `/ws/location`, `/ws/chat`, 차량 연결 수정, Trip 생성/조회, 오더 처리 기록, 운행 통계 경로에서 런타임 `NameError`가 발생할 수 있던 누락 import를 복구
+- **Trip waypoint helper 연결 안정화**: `trips.py`가 `schemas.py`로 이동된 `_same_unloading_point`, `_dest_waypoint`, `_apply_delivery_to_waypoint`, `_trip_waypoints_for_response`를 명시적으로 가져오도록 정리해 목적지 waypoint 보강과 Delivery 메타데이터 복사가 계속 동작하도록 수정
+- **카카오 모빌리티 캐시 초기화 보강**: `kakao_mobility.py`의 future/realtime/multi-destination 캐시 딕셔너리가 정의되지 않아 경로 행렬 계산 시 `NameError`가 날 수 있던 기존 버그를 수정
+- **검증 보강**: `compileall`, `/openapi.json`, `/auth/login`, `/vehicles`, `/deliveries`, `/trips`, `/stats/summary` smoke 확인 및 `/ws/location`, `/ws/chat` 연결 accepted 로그 확인
+- **DB 변경 없음**: 이번 버전은 백엔드 런타임 안정화 작업으로 신규 테이블·컬럼 추가 없음
+
+---
+
 ## v1.0.93 (2026-06-06)
 ### 오더 접수 엑셀 다중 상·하차·좌표 변환 보강
 - **엑셀 접수 양식 다중 상·하차 확장**: `양식 다운로드` 템플릿을 `상차지1~3/상차화물/상차규격`, `하차지1~3/하차수취인/하차화물/하차규격` 구조로 확장. 기존 단일 `상차지`, `하차지`, `화물종류`, `규격` 헤더도 계속 읽도록 호환 유지

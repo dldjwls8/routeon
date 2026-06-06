@@ -60,12 +60,13 @@ routeon/
 │   ├── auth.py             JWT 인증 (비동기)
 │   ├── database.py         DB 연결 — AsyncEngine, AsyncSession
 │   ├── models.py           DB 테이블
+│   ├── schemas.py          공용 Pydantic/응답 스키마 — WaypointSchema, trip_schema
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   ├── routers/            도메인별 API 라우터
 │   ├── uploads/            기업 등록 서류 업로드 저장소
 │   ├── services/
-│   │   ├── kakao_mobility.py      카카오 모빌리티 API + TTL 캐시 + find_best_rest_stop
+│   │   ├── kakao_mobility.py      카카오 모빌리티 API + 경로행렬 캐시 + find_best_rest_stop
 │   │   ├── optimizer.py           OR-Tools TSP
 │   │   ├── email_service.py       기업 승인/반려 이메일 알림
 │   │   └── rest_stop_inserter.py  법정 휴게 규정 기반 휴게소 자동 삽입 (async)
@@ -138,6 +139,13 @@ routeon/
 - `cargo_weight_ton`: 과거 톤수 값 호환용. 신규 프론트 입력은 숫자 파싱 없이 `cargo_size`로 전달한다.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 - `order_no`: 표시용 오더번호. DB 컬럼이 아니라 `/deliveries`/`/trips` 응답에서 `created_at`과 Delivery UUID 기반으로 계산되는 `RO-YYMMDD-XXXXXX` 형식.
+- `WaypointSchema`, `trip_schema`, 목적지 waypoint 보강 helper는 `backend/schemas.py`에 있다. `dispatch`, `optimize`, `stats`, `trips` 라우터가 필요 시 여기서 import해야 하며, 라우터끼리 `from routers.trips import ...`처럼 서로 의존하지 않는다.
+
+### 라우터 import 주의사항
+- `backend/routers/`는 도메인별로 분리되어 있고, FastAPI는 엔드포인트 함수가 실제 호출될 때 누락 import가 드러나는 경우가 있다.
+- import 정리 후에는 최소 `python -m compileall -q /app`, `python -m pyflakes /app/routers /app/schemas.py`, `/openapi.json`, `/auth/login`, `/vehicles`, `/deliveries`, `/trips`, `/stats/summary` smoke를 확인한다.
+- WebSocket 라우터는 HTTP smoke만으로 충분하지 않다. `/ws/location`은 `get_current_user_from_token`, `Vehicle`, `_haversine_km` 참조가 필요하고, `/ws/chat`은 `get_current_user_from_token`, `UserRole` 참조가 필요하다.
+- `services/kakao_mobility.py`의 `_cache_future`, `_cache_realtime`, `_cache_multi`는 모듈 상단에서 초기화되는 프로세스 메모리 캐시다. 경로행렬 계산 함수에서 직접 참조하므로 삭제하지 않는다.
 
 ### 비동기 패턴
 ```python

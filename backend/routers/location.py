@@ -10,13 +10,13 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import (
-    User, Delivery, Trip, Location,
+    User, Delivery, Trip, Vehicle, Location,
     TripStatus, DeliveryStatus, UserRole,
 )
-from auth import get_current_user, require_admin
+from auth import get_current_user, get_current_user_from_token, require_admin
 from core.config import ARRIVAL_RADIUS_M
 from core.managers import manager, redis
-from core.utils import _haversine
+from core.utils import _haversine, _haversine_km
 
 router = APIRouter()
 

@@ -12,8 +12,9 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, Conversation, Message,
+    UserRole,
 )
-from auth import get_current_user
+from auth import get_current_user, get_current_user_from_token
 from core.managers import chat_manager
 
 router = APIRouter()

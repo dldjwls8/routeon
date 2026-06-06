@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import (
-    User, Delivery, Trip,
+    User, Delivery, Trip, OrderEvent,
     DeliveryStatus, TripStatus, UserRole,
 )
 from auth import get_current_user, require_admin, require_driver

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import (
-    User, Organization, Delivery, Trip, Location,
+    User, Organization, Delivery, Trip, Vehicle, Location,
     Conversation, Message,
     UserRole,
 )

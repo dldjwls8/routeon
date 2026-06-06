@@ -16,6 +16,9 @@ KAKAO_REST_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 
 _UNREACHABLE_SEC = 10_800_000
 _LOCAL_RADIUS_M  = 10_000
+_cache_future: dict[tuple[Any, ...], tuple[int, int]] = {}
+_cache_realtime: dict[tuple[Any, ...], tuple[int, int]] = {}
+_cache_multi: dict[tuple[Any, ...], tuple[tuple[int, ...], tuple[int, ...]]] = {}
 
 
 # ────────────────────────────────────────────────

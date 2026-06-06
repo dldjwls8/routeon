@@ -8,7 +8,7 @@ from sqlalchemy import select, func, cast, Float
 
 from database import get_db
 from models import (
-    User, Delivery, Trip, Vehicle,
+    User, Delivery, Trip, Vehicle, Location,
     TripStatus, UserRole,
 )
 from auth import require_admin

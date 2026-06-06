@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, Vehicle, Preset, RestStop,
-    RestStopType,
+    RestStopType, UserRole,
 )
 from auth import require_admin
 
