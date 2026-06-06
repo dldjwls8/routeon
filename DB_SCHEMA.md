@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-06 (v1.0.95 기준, 백엔드·프론트 결합도 개선 — DB 변경 없음)
+> 최종 검토: 2026-06-06 (v1.0.96 기준, 오더·배차 탭 통합 — DB 변경 없음)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## 테이블 구조
 
-> v1.0.95는 운행·위치 유스케이스를 `services/`로, ORM 응답 변환을 `serializers/`로, 프론트 전송 처리를 `api-client.js`로 분리한 구조 개선 버전이다. 기존 ORM 모델과 저장 구조를 그대로 사용하며 신규 테이블·컬럼·ENUM·마이그레이션은 없다.
+> v1.0.96은 관리자 웹의 일괄·수동 배차 화면을 `오더관리 > 배차관리`로 통합하고 기사별 배차 요청 조립과 혼적 ON/OFF 규칙을 정리한 프론트 변경 버전이다. 기존 ORM 모델과 저장 구조를 그대로 사용하며 신규 테이블·컬럼·ENUM·마이그레이션은 없다.
 
 ### `organizations`
 
@@ -209,7 +209,7 @@
 > 프론트 오더 목록/상세의 `접수시간`은 이 `created_at` 값을 표시한다.
 > 표시용 오더번호 `order_no`는 DB 컬럼이 아니다. `/deliveries`와 배송 연결 `/trips` waypoint 응답에서 `created_at` + Delivery UUID 기반 `RO-YYMMDD-XXXXXX` 형식으로 계산해 내려준다.
 > 대시보드 첫 화면의 오더 요약 카드는 상태 필터별 최대 5건만 표시하고, 전체 오더는 오더 목록 페이지에서 조회한다.
-> 오더 목록의 체크박스 선택은 프론트 UI 상태이며 별도 DB 컬럼을 만들지 않는다. 선택한 접수 상태 오더는 단건·수동 배차 화면으로 전달되어 기존 `deliveries.id` 기준으로 `/trips/auto-dispatch` 요청을 구성한다.
+> 오더 목록의 체크박스 선택은 프론트 UI 상태이며 별도 DB 컬럼을 만들지 않는다. 선택한 접수 상태 오더는 `오더관리 > 배차관리`로 전달되어 기존 `deliveries.id` 기준으로 `/trips/auto-dispatch` 요청을 구성한다.
 > 오더 목록 UI 기본 표시 순서는 `상태`, `접수 시간`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `시간창`, `오더번호`다.
 > `cargo_size` 또는 `cargo_weight_ton`에서 톤 단위를 읽을 수 있으면 배차 생성 API가 `vehicles.weight_kg`와 비교한다. `3파레트`처럼 중량 환산이 불가능한 규격은 표시값으로만 저장된다.
 
@@ -428,7 +428,7 @@ cancelled 처리 시:
 | `done` / `done_manual` | `'완료'` | 미표시 |
 | `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
 
-> v1.0.86 기준 일괄 자동 배차의 좌측 `오더·기사 배정` 패널과 단건·수동 배차의 좌측 `미배차 건` 선택 상태는 모두 프론트 임시 상태다. 최종 확정 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 우측 결과 패널은 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
+> v1.0.96 기준 `오더관리 > 배차관리`의 오더·기사 선택과 기사별 배정 묶음은 모두 프론트 임시 상태다. 최종 실행 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, 기사별 `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 하단 결과 컨테이너는 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
 
 ### 법적 안내 페이지와 DB
 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`은 정적 프론트 페이지다.

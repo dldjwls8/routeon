@@ -709,11 +709,10 @@
   const NAV = [
     { id: 'dashboard', label: '대시보드', pages: [{ id: 'dashboard', label: '요약' }] },
     { id: 'control', label: '운행관제', pages: [{ id: 'control-live', label: '실시간 차량 관제' }] },
-    { id: 'dispatch', label: '배차지정', pages: [
-      { id: 'order-intake', label: '오더 접수' },
-      { id: 'order-list', label: '오더 목록' },
-      { id: 'bulk-dispatch', label: '일괄 자동 배차' },
-      { id: 'dispatch-assign', label: '단건·수동 배차' },
+    { id: 'dispatch', label: '오더관리', pages: [
+      { id: 'order-intake', label: '오더접수' },
+      { id: 'order-list', label: '오더목록' },
+      { id: 'dispatch-manage', label: '배차관리' },
     ]},
     { id: 'customers', label: '고객관리', pages: [
       { id: 'customer-list', label: '고객 관리' },
@@ -758,12 +757,13 @@
   let dispatchRan = false;
   let bulkDispatchRan = false;
   let bulkDispatchTab = 0;
-  let bulkDepartureMode = 'distributed';
   let bulkAllowMixedLoad = true;
+  let bulkOrderSearch = '';
   let bulkSelectedOrderIds = [];
   let bulkSelectedDriverIds = [];
   let bulkOrderAssignments = {};
   let dispatchPendingMixedOnly = false;
+  let dispatchOrderSearch = '';
   let dashOrderTab = '전체';
   let pendingIntakes = [];
   let pendingIntakeSeq = 0;
@@ -803,6 +803,7 @@
   }
 
   function gotoPage(main, page) {
+    if (page === 'bulk-dispatch' || page === 'dispatch-assign') page = 'dispatch-manage';
     if (isMapPage(currentPage) && !isMapPage(page)) hideLiveMap();
     currentMain = main;
     const group = NAV.find(g => g.id === main);
@@ -816,9 +817,12 @@
   function applyInitialQueryState() {
     const params = new URLSearchParams(location.search);
     let requestedMain = params.get('main');
-    const requestedPage = params.get('page');
+    let requestedPage = params.get('page');
     if (requestedMain === 'stats') requestedMain = 'schedule';
     if (requestedMain === 'orders') requestedMain = 'dispatch';
+    if (requestedPage === 'bulk-dispatch' || requestedPage === 'dispatch-assign') {
+      requestedPage = 'dispatch-manage';
+    }
     if (requestedMain) {
       const group = NAV.find(g => g.id === requestedMain);
       if (group) {
@@ -2346,10 +2350,13 @@
   }
 
   function applyPageTheme() {
-    document.body.classList.remove('theme-dashboard', 'theme-app');
+    document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport');
     document.body.classList.add('page-compact');
     if (currentPage === 'dashboard') document.body.classList.add('theme-dashboard');
     else document.body.classList.add('theme-app');
+    if (currentPage === 'dispatch-manage') {
+      document.body.classList.add('dispatch-viewport');
+    }
     syncSubNavLayout();
   }
 
@@ -2424,8 +2431,7 @@
     switch (currentPage) {
       case 'dashboard': renderDashboard(root); break;
       case 'control-live': renderControlLive(root); break;
-      case 'bulk-dispatch': renderBulkDispatch(root); break;
-      case 'dispatch-assign': renderDispatchAssign(root); break;
+      case 'dispatch-manage': renderBulkDispatch(root); break;
       case 'trip-stats': renderTripStats(root); break;
       case 'drivers': renderDrivers(root); break;
       case 'vehicles': renderVehicles(root); break;
@@ -2502,11 +2508,9 @@
                 <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="order-intake">
                   <strong>접수 창</strong>
                 </button>
-                <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="bulk-dispatch">
-                  <strong>자동 배차</strong>
-                </button>
-                <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="dispatch-assign">
-                  <strong>수동 배차</strong>
+                <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="dispatch-manage">
+                  <strong>배차 관리</strong>
+                  <span>단건·다건 오더 배차</span>
                 </button>
               </div>
             </div>
@@ -3224,6 +3228,21 @@
     return stops.filter(s => !assigned.has(s.id));
   }
 
+  function dispatchOrderMatches(order, query) {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return true;
+    return [
+      order.id,
+      order.order_id,
+      order.shipper,
+      order.customer,
+      order.pickup,
+      order.delivery,
+      order.tons,
+      order.cargo_spec,
+    ].filter(Boolean).join(' ').toLowerCase().includes(normalized);
+  }
+
   function bulkAvailableDrivers() {
     return DATA.drivers.filter(d => d.status === '운행가능' || d.status === '운행중');
   }
@@ -3237,7 +3256,7 @@
     return drivers.map(d => {
       const vehicle = bulkDriverVehicle(d.id);
       const assigned = bulkOrderAssignments[String(d.id)] || [];
-      const picked = bulkSelectedDriverIds.includes(d.id);
+      const picked = bulkSelectedDriverIds.includes(String(d.id));
       return `
         <div class="bulk-driver-card ${picked ? 'picked' : ''}" data-driver-id="${d.id}">
           <div class="bulk-driver-card-hd">
@@ -3279,9 +3298,9 @@
     const tabIdx = Math.min(bulkDispatchTab, plans.length - 1);
     const plan = plans[tabIdx] || plans[0];
     const drivers = bulkAvailableDrivers();
-    const driverIds = new Set(drivers.map(d => d.id));
+    const driverIds = new Set(drivers.map(d => String(d.id)));
     Object.keys(bulkOrderAssignments).forEach(id => {
-      if (!driverIds.has(Number(id))) delete bulkOrderAssignments[id];
+      if (!driverIds.has(String(id))) delete bulkOrderAssignments[id];
     });
     const validStopIds = new Set(bd.stops.map(s => s.id));
     Object.keys(bulkOrderAssignments).forEach(id => {
@@ -3289,8 +3308,9 @@
       if (!bulkOrderAssignments[id].length) delete bulkOrderAssignments[id];
     });
     bulkSelectedOrderIds = bulkSelectedOrderIds.filter(id => validStopIds.has(id) && !bulkAssignedOrderIds().has(id));
-    bulkSelectedDriverIds = bulkSelectedDriverIds.filter(id => driverIds.has(id));
-    const pool = bulkOrderPool(bd.stops);
+    bulkSelectedDriverIds = bulkSelectedDriverIds.filter(id => driverIds.has(String(id)));
+    const fullPool = bulkOrderPool(bd.stops);
+    const pool = fullPool.filter(order => dispatchOrderMatches(order, bulkOrderSearch));
     const poolIds = pool.map(s => s.id);
     const allPoolSelected = poolIds.length > 0 && poolIds.every(id => bulkSelectedOrderIds.includes(id));
     const assignedCount = Object.values(bulkOrderAssignments).reduce((sum, list) => sum + (list?.length || 0), 0);
@@ -3310,82 +3330,71 @@
 
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('bulk-dispatch', { desc: '다차량·다배송지 자동 배정 · 경로 미리보기' })}
+      ${pageChromeHtml('dispatch-manage', { desc: '오더 선택 · 기사·차량 배정 · 경로 및 결과 확인' })}
       </div>
-      <div class="page-body-fill dispatch-two-pane dispatch-two-pane--bulk page-bulk-dispatch">
-      <div class="dispatch-work-pane">
+      <div class="page-body-fill dispatch-zone-layout dispatch-zone-layout--bulk page-dispatch-manage">
+      <section class="dispatch-orders-pane">
       <div class="card bulk-setup-card" id="sec-bulk-setup">
         <div class="card-hd card-hd--dispatch">
           <div class="card-hd-lead">
-            <h2>오더·기사 배정</h2>
-            <span class="text-muted-hint" style="font-size:12px">미배정 오더를 선택해 기사별로 배정한 뒤 일괄 최적화</span>
+            <h2>미배정 오더</h2>
+            <span class="text-muted-hint" style="font-size:12px">행 클릭 또는 체크로 다중 선택</span>
+          </div>
+          <label class="dispatch-inline-toggle">
+            <input type="checkbox" id="bulkAllowMixed" ${bulkAllowMixedLoad ? 'checked' : ''}>
+            혼적 허용
+          </label>
+        </div>
+        <div class="card-bd" style="padding:0">
+          <div class="dispatch-list-tools">
+            <input type="search" class="search" id="bulkOrderSearch" value="${escapeHtml(bulkOrderSearch)}" placeholder="오더번호·화주·상하차지·규격 검색" aria-label="미배정 오더 검색">
+            ${bulkOrderSearch ? `<span class="text-muted-hint">검색 ${pool.length}건</span>` : ''}
+          </div>
+          <div class="dispatch-setup-main dispatch-setup-main--stack">
+            <div id="bulkOrderPool">
+              ${tableScrollWrap(`<table class="bulk-pool-table">
+                <thead><tr>
+                  <th><input type="checkbox" id="chkAllBulkPool" ${allPoolSelected ? 'checked' : ''} aria-label="전체 선택"></th>
+                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
+                </tr></thead>
+                <tbody id="bulkOrderPoolBody">
+                  ${pool.length ? dispatchListTableRows(pool, {
+                    rowClass: 'bulk-pool-row order-row-clickable',
+                    dataAttr: 'bulk-order-id',
+                    checkbox: true,
+                    checkboxClass: 'bulk-pool-chk',
+                    selectedIds: bulkSelectedOrderIds,
+                  }) : `
+                    <tr><td colspan="8" class="empty-hint" style="padding:16px">미배정 오더가 없습니다.</td></tr>`}
+                </tbody>
+              </table>`)}
+            </div>
+            <p class="empty-hint dispatch-table-foot" style="padding:0 16px 12px">전체 ${fullPool.length}건${bulkOrderSearch ? ` · 검색 ${pool.length}건` : ''} · ${bulkSelectedOrderIds.length ? `<strong>${bulkSelectedOrderIds.length}</strong>건 선택` : '선택 없음'}</p>
           </div>
         </div>
-        <div class="card-bd" style="padding-top:0">
-          <p class="field-label">출발 방식</p>
-          <div class="departure-mode" role="radiogroup" aria-label="출발 방식">
-            <button type="button" class="${bulkDepartureMode === 'distributed' ? 'active' : ''}" data-departure="distributed">
-              <strong>분산 출발</strong>
-              차량별 최근 GPS 위치에서 출발 (기본)
-            </button>
-            <button type="button" class="${bulkDepartureMode === 'depot' ? 'active' : ''}" data-departure="depot">
-              <strong>단일 센터 출발</strong>
-              공통 창고 1곳에서 전 차량 출발
-            </button>
-          </div>
-          <div id="bulkDepotBlock" class="${bulkDepartureMode === 'depot' ? '' : 'is-hidden'}">
-            <div class="form-grid" style="max-width:100%;grid-template-columns:120px 1fr;margin-bottom:12px">
-              <label>센터(Depot)</label>
-              <div class="toolbar">
-                <input type="text" value="${bd.depot.name}" id="bulkDepotName" style="flex:1;min-width:160px">
-                <button type="button" class="btn btn-sm" id="bulkDepotMap">지도에서 선택</button>
-                <span class="coord">${bd.depot.lat}, ${bd.depot.lon}</span>
-              </div>
-            </div>
-            <div class="map-placeholder map-short" style="margin-bottom:16px" id="bulkDepotMapPreview" aria-label="센터 위치 지도"></div>
-          </div>
+      </div>
+      </section>
 
-          <label class="toolbar" style="margin-top:12px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="bulkAllowMixed" ${bulkAllowMixedLoad ? 'checked' : ''}>
-            혼적 허용 <span class="text-muted-hint">(동일 차량·복수 화주·화물)</span>
-          </label>
-
-          <div class="dispatch-setup-grid bulk-assign-grid">
-            <div class="dispatch-setup-main dispatch-setup-main--stack">
-              <p class="field-label" style="margin-top:16px">미배정 오더 <span class="text-muted-hint" style="font-weight:400">· 행 클릭 또는 체크로 다중 선택</span></p>
-              <div id="bulkOrderPool">
-                ${tableScrollWrap(`<table class="bulk-pool-table">
-                  <thead><tr>
-                    <th><input type="checkbox" id="chkAllBulkPool" ${allPoolSelected ? 'checked' : ''} aria-label="전체 선택"></th>
-                    <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
-                  </tr></thead>
-                  <tbody id="bulkOrderPoolBody">
-                    ${pool.length ? dispatchListTableRows(pool, {
-                      rowClass: 'bulk-pool-row order-row-clickable',
-                      dataAttr: 'bulk-order-id',
-                      checkbox: true,
-                      checkboxClass: 'bulk-pool-chk',
-                      selectedIds: bulkSelectedOrderIds,
-                    }) : `
-                      <tr><td colspan="8" class="empty-hint" style="padding:16px">미배정 오더가 없습니다.</td></tr>`}
-                  </tbody>
-                </table>`)}
-              </div>
-              <p class="empty-hint dispatch-table-foot">${pool.length}건 미배정 · ${bulkSelectedOrderIds.length ? `<strong>${bulkSelectedOrderIds.length}</strong>건 선택` : '선택 없음'}</p>
+      <aside class="dispatch-resource-pane">
+      <div class="card bulk-resource-card">
+        <div class="card-hd card-hd--dispatch">
+          <div class="card-hd-lead">
+            <h2>기사·차량 선택</h2>
+            <span class="text-muted-hint" style="font-size:12px">1건은 단건 배차, 여러 건은 다건 배차로 처리</span>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" id="runBulkDispatch" ${canRunBulk ? '' : 'disabled'}>배차 실행</button>
+        </div>
+        <div class="card-bd">
+          <div class="driver-panel bulk-driver-panel">
+            <div class="bulk-driver-panel-hd">
+              <h3>가용 기사·연결 차량 <span class="text-muted-hint" style="font-weight:400;font-size:12px">· 체크로 다중 선택</span></h3>
+              <label class="bulk-driver-select-all">
+                <input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택">
+                <span>전체</span>
+              </label>
             </div>
-            <aside class="dispatch-setup-fleet" aria-label="가용 기사">
-              <div class="driver-panel bulk-driver-panel">
-                <div class="bulk-driver-panel-hd">
-                  <h3>가용 기사 <span class="text-muted-hint" style="font-weight:400;font-size:12px">· 체크로 다중 선택</span></h3>
-                  <label class="bulk-driver-select-all">
-                    <input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택">
-                    <span>전체</span>
-                  </label>
-                </div>
-                <input type="search" class="search bulk-driver-search" placeholder="기사 검색" id="bulkDriverSearch">
-                <div class="bulk-driver-list" id="bulkDriverList">${bulkDriverCardsHtml(drivers)}</div>
-              </div>
-            </aside>
+            <input type="search" class="search bulk-driver-search" placeholder="기사 또는 차량 검색" id="bulkDriverSearch">
+            <div class="bulk-driver-list" id="bulkDriverList">${bulkDriverCardsHtml(drivers)}</div>
           </div>
 
           <div class="bulk-setup-footer">
@@ -3396,23 +3405,20 @@
               <button type="button" class="btn btn-primary" id="bulkAssignToDriver" ${canAssign ? '' : 'disabled'}>기사에게 배정</button>
             </div>
             <div class="bulk-setup-exec">
-              <p class="bulk-pre-kpi">미배정 <strong>${pool.length}</strong>건 · 기사 배정 <strong>${assignedCount}</strong>건 · 배정 기사 <strong>${assignedDriverCount}</strong>명</p>
-              <div class="card-actions bulk-setup-actions">
-                <button type="button" class="btn btn-primary" id="runBulkDispatch" ${canRunBulk ? '' : 'disabled'}>일괄 배차 실행</button>
-              </div>
+              <p class="bulk-pre-kpi">미배정 <strong>${fullPool.length}</strong>건 · 기사 배정 <strong>${assignedCount}</strong>건 · 배정 기사 <strong>${assignedDriverCount}</strong>명</p>
             </div>
           </div>
         </div>
       </div>
-      </div>
+      </aside>
 
       <div class="dispatch-result-pane">
       <div class="card dispatch-result-card" id="bulkResultsCard" style="${bulkDispatchRan ? '' : 'opacity:.6'}">
         <div class="card-hd">
-          <h2>결과 — 차량별 방문 순서·미배정</h2>
+              <h2>배차 결과 — 차량별 방문 순서·미배정</h2>
         </div>
         <div class="card-bd">
-          ${bulkDispatchRan ? '' : '<p class="empty-hint" style="padding:0 0 12px">「일괄 배차 실행」 후 차량별 방문 순서·미배정·지도가 표시됩니다.</p>'}
+          ${bulkDispatchRan ? '' : '<p class="empty-hint" style="padding:0 0 12px">「배차 실행」 후 차량별 방문 순서·미배정·지도가 표시됩니다.</p>'}
           <div id="bulkResultsBlock" style="${bulkDispatchRan ? '' : 'display:none'}">
             <div class="bulk-summary">
               <span><strong>${res.summary.vehicles}</strong>대 차량</span>
@@ -3463,7 +3469,7 @@
                   }).join('')}
                 </tbody>
               </table>`)}
-              <button type="button" class="btn btn-sm" style="margin-top:12px" id="bulkManualReassign">수동으로 미배정 건 재배정</button>
+              <button type="button" class="btn btn-sm" style="margin-top:12px" id="bulkManualReassign">미배정 오더 다시 선택</button>
             </div>
           </div>
         </div>
@@ -3472,27 +3478,19 @@
 
     $('#bulkAllowMixed', root)?.addEventListener('change', (e) => {
       bulkAllowMixedLoad = e.target.checked;
+      if (!bulkAllowMixedLoad) {
+        Object.keys(bulkOrderAssignments).forEach(driverId => {
+          bulkOrderAssignments[driverId] = (bulkOrderAssignments[driverId] || []).slice(0, 1);
+        });
+      }
+      renderBulkDispatch(root);
     });
-    root.querySelectorAll('.departure-mode button[data-departure]').forEach(btn => {
-      btn.onclick = () => {
-        const mode = btn.dataset.departure;
-        if (mode === bulkDepartureMode) return;
-        bulkDepartureMode = mode;
-        renderBulkDispatch(root);
-      };
-    });
-    $('#bulkDepotMap', root)?.addEventListener('click', () => {
-      const address = $('#bulkDepotName', root)?.value?.trim();
-      if (!address) { toast('센터 이름/주소를 입력하세요'); return; }
-      apiFetch(`/address/coord?query=${encodeURIComponent(address)}` )
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (!data?.lat) { toast('주소 좌표를 찾을 수 없습니다'); return; }
-          DATA.bulkDispatch.depot = { name: address, lat: data.lat, lon: data.lon, address };
-          toast(`센터 위치 설정: ${address}`);
-          renderBulkDispatch(root);
-        })
-        .catch(() => toast('주소 변환 실패'));
+    $('#bulkOrderSearch', root)?.addEventListener('input', (e) => {
+      bulkOrderSearch = e.target.value;
+      renderBulkDispatch(root);
+      const search = $('#bulkOrderSearch', root);
+      search?.focus();
+      search?.setSelectionRange(bulkOrderSearch.length, bulkOrderSearch.length);
     });
     $('#chkAllBulkPool', root)?.addEventListener('change', (e) => {
       const ids = new Set(bulkSelectedOrderIds);
@@ -3519,12 +3517,12 @@
       };
     });
     $('#chkAllBulkDrivers', root)?.addEventListener('change', (e) => {
-      bulkSelectedDriverIds = e.target.checked ? drivers.map(d => d.id) : [];
+      bulkSelectedDriverIds = e.target.checked ? drivers.map(d => String(d.id)) : [];
       renderBulkDispatch(root);
     });
     root.querySelectorAll('.bulk-driver-chk').forEach(chk => {
       chk.onchange = (e) => {
-        const id = Number(chk.dataset.id);
+        const id = chk.dataset.id;
         const ids = new Set(bulkSelectedDriverIds);
         e.target.checked ? ids.add(id) : ids.delete(id);
         bulkSelectedDriverIds = [...ids];
@@ -3534,7 +3532,7 @@
     root.querySelectorAll('.bulk-driver-card').forEach(card => {
       card.onclick = (e) => {
         if (e.target.closest('input')) return;
-        const id = Number(card.dataset.driverId);
+        const id = card.dataset.driverId;
         const ids = new Set(bulkSelectedDriverIds);
         ids.has(id) ? ids.delete(id) : ids.add(id);
         bulkSelectedDriverIds = [...ids];
@@ -3551,6 +3549,20 @@
       if (!bulkSelectedOrderIds.length || !bulkSelectedDriverIds.length) return;
       const orderIds = [...bulkSelectedOrderIds];
       const driverIds = [...bulkSelectedDriverIds];
+      if (!bulkAllowMixedLoad) {
+        const availableDriverIds = driverIds.filter(driverId => !(bulkOrderAssignments[String(driverId)] || []).length);
+        if (availableDriverIds.length < orderIds.length) {
+          toast('혼적 OFF에서는 오더 수만큼 비어 있는 기사를 선택해야 합니다');
+          return;
+        }
+        orderIds.forEach((orderId, idx) => {
+          bulkOrderAssignments[String(availableDriverIds[idx])] = [orderId];
+        });
+        bulkSelectedOrderIds = [];
+        toast(`${orderIds.length}건을 기사별 1건씩 배정했습니다`);
+        renderBulkDispatch(root);
+        return;
+      }
       orderIds.forEach((orderId, idx) => {
         const driverId = driverIds[idx % driverIds.length];
         const key = String(driverId);
@@ -3596,53 +3608,68 @@
     });
     $('#runBulkDispatch', root).onclick = async () => {
       if (!canRunBulk) { toast('기사별로 오더를 먼저 배정하세요'); return; }
-      const tasks = [];
       const skipped = [];
-      const assignedOrderIds = [...bulkAssignedOrderIds()];
-      assignedOrderIds.forEach(orderId => {
-        const stop = bd.stops.find(s => s.id === orderId);
-        const ord = DATA.orders.find(o => o.id === stop.id);
-        const task = dispatchTaskFromOrder(ord);
-        if (!task) { skipped.push(stop.id); return; }
-        tasks.push(task);
-      });
-      if (!tasks.length) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
-
-      const driver_ids = Object.entries(bulkOrderAssignments)
+      const groups = Object.entries(bulkOrderAssignments)
         .filter(([, ids]) => ids?.length)
-        .map(([driverId]) => driverId);
-      const vehicle_assignments = {};
-      driver_ids.forEach(driverId => {
-        const vehicle = bulkDriverVehicle(driverId);
-        if (vehicle?.id) vehicle_assignments[driverId] = Number(vehicle.id);
-      });
-      if (!driver_ids.length) { toast('배정된 기사가 없습니다.'); return; }
+        .map(([driverId, orderIds]) => {
+          const tasks = orderIds.map(orderId => {
+            const stop = bd.stops.find(s => s.id === orderId);
+            const ord = stop ? DATA.orders.find(o => o.id === stop.id) : null;
+            const task = dispatchTaskFromOrder(ord);
+            if (!task) skipped.push(orderId);
+            return task;
+          }).filter(Boolean);
+          return { driverId, orderIds, tasks, vehicle: bulkDriverVehicle(driverId) };
+        })
+        .filter(group => group.tasks.length);
+      const taskCount = groups.reduce((sum, group) => sum + group.tasks.length, 0);
+      if (!taskCount) { toast('좌표 정보가 있는 배송 건이 없습니다.'); return; }
+      if (!groups.length) { toast('배정된 기사가 없습니다.'); return; }
+      const missingVehicle = groups.find(group => !group.vehicle?.id);
+      if (missingVehicle) {
+        toast(`${driverById(missingVehicle.driverId)?.name || '선택 기사'}의 연결 차량을 확인하세요`);
+        return;
+      }
+      if (!bulkAllowMixedLoad && groups.some(group => group.tasks.length > 1)) {
+        toast('혼적 OFF에서는 기사 한 명에게 오더 한 건만 배정할 수 있습니다');
+        return;
+      }
+      const assignmentCountByDriver = Object.fromEntries(
+        groups.map(group => [String(group.driverId), group.tasks.length])
+      );
 
       const btn = $('#runBulkDispatch', root);
       btn.disabled = true;
       btn.innerHTML = '<span class="loading"></span>배차 중…';
       try {
-        const body = { tasks, driver_ids, vehicle_assignments, departure_time: new Date().toISOString() };
-        const res = await apiFetch(`/trips/auto-dispatch`, {
-          method: 'POST', body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const e = await res.json().catch(() => ({}));
-          toast(e.detail || '배차 실패');
-          btn.disabled = false; btn.textContent = '일괄 배차 실행';
-          return;
+        const trips = [];
+        for (const group of groups) {
+          const body = {
+            tasks: group.tasks,
+            driver_ids: [group.driverId],
+            vehicle_assignments: { [group.driverId]: Number(group.vehicle.id) },
+            departure_time: new Date().toISOString(),
+          };
+          const response = await apiFetch('/trips/auto-dispatch', {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || '배차 실패');
+          }
+          const result = await response.json();
+          trips.push(...(result.trips || []));
         }
-        const result = await res.json();
-        const trips = result.trips || [];
         _bulkDispatchTrips = trips;
         DATA.bulkDispatch.results = {
-          summary: { vehicles: trips.length, stops: tasks.length, unassigned: skipped.length + pool.length },
+          summary: { vehicles: trips.length, stops: taskCount, unassigned: skipped.length + fullPool.length },
           plans: trips.map(t => {
             const dv = driverById(t.driver_id);
             const vv = vehicleById(t.vehicle_id);
             return {
               plate: vv?.plate || '—', tonnage: vv?.tonnage || '—', driver: dv?.name || '—',
-              mixed_load: false,
+              mixed_load: (assignmentCountByDriver[String(t.driver_id)] || 0) > 1,
               visits: (t.waypoints || []).map(w => ({
                 kind: '', text: `${w.name} (${w.type === 'loading' ? '상차' : '하차'})`,
               })),
@@ -3658,13 +3685,14 @@
         bulkDispatchTab = 0;
         bulkOrderAssignments = {};
         toast(skipped.length
-          ? `배차 완료 · ${trips.length}대 · ${tasks.length}건 (${skipped.length}건 좌표 미확인 제외)`
-          : `배차 완료 · ${trips.length}대 · ${tasks.length}건`);
+          ? `배차 완료 · ${trips.length}대 · ${taskCount}건 (${skipped.length}건 좌표 미확인 제외)`
+          : `배차 완료 · ${trips.length}대 · ${taskCount}건`);
         await loadRealData();
       } catch (err) {
-        toast('배차 중 오류가 발생했습니다');
+        toast(err.message || '배차 중 오류가 발생했습니다');
       } finally {
-        btn.disabled = false; btn.textContent = '일괄 배차 실행';
+        btn.disabled = false;
+        btn.textContent = '배차 실행';
         if (document.body.contains(root)) renderBulkDispatch(root);
       }
     };
@@ -3675,20 +3703,13 @@
       };
     });
     $('#bulkManualReassign', root)?.addEventListener('click', () => {
-      gotoPage('dispatch', 'dispatch-assign');
+      bulkDispatchRan = false;
+      renderBulkDispatch(root);
     });
 
     // 지도 초기화
     setTimeout(() => {
       if (typeof kakao === 'undefined' || !kakao.maps) return;
-      if (bulkDepartureMode === 'depot') {
-        const depotEl = document.getElementById('bulkDepotMapPreview');
-        if (depotEl) {
-          const center = new kakao.maps.LatLng(bd.depot.lat, bd.depot.lon);
-          const m = new kakao.maps.Map(depotEl, { center, level: 5 });
-          new kakao.maps.Marker({ map: m, position: center });
-        }
-      }
       if (bulkDispatchRan && _bulkDispatchTrips[bulkDispatchTab]?.waypoints?.length) {
         const routeEl = document.getElementById('bulkRouteMap');
         if (routeEl) {
@@ -3932,14 +3953,15 @@
     const plans = DATA.dispatchPlans;
     const tabIdx = Math.min(dispatchPreviewTab, plans.length - 1);
     const plan = plans[tabIdx] || plans[0];
-    let unassigned = _allUnassigned.filter(_passRegion).filter(_passSite);
-    if (dispatchPendingMixedOnly) unassigned = unassigned.filter(o => isMixedLoad(o));
-    const visiblePendingIds = new Set(unassigned.map(o => o.id));
-    dispatchPendingSelectedIds = dispatchPendingSelectedIds.filter(id => visiblePendingIds.has(id));
-    if (dispatchPendingSelectedId && !visiblePendingIds.has(dispatchPendingSelectedId)) dispatchPendingSelectedId = dispatchPendingSelectedIds[0] || null;
+    let eligibleUnassigned = _allUnassigned.filter(_passRegion).filter(_passSite);
+    if (dispatchPendingMixedOnly) eligibleUnassigned = eligibleUnassigned.filter(o => isMixedLoad(o));
+    const unassigned = eligibleUnassigned.filter(order => dispatchOrderMatches(order, dispatchOrderSearch));
+    const eligiblePendingIds = new Set(eligibleUnassigned.map(o => o.id));
+    dispatchPendingSelectedIds = dispatchPendingSelectedIds.filter(id => eligiblePendingIds.has(id));
+    if (dispatchPendingSelectedId && !eligiblePendingIds.has(dispatchPendingSelectedId)) dispatchPendingSelectedId = dispatchPendingSelectedIds[0] || null;
     if (!dispatchPendingSelectedId && dispatchPendingSelectedIds.length) dispatchPendingSelectedId = dispatchPendingSelectedIds[0];
-    const selectedRows = unassigned.filter(o => dispatchPendingSelectedIds.includes(o.id));
-    const selectedPending = unassigned.find(o => o.id === dispatchPendingSelectedId)
+    const selectedRows = eligibleUnassigned.filter(o => dispatchPendingSelectedIds.includes(o.id));
+    const selectedPending = eligibleUnassigned.find(o => o.id === dispatchPendingSelectedId)
       || (dispatchPendingSelectedId ? unassignedForDispatch().find(o => o.id === dispatchPendingSelectedId) : null);
     const hasManualSelection = selectedRows.length > 0;
     const vehicleLabel = dispatchManualVehicleId ? (() => { const v = vehicleById(dispatchManualVehicleId); return v ? `${v.plate} · ${v.tonnage || '—'}` : '선택'; })() : '미선택';
@@ -3957,8 +3979,8 @@
       <div class="page-sticky-top">
       ${pageChromeHtml('dispatch-assign', { desc: '미배차 건 선택 · 차량·기사 · 경로 계산 · 배차 결과' })}
       </div>
-      <div class="page-body-fill dispatch-two-pane dispatch-two-pane--manual">
-      <div class="dispatch-work-pane">
+      <div class="page-body-fill dispatch-zone-layout dispatch-zone-layout--manual">
+      <section class="dispatch-orders-pane">
 
       <div class="card" id="sec-dispatch-pending">
         <div class="card-hd">
@@ -3969,6 +3991,10 @@
           </label>
         </div>
         <div class="card-bd" style="padding:0">
+          <div class="dispatch-list-tools">
+            <input type="search" class="search" id="dispatchOrderSearch" value="${escapeHtml(dispatchOrderSearch)}" placeholder="오더번호·화주·상하차지·규격 검색" aria-label="미배차 오더 검색">
+            ${dispatchOrderSearch ? `<span class="text-muted-hint">검색 ${unassigned.length}건</span>` : ''}
+          </div>
           ${tableScrollWrap(`<table>
             <thead>
               <tr>
@@ -3986,9 +4012,11 @@
           <p class="empty-hint dispatch-table-foot" style="padding:0 16px 12px">${unassigned.length}건 · ${selectedRows.length ? `<strong>${selectedRows.length}</strong>건 선택` : '선택 없음'}</p>
         </div>
       </div>
+      </section>
 
+      <aside class="dispatch-resource-pane">
       <div class="card" id="sec-dispatch-manual" style="${selectedPending ? '' : 'opacity:.7'}">
-        <div class="card-hd"><h2>선택 건 배정</h2></div>
+        <div class="card-hd"><h2>기사·차량 선택</h2></div>
         <div class="card-bd">
           ${selectedPending ? `
             <p class="field-label" style="margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
@@ -3998,23 +4026,10 @@
                 <input type="checkbox" id="toggleSelectedMixed" ${isMixedLoad(selectedPending) ? 'checked' : ''}> 혼적 (편집)
               </label>
             </p>
-            <div class="intake-layout-wrap">
-              <div class="intake-main">
-                <div class="intake-actions">
-                  <button type="button" class="btn" id="calcRouteAssign">경로 계산</button>
-                  <button type="button" class="btn btn-primary" id="confirmDispatchAssign" ${hasManualSelection ? '' : 'disabled'}>배정 확정</button>
-                </div>
-                <div class="route-box" id="routeBoxAssign">
-                  <strong>경로 미리보기</strong>
-                  <ol class="route-list" id="routeListAssign"></ol>
-                  <svg class="route-svg" viewBox="0 0 300 60" preserveAspectRatio="none">
-                    <polyline points="10,50 80,30 150,45 220,20 290,35" fill="none" stroke="#c6f135" stroke-width="2" stroke-dasharray="4 2"/>
-                    <circle cx="10" cy="50" r="4" fill="#c6f135"/><circle cx="290" cy="35" r="4" fill="#a8d42e"/>
-                  </svg>
-                </div>
-                <div class="map-placeholder map-tall" id="dispatchRouteMap" style="margin-top:12px" aria-label="선택 건 경로 지도"></div>
-              </div>
-              ${manualAssignPanelHtml(assignIds)}
+            ${manualAssignPanelHtml(assignIds)}
+            <div class="intake-actions">
+              <button type="button" class="btn" id="calcRouteAssign">경로 계산</button>
+              <button type="button" class="btn btn-primary" id="confirmDispatchAssign" ${hasManualSelection ? '' : 'disabled'}>배정 확정</button>
             </div>` : `
             <p class="empty-hint">위 「미배차 건」에서 건을 선택한 뒤 차량·기사를 지정하고 경로를 계산하세요.</p>`}
           <div class="bulk-setup-footer manual-setup-footer">
@@ -4097,20 +4112,32 @@
           </ul>
         </div>
       </div>
-        </div>
+      </div>
       </details>
 
-      </div>
+      </aside>
       <div class="dispatch-result-pane">
       <div class="card dispatch-result-card" id="sec-dispatch-preview" style="${dispatchRan ? '' : 'opacity:.65'}">
         <div class="card-hd">
-          <h2>배차 결과</h2>
+          <h2>경로·배차 결과</h2>
           <div class="toolbar">
             <button type="button" class="btn btn-sm" id="manualReassign" ${dispatchRan ? '' : 'disabled'}>수동 재배정</button>
             <button type="button" class="btn btn-sm" id="singleDispatch" ${dispatchRan ? '' : 'disabled'}>단건 배차</button>
           </div>
         </div>
         <div class="card-bd">
+          ${selectedPending ? `
+            <div class="manual-route-result">
+              <div class="route-box" id="routeBoxAssign">
+                <strong>선택 오더 경로 미리보기</strong>
+                <ol class="route-list" id="routeListAssign"></ol>
+                <svg class="route-svg" viewBox="0 0 300 60" preserveAspectRatio="none">
+                  <polyline points="10,50 80,30 150,45 220,20 290,35" fill="none" stroke="#c6f135" stroke-width="2" stroke-dasharray="4 2"/>
+                  <circle cx="10" cy="50" r="4" fill="#c6f135"/><circle cx="290" cy="35" r="4" fill="#a8d42e"/>
+                </svg>
+              </div>
+              <div class="map-placeholder map-tall" id="dispatchRouteMap" aria-label="선택 건 경로 지도"></div>
+            </div>` : '<p class="empty-hint" style="padding:0 0 12px">오더와 기사·차량을 선택하면 경로를 확인할 수 있습니다.</p>'}
           ${dispatchRan ? '' : '<p class="empty-hint" style="padding:0 0 12px">「배차 실행」 후 방문 순서·지도·배정 현황이 표시됩니다.</p>'}
           <div id="previewBlock" style="${dispatchRan ? '' : 'display:none'}">
             <div class="tabs" id="vehicleTabs">
@@ -4187,6 +4214,13 @@
     $('#dispatchMixedOnlyFilter', root)?.addEventListener('change', (e) => {
       dispatchPendingMixedOnly = e.target.checked;
       renderDispatchAssign(root);
+    });
+    $('#dispatchOrderSearch', root)?.addEventListener('input', (e) => {
+      dispatchOrderSearch = e.target.value;
+      renderDispatchAssign(root);
+      const search = $('#dispatchOrderSearch', root);
+      search?.focus();
+      search?.setSelectionRange(dispatchOrderSearch.length, dispatchOrderSearch.length);
     });
     $('#dispatchRegionFilter', root)?.addEventListener('change', e => {
       dispatchRegionSel = e.target.value;
@@ -5720,6 +5754,9 @@
     const rows = allRows.slice((orderPage - 1) * PAGE_SIZE, orderPage * PAGE_SIZE);
     const rowIds = rows.map(o => o.id);
     selectedOrderIds = selectedOrderIds.filter(id => DATA.orders.some(o => o.id === id));
+    const dispatchableSelectedIds = selectedOrderIds.filter(
+      id => DATA.orders.some(o => o.id === id && o.status === '접수')
+    );
     const allPageSelected = rowIds.length > 0 && rowIds.every(id => selectedOrderIds.includes(id));
     const selected = selectedOrderId ? orderById(selectedOrderId) : null;
     const detailTab = selected ? orderDetailTab : 'info';
@@ -5739,7 +5776,7 @@
         <div class="order-bulk-bar ${selectedOrderIds.length ? '' : 'is-idle'}">
           <span>선택 <strong>${selectedOrderIds.length}</strong>건</span>
           <span class="text-muted-hint">행 클릭은 상세 보기, 체크박스는 일괄 선택</span>
-          <button type="button" class="btn btn-sm" id="orderGoDispatch" ${selectedOrderIds.length ? '' : 'disabled'}>선택 건 배차지정</button>
+          <button type="button" class="btn btn-sm" id="orderGoDispatch" ${dispatchableSelectedIds.length ? '' : 'disabled'}>접수 ${dispatchableSelectedIds.length}건 배차관리</button>
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table>
@@ -5808,9 +5845,9 @@
       syncOrderSelection();
     });
     $('#orderGoDispatch', root)?.addEventListener('click', () => {
-      dispatchPendingSelectedIds = selectedOrderIds.filter(id => DATA.orders.some(o => o.id === id && o.status === '접수'));
-      dispatchPendingSelectedId = dispatchPendingSelectedIds[0] || null;
-      gotoPage('dispatch', 'dispatch-assign');
+      bulkSelectedOrderIds = [...dispatchableSelectedIds];
+      bulkOrderAssignments = {};
+      gotoPage('dispatch', 'dispatch-manage');
     });
     root.querySelectorAll('.order-list-chk').forEach(chk => {
       chk.onchange = (e) => {
@@ -5869,8 +5906,7 @@
     if (isMapPage()) showLiveMap(currentPage);
     else if (currentPage === 'customer-loc') initCustomerLocMap(document.getElementById('mainContent'));
     else if (currentPage === 'order-intake') bindPlaceSearch(document.getElementById('mainContent'));
-    else if (currentPage === 'dispatch-assign') renderPage();
-    else if (currentPage === 'bulk-dispatch') renderPage();
+    else if (currentPage === 'dispatch-manage') renderPage();
     else initMap();
   }
 

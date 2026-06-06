@@ -2157,6 +2157,25 @@
     body.page-compact .stepper { margin-bottom: 10px; padding: 8px; }
     body.page-compact .link-cards { gap: 10px; margin-bottom: 10px; }
 
+    body.dispatch-viewport {
+      height: 100vh;
+      overflow: hidden;
+    }
+    body.dispatch-viewport #app.app-shell {
+      height: 100vh;
+      min-height: 0;
+      overflow: hidden;
+    }
+    body.dispatch-viewport .content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    body.dispatch-viewport .page.active {
+      min-height: 0;
+      overflow: hidden;
+    }
+
     .page-viewport-inner {
       flex: 1;
       min-height: 0;
@@ -2333,6 +2352,201 @@
       }
       .dispatch-result-card > .card-bd {
         overflow: visible;
+      }
+    }
+
+    .dispatch-zone-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr);
+      grid-template-rows: minmax(0, 3fr) minmax(190px, 2fr);
+      grid-template-areas:
+        "orders resources"
+        "results results";
+      gap: 10px;
+      align-items: stretch;
+      overflow: hidden;
+    }
+    .dispatch-zone-layout .dispatch-orders-pane {
+      grid-area: orders;
+      min-width: 0;
+    }
+    .dispatch-zone-layout .dispatch-resource-pane {
+      grid-area: resources;
+      min-width: 0;
+    }
+    .dispatch-zone-layout .dispatch-result-pane {
+      grid-area: results;
+      min-width: 0;
+    }
+    .dispatch-zone-layout .dispatch-orders-pane,
+    .dispatch-zone-layout .dispatch-resource-pane,
+    .dispatch-zone-layout .dispatch-result-pane {
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .dispatch-zone-layout .card {
+      margin-bottom: 0;
+    }
+    .dispatch-zone-layout .dispatch-orders-pane > .card,
+    .dispatch-zone-layout .dispatch-resource-pane > .card:first-child {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .dispatch-zone-layout .dispatch-orders-pane .card-bd,
+    .dispatch-zone-layout .dispatch-resource-pane .card-bd {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .dispatch-zone-layout .dispatch-orders-pane .table-scroll {
+      max-height: none;
+      min-height: 0;
+      flex: 1;
+    }
+    .dispatch-zone-layout .dispatch-resource-pane .bulk-driver-list,
+    .dispatch-zone-layout .dispatch-resource-pane .driver-list {
+      max-height: none;
+      min-height: 90px;
+      flex: 1;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .dispatch-zone-layout .bulk-driver-panel {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .dispatch-zone-layout .bulk-driver-panel-hd,
+    .dispatch-zone-layout .bulk-driver-card-hd,
+    .dispatch-zone-layout .bulk-driver-pick,
+    .dispatch-zone-layout .bulk-setup-footer,
+    .dispatch-zone-layout .bulk-assign-bar,
+    .dispatch-zone-layout .bulk-setup-exec {
+      display: flex;
+      align-items: center;
+    }
+    .dispatch-zone-layout .bulk-driver-panel-hd,
+    .dispatch-zone-layout .bulk-driver-card-hd,
+    .dispatch-zone-layout .bulk-setup-footer,
+    .dispatch-zone-layout .bulk-setup-exec {
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .dispatch-zone-layout .bulk-driver-search {
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .dispatch-zone-layout .bulk-driver-card {
+      padding: 9px 10px;
+      border: 1px solid var(--dark-border);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      cursor: pointer;
+    }
+    .dispatch-zone-layout .bulk-driver-card.picked {
+      border-color: rgba(198,241,53,.45);
+      background: rgba(198,241,53,.08);
+    }
+    .dispatch-zone-layout .bulk-driver-pick {
+      gap: 8px;
+      min-width: 0;
+    }
+    .dispatch-zone-layout .bulk-driver-pick-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .dispatch-zone-layout .bulk-driver-vehicle,
+    .dispatch-zone-layout .bulk-driver-empty {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .dispatch-zone-layout .bulk-driver-assigned {
+      margin-top: 6px;
+    }
+    .dispatch-zone-layout .bulk-setup-footer {
+      align-items: stretch;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--dark-border);
+    }
+    .dispatch-zone-layout .bulk-assign-bar {
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .dispatch-zone-layout .bulk-assign-bar--dim {
+      opacity: .65;
+    }
+    .dispatch-zone-layout .bulk-setup-exec {
+      flex-wrap: wrap;
+    }
+    .dispatch-zone-layout .bulk-pre-kpi {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .dispatch-zone-layout .dispatch-result-card {
+      min-height: 0;
+      height: 100%;
+    }
+    .dispatch-zone-layout .dispatch-result-card > .card-bd {
+      overflow-y: auto;
+    }
+    .dispatch-zone-layout .dispatch-result-pane .split,
+    .manual-route-result {
+      display: grid;
+      grid-template-columns: minmax(280px, 2fr) minmax(320px, 3fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+    .manual-route-result + .empty-hint {
+      margin-top: 12px;
+    }
+    .dispatch-zone-layout .map-tall {
+      min-height: 150px;
+      height: 100%;
+    }
+    .dispatch-list-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--dark-border);
+    }
+    .dispatch-list-tools .search {
+      flex: 1;
+      min-width: 0;
+    }
+    .dispatch-inline-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    @media (max-width: 1100px) {
+      .dispatch-zone-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        grid-template-areas:
+          "orders"
+          "resources"
+          "results";
+        overflow-y: auto;
+      }
+      .dispatch-zone-layout .dispatch-result-pane .split,
+      .manual-route-result {
+        grid-template-columns: 1fr;
       }
     }
 
