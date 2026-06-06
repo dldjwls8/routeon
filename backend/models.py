@@ -107,6 +107,7 @@ class User(Base):
     name            = Column(String(50))
     email           = Column(String(255))
     phone           = Column(String(20))
+    profile_image   = Column(String(512))
     license_number  = Column(String(50))
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     vehicle_id      = Column(Integer, ForeignKey("vehicles.id"), nullable=True)

@@ -79,6 +79,9 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(50);"
         ))
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image VARCHAR(512);"
+        ))
 
         # organizations.auto_approve_drivers 컬럼 추가
         await conn.execute(text(

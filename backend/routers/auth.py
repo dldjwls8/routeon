@@ -1,8 +1,10 @@
 import uuid as uuid_lib
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, update, delete
 from pydantic import BaseModel
@@ -11,7 +13,7 @@ from database import get_db
 from models import (
     User, Organization, Delivery, Trip, Vehicle, Location,
     Conversation, Message,
-    AccountStatus, OrgStatus, UserRole,
+    AccountStatus, OrgStatus, TripStatus, UserRole,
 )
 from auth import (
     hash_password, verify_password, create_token,
@@ -21,6 +23,8 @@ from core.utils import normalize_phone
 from services.entity_events import changed_fields, record_entity_event
 
 ADMIN_PERMISSION_KEYS = {"dashboard", "control", "dispatch", "customers", "schedule", "basic"}
+PROFILE_DIR = Path("/app/uploads/profiles")
+PROFILE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 router = APIRouter()
 
@@ -291,6 +295,7 @@ async def me(
         "name":     current_user.name,
         "role":     current_user.role,
         "phone":    current_user.phone,
+        "profile_image": current_user.profile_image,
         "org_code": org_code,
         "is_org_owner": current_user.is_org_owner,
         "permissions": current_user.permissions or {},
@@ -303,6 +308,27 @@ class UpdateMeRequest(BaseModel):
     phone:            Optional[str] = None
     current_password: Optional[str] = None
     new_password:     Optional[str] = None
+
+
+class DeleteMeRequest(BaseModel):
+    current_password: str
+
+
+async def _delete_user_relations(db: AsyncSession, user: User) -> None:
+    uid = user.id
+    await db.execute(delete(Message).where(Message.sender_id == uid))
+    conv_ids = (await db.execute(
+        select(Conversation.id).where(or_(Conversation.driver_id == uid, Conversation.admin_id == uid))
+    )).scalars().all()
+    if conv_ids:
+        await db.execute(delete(Message).where(Message.conversation_id.in_(conv_ids)))
+        await db.execute(delete(Conversation).where(Conversation.id.in_(conv_ids)))
+    trip_ids = (await db.execute(select(Trip.id).where(Trip.driver_id == uid))).scalars().all()
+    await db.execute(update(Delivery).where(Delivery.assigned_to == uid).values(assigned_to=None))
+    if trip_ids:
+        await db.execute(update(Delivery).where(Delivery.trip_id.in_(trip_ids)).values(trip_id=None))
+        await db.execute(delete(Trip).where(Trip.id.in_(trip_ids)))
+    await db.execute(delete(Location).where(Location.user_id == uid))
 
 
 @router.patch("/auth/me")
@@ -356,7 +382,79 @@ async def update_me(
         "username": current_user.username,
         "role":     current_user.role,
         "phone":    current_user.phone,
+        "profile_image": current_user.profile_image,
     }
+
+
+@router.post("/auth/me/profile-image")
+async def upload_profile_image(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in PROFILE_EXTENSIONS:
+        raise HTTPException(400, "JPG, PNG, WEBP 이미지만 업로드할 수 있습니다.")
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(400, "지원하지 않는 이미지 형식입니다.")
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "빈 파일은 업로드할 수 없습니다.")
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "프로필 이미지는 5MB 이하여야 합니다.")
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    old_path = current_user.profile_image
+    filename = f"{current_user.id.hex}{suffix}"
+    target = PROFILE_DIR / filename
+    target.write_bytes(content)
+    current_user.profile_image = f"/uploads/profiles/{filename}"
+    if old_path and old_path != current_user.profile_image:
+        old_file = Path("/app") / old_path.lstrip("/")
+        if old_file.is_file():
+            old_file.unlink()
+    await db.commit()
+    return {"profile_image": current_user.profile_image}
+
+
+@router.delete("/auth/me/profile-image", status_code=204)
+async def delete_profile_image(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.profile_image:
+        target = Path("/app") / current_user.profile_image.lstrip("/")
+        if target.is_file():
+            target.unlink()
+    current_user.profile_image = None
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.delete("/auth/me", status_code=204)
+async def delete_me(
+    req: DeleteMeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.is_org_owner:
+        raise HTTPException(400, "최상위 기업관리자는 담당자에게 권한을 이전한 뒤 탈퇴할 수 있습니다.")
+    if not verify_password(req.current_password, current_user.password_hash):
+        raise HTTPException(401, "현재 비밀번호가 올바르지 않습니다.")
+    if current_user.role == UserRole.driver:
+        active_trip = (await db.execute(select(Trip.id).where(
+            Trip.driver_id == current_user.id,
+            Trip.status.in_((TripStatus.scheduled, TripStatus.in_progress)),
+        ).limit(1))).scalar_one_or_none()
+        if active_trip:
+            raise HTTPException(409, "대기 또는 운행 중인 배차가 있어 탈퇴할 수 없습니다.")
+    await _delete_user_relations(db, current_user)
+    if current_user.profile_image:
+        target = Path("/app") / current_user.profile_image.lstrip("/")
+        if target.is_file():
+            target.unlink()
+    await db.delete(current_user)
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/users")
@@ -424,6 +522,12 @@ async def update_user(
     user = _r.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
+    active_trip = None
+    if user.role == UserRole.driver:
+        active_trip = (await db.execute(select(Trip.id).where(
+            Trip.driver_id == user.id,
+            Trip.status == TripStatus.in_progress,
+        ).limit(1))).scalar_one_or_none()
     before = {
         "name": user.name,
         "phone": user.phone,
@@ -448,10 +552,21 @@ async def update_user(
     if req.phone is not None:
         user.phone = normalize_phone(req.phone)
     if req.driver_status is not None:
+        if user.role != UserRole.driver:
+            raise HTTPException(400, "기사 계정만 운행 상태를 변경할 수 있습니다.")
+        if user.driver_status == "운행중" or active_trip:
+            raise HTTPException(409, "운행 중인 기사의 상태는 수동으로 변경할 수 없습니다.")
+        if req.driver_status not in {"운행가능", "휴무"}:
+            raise HTTPException(400, "기사 상태는 운행가능 또는 휴무로만 변경할 수 있습니다.")
         user.driver_status = req.driver_status
     if 'vehicle_id' in req.model_fields_set:
+        if active_trip:
+            raise HTTPException(409, "운행 중인 기사의 배정 차량은 변경할 수 없습니다.")
         if req.vehicle_id is not None:
-            _vc = await db.execute(select(Vehicle).where(Vehicle.id == req.vehicle_id))
+            _vc = await db.execute(select(Vehicle).where(
+                Vehicle.id == req.vehicle_id,
+                Vehicle.organization_id == current_user.organization_id,
+            ))
             if not _vc.scalar_one_or_none():
                 raise HTTPException(404, "차량을 찾을 수 없습니다.")
         # 기존 동일 vehicle_id 보유 기사 해제
@@ -500,7 +615,10 @@ async def delete_user(
 ):
     """관리자: 기사 계정 삭제 (연관 데이터 일괄 정리 후 삭제)"""
     import uuid as uuid_lib
-    _r = await db.execute(select(User).where(User.id == uuid_lib.UUID(user_id)))
+    _r = await db.execute(select(User).where(
+        User.id == uuid_lib.UUID(user_id),
+        User.organization_id == current_user.organization_id,
+    ))
     user = _r.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
@@ -510,8 +628,14 @@ async def delete_user(
         raise HTTPException(400, "최상위 관리자 계정은 삭제할 수 없습니다.")
     if user.role == UserRole.admin and not current_user.is_org_owner:
         raise HTTPException(403, "최상위 관리자만 담당자를 삭제할 수 있습니다.")
+    if user.role == UserRole.driver:
+        active_trip = (await db.execute(select(Trip.id).where(
+            Trip.driver_id == user.id,
+            Trip.status == TripStatus.in_progress,
+        ).limit(1))).scalar_one_or_none()
+        if active_trip:
+            raise HTTPException(409, "운행 중인 기사는 삭제할 수 없습니다.")
 
-    uid = user.id
     record_entity_event(
         db,
         organization_id=current_user.organization_id,
@@ -522,23 +646,6 @@ async def delete_user(
         summary=f"{'담당자' if user.role == UserRole.admin else '기사'} '{user.name or user.username}' 삭제",
     )
 
-    # 1. 메시지 삭제 (sender_id = uid)
-    await db.execute(delete(Message).where(Message.sender_id == uid))
-    # 2. 대화방에 속한 나머지 메시지 삭제 후 대화방 삭제
-    conv_ids = (await db.execute(
-        select(Conversation.id).where(
-            or_(Conversation.driver_id == uid, Conversation.admin_id == uid)
-        )
-    )).scalars().all()
-    if conv_ids:
-        await db.execute(delete(Message).where(Message.conversation_id.in_(conv_ids)))
-        await db.execute(delete(Conversation).where(Conversation.id.in_(conv_ids)))
-    # 3. 배송 담당자 해제 (assigned_to nullable)
-    await db.execute(update(Delivery).where(Delivery.assigned_to == uid).values(assigned_to=None))
-    # 4. 운행 기록 삭제
-    await db.execute(delete(Trip).where(Trip.driver_id == uid))
-    # 5. GPS 로그 삭제
-    await db.execute(delete(Location).where(Location.user_id == uid))
-    # 6. 유저 삭제
+    await _delete_user_relations(db, user)
     await db.delete(user)
     await db.commit()

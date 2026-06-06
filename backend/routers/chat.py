@@ -56,6 +56,7 @@ def _conversation_schema(
             "username": getattr(partner, "username", None),
             "name":     getattr(partner, "name", None),
             "role":     partner_role.value,
+            "profile_image": getattr(partner, "profile_image", None),
         },
         "unread_count": unread_count,
         "last_message": _message_schema(last_message) if last_message else None,
@@ -267,7 +268,13 @@ async def list_chat_partners(
     else:
         raise HTTPException(403, "채팅은 관리자와 기사만 사용할 수 있습니다.")
     return [
-        {"id": str(user.id), "username": user.username, "name": user.name, "role": user.role.value}
+        {
+            "id": str(user.id),
+            "username": user.username,
+            "name": user.name,
+            "role": user.role.value,
+            "profile_image": user.profile_image,
+        }
         for user in users
     ]
 

@@ -9,8 +9,8 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import (
-    User, Vehicle, Preset, RestStop,
-    RestStopType, UserRole,
+    User, Vehicle, Trip, Preset, RestStop,
+    RestStopType, TripStatus, UserRole,
 )
 from auth import require_admin
 from services.entity_events import changed_fields, record_entity_event
@@ -75,6 +75,14 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
     v = _r.scalar_one_or_none()
     if not v:
         raise HTTPException(404, "차량을 찾을 수 없습니다.")
+    active_trip = (await db.execute(select(Trip.id).where(
+        Trip.vehicle_id == vehicle_id,
+        Trip.status == TripStatus.in_progress,
+    ).limit(1))).scalar_one_or_none()
+    if active_trip and req.model_fields_set.intersection(
+        {"vehicle_type", "weight_kg", "height_m", "status", "driver_id"}
+    ):
+        raise HTTPException(409, "운행 중인 차량 정보는 변경할 수 없습니다.")
     old_driver_id = next(iter((await db.execute(
         select(User.id).where(
             User.vehicle_id == vehicle_id,
@@ -95,6 +103,10 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
     if req.height_m is not None:
         v.height_m = req.height_m
     if req.status is not None:
+        if v.status == "운행중":
+            raise HTTPException(409, "운행 중인 차량의 상태는 수동으로 변경할 수 없습니다.")
+        if req.status not in {"가용", "정비"}:
+            raise HTTPException(400, "차량 상태는 가용 또는 정비로만 변경할 수 있습니다.")
         v.status = req.status
     if 'driver_id' in req.model_fields_set:
         # 기존 연결 기사의 vehicle_id 해제
@@ -154,6 +166,12 @@ async def delete_vehicle(vehicle_id: int, db: AsyncSession = Depends(get_db),
     v = _r.scalar_one_or_none()
     if not v:
         raise HTTPException(404, "차량을 찾을 수 없습니다.")
+    active_trip = (await db.execute(select(Trip.id).where(
+        Trip.vehicle_id == vehicle_id,
+        Trip.status == TripStatus.in_progress,
+    ).limit(1))).scalar_one_or_none()
+    if active_trip:
+        raise HTTPException(409, "운행 중인 차량은 비활성화할 수 없습니다.")
     v.is_active = False
     await db.commit()
 

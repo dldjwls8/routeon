@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-06 (v1.0.99 기준, 관리자 자동승인·기업 내 채팅 확장)
+> 최종 검토: 2026-06-06 (v1.0.100 기준, 프로필 이미지·운행 상태 변경 방어)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.99는 `organizations.auto_approve_admins`를 추가한다. 기존 v1.0.98의 `users.account_status` 분리와 레거시 `role=pending` 보정은 그대로 유지한다.
+> v1.0.100은 `users.profile_image`를 추가한다. 기존 `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 
@@ -69,10 +69,11 @@
 | `role` | userrole | NOT NULL DEFAULT 'driver' | `admin` / `driver` |
 | `email` | VARCHAR(255) | | 승인/반려 이메일 알림용 |
 | `phone` | VARCHAR(20) | | 연락처 |
+| `profile_image` | VARCHAR(512) | | 프로필 이미지 정적 제공 경로. 이미지 바이너리는 DB에 저장하지 않음 |
 | `license_number` | VARCHAR(50) | | 운전면허번호 |
 | `organization_id` | INTEGER | FK → organizations.id | 소속 기업 |
 | `vehicle_id` | INTEGER | FK → vehicles.id NULLABLE | 배정 차량 ID (기사 상세에서 수동 배정) |
-| `driver_status` | VARCHAR(20) | NULLABLE | 기사 운행 상태 — `운행가능` / `운행중` / `휴무` 등 |
+| `driver_status` | VARCHAR(20) | NULLABLE | 기사 운행 상태. 관리자 수동 변경은 `운행가능` / `휴무`만 허용하고 `운행중`은 Trip 상태에서 관리 |
 | `is_org_owner` | BOOLEAN | NOT NULL DEFAULT FALSE | 기업 최상위 관리자 여부. 조직별 최초 `admin`을 자동 보정 |
 | `permissions` | JSONB | NOT NULL DEFAULT `{}` | 일반 관리자 메인 화면 접근 권한. 키: `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` |
 | `account_status` | accountstatus | NOT NULL DEFAULT 'approved' | 가입 승인 상태. 역할과 독립적으로 `pending` / `approved` / `rejected` 관리 |
@@ -87,6 +88,9 @@
 - `account_status=pending/rejected` 계정은 로그인과 인증된 API 이용이 차단된다.
 - `permissions`의 빈 JSON은 기존 계정 호환을 위해 프론트에서 전체 허용으로 해석하며, 명시적인 `false` 키만 접근을 차단한다.
 - 최상위 관리자만 다른 일반 관리자의 `permissions`를 수정하거나 계정을 삭제할 수 있고, 최상위 관리자 계정은 삭제할 수 없다.
+- 진행 중 Trip이 있는 기사는 상태·배정 차량 변경과 삭제가 거부된다. 본인 탈퇴는 `scheduled` 또는 `in_progress` Trip이 없어야 한다.
+- 일반 계정은 현재 비밀번호 확인 후 탈퇴할 수 있다. 최상위 기업관리자는 먼저 권한을 이전해야 하며 직접 탈퇴할 수 없다.
+- `profile_image`는 `/auth/me/profile-image` 업로드·삭제 API로 관리하고 채팅 파트너 응답에 포함된다.
 
 ---
 
@@ -102,12 +106,14 @@
 | `weight_kg` | FLOAT | NOT NULL | 총중량 (kg) |
 | `length_cm` | FLOAT | | 차량 길이 (cm) |
 | `width_cm` | FLOAT | | 차량 폭 (cm) |
-| `status` | VARCHAR(20) | NOT NULL DEFAULT '가용' | 차량 운행 상태 — `가용` / `운행중` / `정비` |
+| `status` | VARCHAR(20) | NOT NULL DEFAULT '가용' | 차량 운행 상태. 관리자 수동 변경은 `가용` / `정비`만 허용하고 `운행중`은 Trip 상태에서 관리 |
 | `last_lat` | FLOAT | | 차량 마지막 위치 위도. 진행 중 운행 차량만 기사 GPS 수신 시 갱신 |
 | `last_lon` | FLOAT | | 차량 마지막 위치 경도 |
 | `last_gps_at` | DATETIME | | 차량 마지막 위치 확정/갱신 시각 |
 | `is_active` | BOOLEAN | NOT NULL DEFAULT TRUE | |
 | `created_at` | DATETIME | NOT NULL | |
+
+진행 중 Trip이 연결된 차량은 제원·상태·배정 기사 변경과 비활성화를 거부한다.
 
 ---
 
@@ -493,7 +499,7 @@ v1.0.93 기준 템플릿은 `상차지1~3/상차화물/상차규격`, `하차지
 
 ### 고객관리 주소 자동완성과 DB
 `고객관리 > 고객 관리`의 주소 자동완성은 선택 주소 문자열을 `customers.address`, 좌표를 `customers.lat`/`customers.lon`에 저장한다.
-`고객관리 > 고객 위치` 지도는 오더 하차지 좌표가 아니라 고객 마스터의 `lat`/`lon`을 기준으로 마커를 표시한다.
+고객 상세의 `위치` 탭은 오더 하차지 좌표가 아니라 고객 마스터의 `lat`/`lon`을 기준으로 마커를 표시한다. 별도 `고객 위치` 하위 페이지는 사용하지 않는다.
 고객 상세 수정은 우측 패널의 명시적 편집 모드에서만 가능하며 저장 시 `entity_events(entity_type='customer')`에도 변경 전후 값이 기록된다.
 
 ### users ID 타입

@@ -4,10 +4,12 @@ RouteOn Backend — FastAPI
 """
 
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from database import init_db
 from routers import misc, vehicles, trips, optimize, dispatch, organizations, chat, deliveries, location, stats, customers, entity_events
@@ -59,3 +61,6 @@ app.include_router(location.router)
 app.include_router(stats.router)
 app.include_router(customers.router)
 app.include_router(entity_events.router)
+
+os.makedirs("/app/uploads/profiles", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="/app/uploads"), name="uploads")

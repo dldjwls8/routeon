@@ -472,7 +472,6 @@
         DATA.scheduleEvents = [];
         DATA.ganttRows = [];
         DATA.milestones = [];
-        const _today = new Date().toISOString().split('T')[0];
         const _GANTT_RANGE_MIN = (21 - 6) * 60; // 900분 (06:00–21:00)
         const _tripColor = { in_progress: '#3b82f6', completed: '#22c55e', cancelled: '#ef4444', scheduled: '#f59e0b' };
         const _tripLabel = { in_progress: '운행중', completed: '완료', cancelled: '취소', scheduled: '배차' };
@@ -488,14 +487,14 @@
             });
           }
           const tripDate = (t.started_at || t.created_at || '').split('T')[0];
-          if (tripDate === _today || t.status === 'in_progress') {
+          if (tripDate) {
             let startMin = 0;
             if (t.started_at) {
               const dt = new Date(t.started_at);
               startMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
-            } else if (t.departure_time && t.departure_time.includes(':')) {
-              const [hh, mm] = t.departure_time.split(':');
-              startMin = parseInt(hh) * 60 + parseInt(mm || 0) - 6 * 60;
+            } else if (t.departure_time) {
+              const dt = new Date(t.departure_time);
+              if (!Number.isNaN(dt.getTime())) startMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
             }
             let endMin = startMin + 120;
             if (t.completed_at) {
@@ -508,6 +507,7 @@
             startMin = Math.max(0, Math.min(startMin, _GANTT_RANGE_MIN - 30));
             endMin = Math.max(startMin + 30, Math.min(endMin, _GANTT_RANGE_MIN));
             DATA.ganttRows.push({
+              date: tripDate,
               label: d?.name || '—', sub: v?.plate || '—',
               orderId: t.id.slice(0, 8),
               startPct: (startMin / _GANTT_RANGE_MIN) * 100,
@@ -745,7 +745,6 @@
     ]},
     { id: 'customers', label: '고객관리', pages: [
       { id: 'customer-list', label: '고객 관리' },
-      { id: 'customer-loc', label: '고객 위치' },
     ]},
     { id: 'schedule', label: '일정·통계', pages: [
       { id: 'schedule-calendar', label: '캘린더' },
@@ -780,6 +779,11 @@
   let vehiclePage = 1;
   let customerPage = 1;
   let driverPage = 1;
+  let driverSearch = '';
+  let vehicleSearch = '';
+  let customerSearch = '';
+  let orderSearch = '';
+  let ganttDate = new Date().toISOString().slice(0, 10);
   let statsPeriod = '주';
   let calendarYear  = new Date().getFullYear();
   let calendarMonth = new Date().getMonth() + 1;
@@ -857,6 +861,7 @@
     if (requestedPage === 'bulk-dispatch' || requestedPage === 'dispatch-assign') {
       requestedPage = 'dispatch-manage';
     }
+    if (requestedPage === 'customer-loc') requestedPage = 'customer-list';
     if (requestedMain) {
       const group = NAV.find(g => g.id === requestedMain);
       if (group) {
@@ -1644,14 +1649,40 @@
     return `
       <div class="card inline-detail" id="inlineDetail">
         <div class="card-hd inline-detail-hd">
-          <div>
-            <button type="button" class="btn btn-sm" id="inlineDetailBack">← 목록으로</button>
-            <h2>${title}</h2>
-          </div>
-          <button type="button" class="btn btn-primary btn-sm" id="inlineDetailSave">${saveLabel}</button>
+          <h2>${title}</h2>
+          <button type="button" class="detail-close-btn" id="inlineDetailBack" aria-label="상세 닫기" title="닫기">×</button>
         </div>
         <div class="card-bd inline-detail-bd">${bodyHtml}</div>
+        <div class="inline-detail-footer">
+          <span></span>
+          <button type="button" class="btn btn-primary btn-sm" id="inlineDetailSave">${saveLabel}</button>
+        </div>
       </div>`;
+  }
+
+  function bindImeSearch(input, onValue, rerender) {
+    if (!input) return;
+    const inputId = input.id;
+    const renderAndRestore = () => {
+      rerender();
+      const next = inputId ? document.getElementById(inputId) : null;
+      if (next) {
+        next.focus();
+        const end = next.value.length;
+        next.setSelectionRange?.(end, end);
+      }
+    };
+    let composing = false;
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionend', (event) => {
+      composing = false;
+      onValue(event.target.value);
+      renderAndRestore();
+    });
+    input.addEventListener('input', (event) => {
+      onValue(event.target.value);
+      if (!composing && !event.isComposing) renderAndRestore();
+    });
   }
 
   function auditHistoryHtml(events) {
@@ -1694,6 +1725,7 @@
       </div>
       <div class="tabs detail-tabs">
         <button type="button" class="tab ${startTab === 'info' ? 'active' : ''}" data-tab="info">기본</button>
+        <button type="button" class="tab ${startTab === 'location' ? 'active' : ''}" data-tab="location">위치</button>
         <button type="button" class="tab ${startTab === 'history' ? 'active' : ''}" data-tab="history">배송 이력</button>
         <button type="button" class="tab ${startTab === 'audit' ? 'active' : ''}" data-tab="audit">수정 기록</button>
       </div>
@@ -1703,6 +1735,10 @@
           <label>연락처</label><input id="custPhone" value="${c.phone}" ${customerEditMode ? '' : 'disabled'}>
           <label>주소</label><div class="place-search-wrap"><input class="place-search" id="custAddress" value="${c.address}" data-lat="${c.lat ?? ''}" data-lon="${c.lon ?? ''}" ${customerEditMode ? '' : 'disabled'}></div>
         </div>
+      </div>
+      <div class="tab-panel ${startTab === 'location' ? 'active' : ''}" data-panel="location">
+        <p class="text-muted-hint" style="margin-bottom:10px">${escapeHtml(c.address || '등록된 주소가 없습니다.')}</p>
+        <div id="customerDetailMap" style="height:260px;border-radius:6px;overflow:hidden;background:var(--t-deep)"></div>
       </div>
       <div class="tab-panel ${startTab === 'history' ? 'active' : ''}" data-panel="history">${hist}</div>
       <div class="tab-panel ${startTab === 'audit' ? 'active' : ''}" data-panel="audit">${c._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(c.auditEvents)}</div>`;
@@ -1741,7 +1777,40 @@
       await loadEntityEvents(c, 'customer', c.id);
     };
     bindDetailTabs(card);
+    card.querySelector('[data-tab="location"]')?.addEventListener('click', () => {
+      customerDetailTab = 'location';
+      setTimeout(() => initCustomerDetailMap(root, c), 0);
+    });
     if (customerEditMode) bindPlaceSearch(card);
+    if (customerDetailTab === 'location') setTimeout(() => initCustomerDetailMap(root, c), 0);
+    const danger = document.createElement('div');
+    danger.className = 'detail-danger-zone';
+    danger.innerHTML = '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteCustomerBtn">고객 삭제</button>';
+    card.querySelector('.inline-detail-bd')?.appendChild(danger);
+    $('#deleteCustomerBtn', root).onclick = async () => {
+      if (!confirm(`고객 «${c.name}»을 삭제하시겠습니까?`)) return;
+      const res = await apiFetch(`/customers/${c.id}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        const error = await res.json().catch(() => ({}));
+        toast(error.detail || '고객 삭제 실패', 'error');
+        return;
+      }
+      selectedCustomerId = null;
+      toast('고객이 삭제되었습니다');
+      await loadRealData();
+    };
+  }
+
+  function initCustomerDetailMap(root, customer) {
+    const canvas = $('#customerDetailMap', root);
+    if (!canvas || !window.kakao?.maps) return;
+    if (customer.lat == null || customer.lon == null) {
+      canvas.innerHTML = '<p class="empty-hint" style="padding:24px">주소 자동완성으로 좌표를 먼저 등록하세요.</p>';
+      return;
+    }
+    const position = new kakao.maps.LatLng(Number(customer.lat), Number(customer.lon));
+    const detailMap = new kakao.maps.Map(canvas, { center: position, level: 5 });
+    new kakao.maps.Marker({ map: detailMap, position, title: customer.name });
   }
 
   function selectCustomer(id, opts = {}) {
@@ -1754,6 +1823,7 @@
   }
 
   function driverDetailBodyHtml(d) {
+    const locked = d.status === '운행중' || driverHasActiveTrip(d.id);
     return `
       <div class="tabs detail-tabs">
         <button type="button" class="tab active" data-tab="info">기본</button>
@@ -1763,9 +1833,9 @@
         <div class="form-grid" style="max-width:100%">
           <label>연락처</label><span>${d.phone}</span>
           <label>상태</label>
-          <select id="driverStatus">
+          <select id="driverStatus" ${locked ? 'disabled' : ''}>
             <option ${d.status === '운행가능' ? 'selected' : ''}>운행가능</option>
-            <option ${d.status === '운행중' ? 'selected' : ''}>운행중</option>
+            ${locked ? '<option selected>운행중</option>' : ''}
             <option ${d.status === '휴무' ? 'selected' : ''}>휴무</option>
           </select>
         </div>
@@ -1773,14 +1843,15 @@
           <div>
             <label style="font-size:12px;font-weight:600">배정 차량</label>
             <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px">기사 상태와 별도 — 배차 시 투입 차량 선택</p>
-            <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px">
+            <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px" ${locked ? 'disabled' : ''}>
               ${vehicleSelectOptions(d.vehicleId, { allowEmpty: true })}
             </select>
             <div class="vehicle-preview" id="driverVehiclePreview">${vehiclePreviewHtml(vehicleById(d.vehicleId))}</div>
           </div>
         </div>
         <div class="detail-danger-zone">
-          <button type="button" class="btn btn-sm btn-danger-outline" id="deleteDriverBtn">기사 삭제</button>
+          ${locked ? '<span class="text-muted-hint">운행 중에는 기사 정보를 변경하거나 삭제할 수 없습니다.</span>' : ''}
+          <button type="button" class="btn btn-sm btn-danger-outline" id="deleteDriverBtn" ${locked ? 'disabled' : ''}>기사 삭제</button>
         </div>
       </div>
       <div class="tab-panel" data-panel="hist">${d._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(d.auditEvents)}</div>`;
@@ -1790,6 +1861,7 @@
     const card = $('#inlineDetail', root);
     $('#inlineDetailBack', root).onclick = () => { selectedDriverId = null; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
+      if (d.status === '운행중' || driverHasActiveTrip(d.id)) { toast('운행 중인 기사는 수정할 수 없습니다.', 'error'); return; }
       const newStatus = $('#driverStatus', root).value;
       const vid = $('#driverVehicleAssign', root).value;
       const newVehicleId = vid ? Number(vid) : null;
@@ -1840,6 +1912,7 @@
     const linked = DATA.drivers.find(d => d.vehicleId === v.id);
     const tonOpts = ['1톤', '1.4톤', '2.5톤', '3.5톤', '5톤'];
     const typeOpts = ['윙바디', '탑차', '카고'];
+    const locked = v.status === '운행중' || vehicleHasActiveTrip(v.id);
     return `
       <div class="tabs detail-tabs">
         <button type="button" class="tab active" data-tab="info">기본</button>
@@ -1848,18 +1921,18 @@
       <div class="tab-panel active" data-panel="info">
       <div class="form-grid" style="max-width:100%">
         <label>톤급</label>
-        <select id="vehTonnage">${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehTonnage" ${locked ? 'disabled' : ''}>${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <label>차종</label>
-        <select id="vehType">${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehType" ${locked ? 'disabled' : ''}>${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         ${vehicleLastGpsDetailHtml(v)}
         <label>상태</label>
-        <select id="vehStatus">
+        <select id="vehStatus" ${locked ? 'disabled' : ''}>
           <option ${v.status === '가용' ? 'selected' : ''}>가용</option>
-          <option ${v.status === '운행중' ? 'selected' : ''}>운행중</option>
+          ${locked ? '<option selected>운행중</option>' : ''}
           <option ${v.status === '정비' ? 'selected' : ''}>정비</option>
         </select>
         <label>연결 기사</label>
-        <select id="vehDriver">
+        <select id="vehDriver" ${locked ? 'disabled' : ''}>
           <option value="">— 미연결 —</option>
           ${DATA.drivers.map(d => `<option value="${d.id}" ${linked && linked.id === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
         </select>
@@ -1869,7 +1942,8 @@
         ${vehiclePreviewHtml(v)}
       </div>
       <div class="detail-danger-zone">
-        <button type="button" class="btn btn-sm btn-danger-outline" id="deleteVehicleBtn">차량 비활성화</button>
+        ${locked ? '<span class="text-muted-hint">운행 중에는 차량 정보를 변경하거나 비활성화할 수 없습니다.</span>' : ''}
+        <button type="button" class="btn btn-sm btn-danger-outline" id="deleteVehicleBtn" ${locked ? 'disabled' : ''}>차량 비활성화</button>
       </div></div>
       <div class="tab-panel" data-panel="hist">${v._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(v.auditEvents)}</div>`;
   }
@@ -1877,6 +1951,7 @@
   function bindVehicleDetail(root, v) {
     $('#inlineDetailBack', root).onclick = () => { selectedVehicleId = null; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
+      if (v.status === '운행중' || vehicleHasActiveTrip(v.id)) { toast('운행 중인 차량은 수정할 수 없습니다.', 'error'); return; }
       const tonnageStr = $('#vehTonnage', root).value;
       const type = $('#vehType', root).value;
       const status = $('#vehStatus', root).value;
@@ -2067,7 +2142,7 @@
       </div>
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
-          <label>오더번호</label><span>${orderNoHtml(o)} <code class="order-raw-code">${o.id}</code></span>
+          <label>오더번호</label><span>${orderNoHtml(o, { raw: false })}</span>
           <label>화주</label><span>${o.customer}</span>
           <label>수신자</label><span>${o.recipient || '—'}</span>
           <label>화물</label><span>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</span>
@@ -2091,6 +2166,24 @@
       openOrderEditModal(o, root);
     };
     bindDetailTabs(card);
+    if (orderCanDelete(o)) {
+      const danger = document.createElement('div');
+      danger.className = 'detail-danger-zone';
+      danger.innerHTML = '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteOrderBtn">오더 삭제</button>';
+      card.querySelector('.inline-detail-bd')?.appendChild(danger);
+      $('#deleteOrderBtn', root).onclick = async () => {
+        if (!confirm(`오더 ${displayOrderNo(o)}를 삭제하시겠습니까?`)) return;
+        const res = await apiFetch(`/deliveries/${o.id}`, { method: 'DELETE' });
+        if (!res.ok && res.status !== 204) {
+          const error = await res.json().catch(() => ({}));
+          toast(error.detail || '오더 삭제 실패', 'error');
+          return;
+        }
+        selectedOrderId = null;
+        toast('오더가 삭제되었습니다');
+        await loadRealData();
+      };
+    }
     const trip = tripForOrder(o);
     if (trip) bindHandoverActions(root, trip);
   }
@@ -2139,7 +2232,7 @@
           }).join('')}
         </div>
         ${canManage ? '<p class="text-muted-hint">최상위 관리자만 일반 관리자의 접근 권한을 수정할 수 있습니다.</p>' : ''}
-        ${isSelf || s.is_org_owner ? '' : `<div style="margin-top:16px"><button type="button" class="btn btn-sm btn-danger-outline" id="deleteStaffBtn">삭제</button></div>`}
+        ${isSelf || s.is_org_owner ? '' : `<div class="detail-danger-zone"><button type="button" class="btn btn-sm btn-danger-outline" id="deleteStaffBtn">담당자 삭제</button></div>`}
       </div>
       <div class="tab-panel" data-panel="hist">${s._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(s.auditEvents)}</div>`;
   }
@@ -2297,12 +2390,14 @@
 
   function renderScheduleGantt(root) {
     const hours = ['06', '09', '12', '15', '18', '21'];
-    const todayLabel = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
-    const ganttBody = DATA.ganttRows.length === 0
-      ? '<p style="padding:24px;color:var(--text-muted);text-align:center">오늘 등록된 운행이 없습니다</p>'
+    const selectedDate = new Date(`${ganttDate}T00:00:00`);
+    const dateLabel = selectedDate.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+    const rows = DATA.ganttRows.filter(row => row.date === ganttDate);
+    const ganttBody = rows.length === 0
+      ? '<p style="padding:24px;color:var(--text-muted);text-align:center">선택한 날짜에 등록된 운행이 없습니다</p>'
       : `<div class="gantt-scroll"><div class="gantt-wrap">
           <div class="gantt-scale">${hours.map(h => `<span>${h}:00</span>`).join('')}</div>
-          ${DATA.ganttRows.map(row => `
+          ${rows.map(row => `
             <div class="gantt-row">
               <div class="gantt-label">${row.label}<code>${row.sub} · ${row.orderId}</code></div>
               <div class="gantt-track">
@@ -2312,9 +2407,25 @@
         </div></div>`;
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('schedule-gantt', { title: '간트 · 차량·기사', desc: `${todayLabel} 06–21시 타임라인` })}
+      ${pageChromeHtml('schedule-gantt', { title: '간트 · 차량·기사', desc: `${dateLabel} 06–21시 타임라인` })}
+      <div class="gantt-date-tools">
+        <button type="button" class="btn btn-sm" id="ganttPrev">이전 날</button>
+        <input type="date" id="ganttDate" value="${ganttDate}">
+        <button type="button" class="btn btn-sm" id="ganttNext">다음 날</button>
+        <button type="button" class="btn btn-sm" id="ganttToday">오늘</button>
+      </div>
       </div>
       ${ganttBody}`;
+    const moveDate = (days) => {
+      const date = new Date(`${ganttDate}T00:00:00`);
+      date.setDate(date.getDate() + days);
+      ganttDate = date.toISOString().slice(0, 10);
+      renderScheduleGantt(root);
+    };
+    $('#ganttPrev', root).onclick = () => moveDate(-1);
+    $('#ganttNext', root).onclick = () => moveDate(1);
+    $('#ganttToday', root).onclick = () => { ganttDate = new Date().toISOString().slice(0, 10); renderScheduleGantt(root); };
+    $('#ganttDate', root).onchange = (event) => { ganttDate = event.target.value; renderScheduleGantt(root); };
   }
 
   function renderScheduleMilestones(root) {
@@ -2524,12 +2635,15 @@
   }
 
   function applyPageTheme() {
-    document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport');
+    document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport', 'order-list-viewport');
     document.body.classList.add('page-compact');
     if (currentPage === 'dashboard') document.body.classList.add('theme-dashboard');
     else document.body.classList.add('theme-app');
     if (currentPage === 'dispatch-manage') {
       document.body.classList.add('dispatch-viewport');
+    }
+    if (currentPage === 'order-list') {
+      document.body.classList.add('order-list-viewport');
     }
     syncSubNavLayout();
   }
@@ -2623,6 +2737,18 @@
 
   function renderDashboard(root) {
     hideLiveMap();
+    const quickOptions = [
+      { id: 'intake', label: '오더 접수', main: 'dispatch', page: 'order-intake' },
+      { id: 'orders', label: '오더 목록', main: 'dispatch', page: 'order-list' },
+      { id: 'dispatch', label: '배차 관리', main: 'dispatch', page: 'dispatch-manage' },
+      { id: 'control', label: '운행 관제', main: 'control', page: 'control-live' },
+      { id: 'customers', label: '고객 관리', main: 'customers', page: 'customer-list' },
+      { id: 'calendar', label: '일정 캘린더', main: 'schedule', page: 'schedule-calendar' },
+    ];
+    let quickIds;
+    try { quickIds = JSON.parse(localStorage.getItem('dashboardQuickLinks') || '["intake","dispatch"]'); }
+    catch { quickIds = ['intake', 'dispatch']; }
+    const quickLinks = quickIds.map(id => quickOptions.find(item => item.id === id)).filter(Boolean);
     const orderTabs = ['전체', '접수', '배차', '운행중', '완료'];
     const filteredOrders = DATA.orders.filter(o => dashOrderTab === '전체' || o.status === dashOrderTab);
     const dashboardOrders = filteredOrders.slice(0, 5);
@@ -2677,15 +2803,9 @@
               <p style="font-size:11px;color:#6b7280;margin-top:8px">등록 ${DATA.vehicles.length}대 · 기사 ${DATA.drivers.length}명</p>
             </div>
             <div class="dash-widget">
-              <h2>바로가기</h2>
+              <div class="dash-widget-title"><h2>바로가기</h2><button type="button" class="icon-text-btn" id="customizeQuickLinks">편집</button></div>
               <div class="dash-quick-links">
-                <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="order-intake">
-                  <strong>접수 창</strong>
-                </button>
-                <button type="button" class="dash-quick-link" data-goto-main="dispatch" data-goto-page="dispatch-manage">
-                  <strong>배차 관리</strong>
-                  <span>단건·다건 오더 배차</span>
-                </button>
+                ${quickLinks.map(item => `<button type="button" class="dash-quick-link" data-goto-main="${item.main}" data-goto-page="${item.page}"><strong>${item.label}</strong></button>`).join('')}
               </div>
             </div>
           </aside>
@@ -2728,6 +2848,19 @@
     root.querySelectorAll('.dash-quick-link[data-goto-main]').forEach(btn => {
       btn.onclick = () => gotoPage(btn.dataset.gotoMain, btn.dataset.gotoPage);
     });
+    $('#customizeQuickLinks', root).onclick = () => {
+      openModal('바로가기 편집', `
+        <form id="quickLinksForm" class="quick-links-form">
+          ${quickOptions.map(item => `<label><input type="checkbox" name="quick" value="${item.id}" ${quickIds.includes(item.id) ? 'checked' : ''}> ${item.label}</label>`).join('')}
+          <p class="text-muted-hint">최대 3개까지 선택할 수 있습니다.</p>
+        </form>`, () => {
+        const selected = [...document.querySelectorAll('#quickLinksForm [name="quick"]:checked')].map(input => input.value);
+        if (!selected.length || selected.length > 3) { toast('바로가기는 1~3개를 선택하세요', 'error'); return; }
+        localStorage.setItem('dashboardQuickLinks', JSON.stringify(selected));
+        closeModal();
+        renderPage();
+      });
+    };
     root.querySelectorAll('.dash-order-tabs button').forEach(btn => {
       btn.onclick = () => {
         dashOrderTab = btn.dataset.otab;
@@ -2745,10 +2878,15 @@
 
   function renderControlLive(root) {
     const trips = Array.isArray(DATA.trips) ? DATA.trips : (DATA.statsTrips || []);
-    const vehiclesWithGps = DATA.vehicles.filter(v => v.driverId && v.start_lat != null && v.start_lon != null);
     const runningTrips = trips.filter(t => ['운행중', '진행', 'in_progress'].includes(t.status));
+    const runningDriverIds = new Set(runningTrips.map(t => String(t.driverId || t.driver_id || '')));
+    const runningVehicleIds = new Set(runningTrips.map(t => Number(t.vehicleId || t.vehicle_id || 0)));
+    const runningVehicles = DATA.vehicles.filter(v =>
+      runningVehicleIds.has(Number(v.id)) || runningDriverIds.has(String(v.driverId || ''))
+    );
+    const vehiclesWithGps = runningVehicles.filter(v => v.start_lat != null && v.start_lon != null);
     const activeTrips = trips.filter(t => !['완료', '취소', 'completed', 'cancelled'].includes(t.status));
-    const gpsRows = DATA.vehicles.map(v => {
+    const gpsRows = runningVehicles.map(v => {
       const d = DATA.drivers.find(x => x.id === v.driverId);
       const hasGps = v.start_lat != null && v.start_lon != null;
       return `
@@ -2756,8 +2894,8 @@
           <td>${v.plate || v.name || `차량 ${v.id}`}</td>
           <td>${d?.name || v.driver || '미연결'}</td>
           <td>${statusBadge(v.status || '가용')}</td>
-          <td>${hasGps ? `${Number(v.start_lat).toFixed(5)}, ${Number(v.start_lon).toFixed(5)}` : '위치 없음'}</td>
-          <td>${v.last_gps_at || (hasGps ? '등록 좌표' : '—')}</td>
+          <td data-live-coord>${hasGps ? `${Number(v.start_lat).toFixed(5)}, ${Number(v.start_lon).toFixed(5)}` : '위치 없음'}</td>
+          <td data-live-time>${v.last_gps_at || (hasGps ? '등록 좌표' : '—')}</td>
         </tr>`;
     }).join('');
     root.innerHTML = `
@@ -2772,7 +2910,6 @@
               <strong>차량 위치</strong>
               <span>${vehiclesWithGps.length}대 위치 수신 · 운행 ${runningTrips.length}건</span>
             </div>
-            <button type="button" class="btn btn-sm" id="controlRefresh">새로고침</button>
           </div>
           <div class="control-map-card" aria-label="지도"></div>
         </section>
@@ -2780,25 +2917,20 @@
           <div class="control-metric-grid">
             <div><span>활성 운행</span><strong>${activeTrips.length}</strong></div>
             <div><span>위치 수신</span><strong>${vehiclesWithGps.length}</strong></div>
-            <div><span>등록 차량</span><strong>${DATA.vehicles.length}</strong></div>
-            <div><span>등록 기사</span><strong>${DATA.drivers.length}</strong></div>
+            <div><span>운행 차량</span><strong>${runningVehicles.length}</strong></div>
+            <div><span>운행 기사</span><strong>${runningDriverIds.size}</strong></div>
           </div>
           <div class="control-table-card">
             <h2>차량별 최근 위치</h2>
             <div class="table-scroll">
               <table>
                 <thead><tr><th>차량</th><th>기사</th><th>상태</th><th>좌표</th><th>수신</th></tr></thead>
-                <tbody>${gpsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">등록 차량이 없습니다</td></tr>'}</tbody>
+                <tbody>${gpsRows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">현재 운행 중인 차량이 없습니다</td></tr>'}</tbody>
               </table>
             </div>
           </div>
         </aside>
       </div>`;
-    const refresh = root.querySelector('#controlRefresh');
-    if (refresh) refresh.onclick = (e) => {
-      e.preventDefault();
-      loadData({ preserveScroll: true });
-    };
     root.querySelectorAll('[data-control-vehicle-id]').forEach(row => {
       row.onclick = () => {
         selectedControlVehicleId = Number(row.dataset.controlVehicleId);
@@ -2817,7 +2949,7 @@
   }
 
   function renderDrivers(root) {
-    const q = root._search || '';
+    const q = driverSearch;
     const allRows = DATA.drivers.filter(d =>
       !q || (d.name || '').includes(q) || driverVehicleLabel(d).includes(q) || (d.phone || '').includes(q)
     );
@@ -2870,14 +3002,10 @@
       selected ? inlineDetailCardHtml(selected.name, driverDetailBodyHtml(selected)) : ''
     );
 
-    $('#driverSearch', root).oninput = (e) => {
+    bindImeSearch($('#driverSearch', root), (value) => {
       driverPage = 1;
-      root._search = e.target.value;
-      renderDrivers(root);
-      const search = $('#driverSearch', root);
-      search?.focus();
-      search?.setSelectionRange(root._search.length, root._search.length);
-    };
+      driverSearch = value;
+    }, () => renderPage());
 
     // pending 기사 승인
     root.querySelectorAll('.btn-approve-driver').forEach(btn => {
@@ -2911,7 +3039,7 @@
   }
 
   function renderVehicles(root) {
-    const q = (root._search || '').trim().toLowerCase();
+    const q = vehicleSearch.trim().toLowerCase();
     const allRows = DATA.vehicles.filter(v => {
       if (!q) return true;
       const hay = `${v.plate} ${v.tonnage} ${v.type} ${vehicleLastGpsLabel(v)} ${v.status} ${vehicleDriverLabel(v)}`.toLowerCase();
@@ -2924,7 +3052,7 @@
         <div class="card-hd">
           <h2>차량 목록</h2>
           <div class="toolbar">
-            <input type="search" class="search" placeholder="번호판·톤급·위치·기사 검색" id="vehicleSearch" value="${root._search || ''}">
+            <input type="search" class="search" placeholder="번호판·톤급·위치·기사 검색" id="vehicleSearch" value="${escapeHtml(vehicleSearch)}">
             <button type="button" class="btn btn-primary" id="addVehicle">+ 차량 등록</button>
           </div>
         </div>
@@ -2952,14 +3080,10 @@
       selected ? inlineDetailCardHtml(selected.plate, vehicleDetailBodyHtml(selected)) : ''
     );
 
-    $('#vehicleSearch', root).oninput = (e) => {
+    bindImeSearch($('#vehicleSearch', root), (value) => {
       vehiclePage = 1;
-      root._search = e.target.value;
-      renderVehicles(root);
-      const search = $('#vehicleSearch', root);
-      search?.focus();
-      search?.setSelectionRange(root._search.length, root._search.length);
-    };
+      vehicleSearch = value;
+    }, () => renderPage());
     $('#addVehicle', root).onclick = () => {
       openModal('차량 등록', `
         <form id="vehicleForm">
@@ -3106,6 +3230,7 @@
               <label>조직코드</label>
               <div class="org-code-control">
                 <code id="companyOrgCode">${escapeHtml(org.org_code || '—')}</code>
+                <button type="button" class="btn btn-sm" id="copyOrgCode">복사</button>
                 <button type="button" class="btn btn-sm" id="regenOrgCode" ${ownerOnly}>재발급</button>
               </div>
               <label>기사 자동승인</label>
@@ -3170,13 +3295,27 @@
       toast('조직코드가 재발급됐습니다');
       await loadEntityEvents(org, 'organization', org.id);
     });
+    $('#copyOrgCode', root)?.addEventListener('click', async () => {
+      const value = org.org_code || '';
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = value;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      toast('조직코드를 복사했습니다');
+    });
     if (org.id && !org._auditLoaded && !org._auditLoading) {
       loadEntityEvents(org, 'organization', org.id);
     }
   }
 
   function renderCustomers(root) {
-    const q = root._search || '';
+    const q = customerSearch;
     const filterChips = ['전체', '정규', '임시(당일)'];
     const allRows = DATA.customers.filter(c =>
       customerMatchesListFilter(c, customerListFilter) &&
@@ -3228,7 +3367,10 @@
         renderCustomers(root);
       };
     });
-    $('#custSearch', root).oninput = (e) => { customerPage = 1; root._search = e.target.value; renderCustomers(root); };
+    bindImeSearch($('#custSearch', root), (value) => {
+      customerPage = 1;
+      customerSearch = value;
+    }, () => renderPage());
     $('#addCust', root).onclick = () => customerModal();
     root.querySelectorAll('tbody tr[data-id]').forEach(tr => {
       tr.onclick = () => {
@@ -5912,7 +6054,14 @@
 
   function renderOrderList(root) {
     const statuses = ['전체', '접수', '배차대기', '배차', '운행중', '완료', '취소'];
-    const allRows = DATA.orders.filter(o => orderMatchesFilter(o, orderFilter));
+    const q = orderSearch.trim().toLowerCase();
+    const allRows = DATA.orders.filter(o => {
+      if (!orderMatchesFilter(o, orderFilter)) return false;
+      if (!q) return true;
+      return [
+        displayOrderNo(o), o.customer, o.pickup, o.delivery, o.cargo, o.driver, o.window,
+      ].some(value => String(value || '').toLowerCase().includes(q));
+    });
     const rows = allRows.slice((orderPage - 1) * PAGE_SIZE, orderPage * PAGE_SIZE);
     const rowIds = rows.map(o => o.id);
     selectedOrderIds = selectedOrderIds.filter(id => DATA.orders.some(o => o.id === id));
@@ -5933,7 +6082,7 @@
             <button type="button" class="btn btn-sm" id="orderSelectVisible">${allPageSelected ? '현재 페이지 해제' : '현재 페이지 선택'}</button>
             <button type="button" class="btn btn-sm" id="orderClearSelection" ${selectedOrderIds.length ? '' : 'disabled'}>선택 해제</button>
           </div>
-          <button type="button" class="btn btn-sm btn-primary" id="goOrderIntake" style="margin-left:auto">+ 접수 창</button>
+          <input type="search" class="search" id="orderSearch" value="${escapeHtml(orderSearch)}" placeholder="오더번호·화주·상하차지·화물 검색">
         </div>
         <div class="order-bulk-bar ${selectedOrderIds.length ? '' : 'is-idle'}">
           <span>선택 <strong>${selectedOrderIds.length}</strong>건</span>
@@ -5979,11 +6128,10 @@
       listCard,
       selected ? inlineDetailCardHtml(`${displayOrderNo(selected)} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), { saveLabel: '수정' }) : ''
     );
-    const goIntakeBtn = $('#goOrderIntake', root);
-    if (goIntakeBtn) goIntakeBtn.onclick = () => {
-      currentPage = 'order-intake';
-      renderPage();
-    };
+    bindImeSearch($('#orderSearch', root), (value) => {
+      orderPage = 1;
+      orderSearch = value;
+    }, () => renderPage());
     root.querySelectorAll('#orderChips .chip').forEach(chip => {
       chip.onclick = () => { orderPage = 1; orderFilter = chip.dataset.f; selectedOrderId = null; renderOrderList(root); };
     });
@@ -6157,17 +6305,25 @@
     return trips.some(t => t.driverId === driverId && t.status === '운행중');
   }
 
+  function vehicleHasActiveTrip(vehicleId) {
+    const trips = Array.isArray(DATA.statsTrips) ? DATA.statsTrips : [];
+    return trips.some(t => Number(t.vehicleId) === Number(vehicleId) && t.status === '운행중');
+  }
+
   function renderVehicleLocationMarkers() {
     if (!map) return;
     let sumLat = 0;
     let sumLon = 0;
     let count = 0;
+    const visibleDriverIds = new Set();
     DATA.vehicles.forEach(v => {
       if (!v.driverId || v.start_lat == null || v.start_lon == null) return;
+      if (_liveMapPage === 'control-live' && !driverHasActiveTrip(v.driverId)) return;
       const driver = DATA.drivers.find(d => d.id === v.driverId);
       const lat = Number(v.start_lat);
       const lon = Number(v.start_lon);
       updateDriverMarker(v.driverId, lat, lon, driver?.name || v.driver || v.plate, v.id);
+      visibleDriverIds.add(String(v.driverId));
       sumLat += lat;
       sumLon += lon;
       count += 1;
@@ -6178,6 +6334,9 @@
       marker._element?.classList.toggle('is-selected', selected);
       marker._element?.classList.toggle('is-dimmed', dimmed);
       marker.setZIndex(selected ? 20 : 3);
+    });
+    Object.entries(_driverMarkers).forEach(([driverId, marker]) => {
+      if (_liveMapPage === 'control-live' && !visibleDriverIds.has(String(driverId))) marker.setMap(null);
     });
     if (count > 0 && _liveMapCenteredPage !== _liveMapPage) {
       map.setCenter(new kakao.maps.LatLng(sumLat / count, sumLon / count));
@@ -6206,6 +6365,13 @@
               v.last_gps_label = `${Number(msg.lat).toFixed(2)}, ${Number(msg.lon).toFixed(2)}`;
               v.last_gps_at = '실시간';
               updateDriverMarker(d.id, msg.lat, msg.lon, d.name, v.id);
+              const row = document.querySelector(`[data-control-vehicle-id="${v.id}"]`);
+              if (row) {
+                const coord = row.querySelector('[data-live-coord]');
+                const time = row.querySelector('[data-live-time]');
+                if (coord) coord.textContent = `${Number(msg.lat).toFixed(5)}, ${Number(msg.lon).toFixed(5)}`;
+                if (time) time.textContent = '실시간';
+              }
             }
           }
         }
@@ -6309,7 +6475,6 @@
     $('#modalOverlay').onclick = (e) => { if (e.target === $('#modalOverlay')) closeModal(); };
     // 탑바 버튼 이벤트
     $('#messageBtn').onclick = () => { location.href = '/chat.html'; };
-    $('#settingsBtn').onclick = () => { location.href = '/settings.html'; };
     $('#notifBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('notifDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('notifDropdown'); } };
     $('#userMenuBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('userDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('userDropdown'); } };
     $('#ddSettings').onclick = () => { _closeAllDropdowns(); location.href = '/settings.html'; };
