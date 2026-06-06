@@ -352,6 +352,7 @@
     vehicles: [],
     drivers: [],
     pendingDrivers: [],
+    pendingStaff: [],
     staff: [],
     customers: [],
     locations: [],
@@ -404,7 +405,7 @@
     const scrollState = opts.preserveScroll !== false ? captureScrollState() : null;
     try {
       // 기사 목록
-      const dr = await apiFetch(`/users?role=driver`);
+      const dr = await apiFetch(`/users?role=driver&account_status=approved`);
       if (dr.ok) {
         const users = await dr.json();
         DATA.drivers = users.map(u => ({
@@ -634,7 +635,7 @@
       }
 
       // 승인 대기 기사 목록
-      const pr = await apiFetch(`/users?role=pending`);
+      const pr = await apiFetch(`/users?role=driver&account_status=pending`);
       if (pr.ok) {
         const pending = await pr.json();
         DATA.pendingDrivers = pending.map(u => ({
@@ -668,7 +669,19 @@
       }
 
       // 담당자(관리자) 목록
-      const admR = await apiFetch(`/users?role=admin`);
+      const pendingAdminR = await apiFetch(`/users?role=admin&account_status=pending`);
+      if (pendingAdminR.ok) {
+        const pendingAdmins = await pendingAdminR.json();
+        DATA.pendingStaff = pendingAdmins.map(u => ({
+          id: u.id,
+          username: u.username,
+          name: u.name || u.username,
+          phone: u.phone || '',
+          created_at: u.created_at,
+        }));
+      }
+
+      const admR = await apiFetch(`/users?role=admin&account_status=approved`);
       if (admR.ok) {
         const admins = await admR.json();
         DATA.staff = admins.map(u => ({
@@ -2998,13 +3011,37 @@
 
   function renderStaff(root) {
     const selected = selectedStaffId ? staffById(selectedStaffId) : null;
+    const pendingStaffHtml = DATA.me?.is_org_owner && DATA.pendingStaff.length ? `
+      <div class="staff-requests">
+        <div class="card-hd">
+          <h3>가입 신청 <span class="badge badge-warn">${DATA.pendingStaff.length}</span></h3>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>이름</th><th>아이디</th><th>연락처</th><th>신청일</th><th></th></tr></thead>
+            <tbody>${DATA.pendingStaff.map(s => `
+              <tr>
+                <td>${escapeHtml(s.name)}</td>
+                <td>${escapeHtml(s.username)}</td>
+                <td>${escapeHtml(s.phone || '—')}</td>
+                <td>${s.created_at ? s.created_at.split('T')[0] : '—'}</td>
+                <td class="staff-request-actions">
+                  <button type="button" class="btn btn-sm btn-primary btn-approve-staff" data-id="${s.id}" data-name="${escapeHtml(s.name)}">승인</button>
+                  <button type="button" class="btn btn-sm btn-danger-outline btn-reject-staff" data-id="${s.id}" data-name="${escapeHtml(s.name)}">반려</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : '';
     const listCard = `
       <div class="card card-fill">
         <div class="card-hd">
           <h2>담당자</h2>
-          <button type="button" class="btn btn-primary" id="addStaff" ${DATA.me?.is_org_owner ? '' : 'disabled title="최상위 관리자만 추가할 수 있습니다"'}>+ 추가</button>
+          <span class="text-muted-hint">관리자는 가입 페이지에서 조직코드로 신청합니다.</span>
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+          ${pendingStaffHtml}
           ${tableScrollWrap(`<table id="staffTable">
             <thead><tr><th>이름</th><th>아이디</th><th>연락처</th><th>가입일</th></tr></thead>
             <tbody>${DATA.staff.map(s => `
@@ -3027,43 +3064,31 @@
       tr.onclick = () => selectStaff(tr.dataset.id);
     });
     if (selected) bindStaffDetail(root, selected);
-    $('#addStaff', root).onclick = async () => {
-      openModal('담당자 추가', `
-        <form id="addStaffForm">
-          <div class="form-grid" style="max-width:100%">
-            <label>이름 *</label><input id="sfName" required placeholder="홍길동">
-            <label>아이디 *</label><input id="sfUsername" required placeholder="login_id">
-            <label>비밀번호 *</label><input id="sfPassword" type="password" required placeholder="8자 이상">
-            <label>연락처 *</label><input id="sfPhone" required placeholder="010-0000-0000">
-          </div>
-          <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-            <button type="button" class="btn" id="sfCancel">취소</button>
-            <button type="submit" class="btn btn-primary">추가</button>
-          </div>
-        </form>`);
-      document.getElementById('sfCancel').onclick = closeModal;
-      document.getElementById('addStaffForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const body = {
-          name: document.getElementById('sfName').value.trim(),
-          username: document.getElementById('sfUsername').value.trim(),
-          password: document.getElementById('sfPassword').value,
-          phone: normalizePhone(document.getElementById('sfPhone').value),
-        };
-        const res = await apiFetch(`/users/admin`, {
-          method: 'POST',
-          body: JSON.stringify(body),
-        });
-        if (res.ok || res.status === 201) {
-          toast('담당자가 추가되었습니다.');
-          closeModal();
-          await loadRealData();
-        } else {
+    root.querySelectorAll('.btn-approve-staff').forEach(button => {
+      button.onclick = async () => {
+        const res = await apiFetch(`/auth/approve/${button.dataset.id}`, { method: 'POST' });
+        if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          toast(err.detail || '추가 실패', 'error');
+          toast(err.detail || '가입 승인 실패', 'error');
+          return;
         }
+        toast(`관리자 «${button.dataset.name}» 가입 승인 완료`);
+        await loadRealData();
       };
-    };
+    });
+    root.querySelectorAll('.btn-reject-staff').forEach(button => {
+      button.onclick = async () => {
+        if (!confirm(`관리자 «${button.dataset.name}» 가입을 반려하시겠습니까?`)) return;
+        const res = await apiFetch(`/auth/reject/${button.dataset.id}`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toast(err.detail || '가입 반려 실패', 'error');
+          return;
+        }
+        toast(`관리자 «${button.dataset.name}» 가입 반려`);
+        await loadRealData();
+      };
+    });
   }
 
   function renderProfile(root) {

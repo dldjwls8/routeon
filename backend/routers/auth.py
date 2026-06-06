@@ -11,7 +11,7 @@ from database import get_db
 from models import (
     User, Organization, Delivery, Trip, Vehicle, Location,
     Conversation, Message,
-    UserRole,
+    AccountStatus, OrgStatus, UserRole,
 )
 from auth import (
     hash_password, verify_password, create_token,
@@ -30,6 +30,7 @@ class RegisterRequest(BaseModel):
     phone:    str
     org_code: str              # 기사/관리자 추가 가입 시 조직코드 입력
     name:     str
+    email: Optional[str] = None
     role: str = "driver"
 
 class LoginRequest(BaseModel):
@@ -62,17 +63,19 @@ async def check_username(
 @router.post("/auth/register", status_code=201)
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """
-    기사 또는 관리자 추가 가입.
+    기사 또는 일반 관리자 가입 신청.
     - org_code로 소속 기업 확인 후 가입
-    - role=driver  → pending (관리자 승인 필요)
-    - role=admin   → admin 즉시 (같은 기업 관리자 추가)
+    - role=driver → 기업 설정에 따라 자동 승인 또는 승인 대기
+    - role=admin  → 최상위 기업관리자 승인 전까지 항상 승인 대기
     """
-    if req.role != "driver":
-        raise HTTPException(403, "담당자 계정은 최상위 관리자가 담당자 화면에서 추가해야 합니다.")
+    if req.role not in {"driver", "admin"}:
+        raise HTTPException(400, "가입 유형은 기사 또는 관리자여야 합니다.")
     if not req.phone:
         raise HTTPException(400, "전화번호는 필수입니다.")
     if not req.org_code:
         raise HTTPException(400, "조직 코드는 필수입니다.")
+    if len(req.password) < 4:
+        raise HTTPException(400, "비밀번호는 4자 이상이어야 합니다.")
 
     # 조직코드로 기업 조회
     _o = await db.execute(
@@ -81,24 +84,32 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     org = _o.scalar_one_or_none()
     if not org:
         raise HTTPException(404, "올바르지 않은 조직 코드입니다.")
+    if org.status != OrgStatus.approved:
+        raise HTTPException(403, "승인된 기업에만 가입을 신청할 수 있습니다.")
 
     # 아이디 중복 확인
     _r = await db.execute(select(User).where(User.username == req.username))
     if _r.scalar_one_or_none():
         raise HTTPException(409, f"이미 존재하는 아이디입니다: {req.username}")
 
-    if org.auto_approve_drivers:
-        actual_role = UserRole.driver
-    else:
-        actual_role = UserRole.pending
+    actual_role = UserRole.admin if req.role == "admin" else UserRole.driver
+    account_status = (
+        AccountStatus.approved
+        if req.role == "driver" and org.auto_approve_drivers
+        else AccountStatus.pending
+    )
 
     user = User(
         username        = req.username,
         password_hash   = hash_password(req.password),
         role            = actual_role,
+        account_status  = account_status,
         name            = req.name,
+        email           = req.email.strip() if req.email else None,
         phone           = normalize_phone(req.phone),
         organization_id = org.id,
+        is_org_owner    = False,
+        permissions     = {},
     )
     db.add(user)
     await db.commit()
@@ -109,73 +120,19 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         "username":   user.username,
         "name":       user.name,
         "role":       user.role,
+        "account_status": user.account_status,
         "org_name":   org.name,
         "created_at": user.created_at,
     }
 
 
-class AdminCreateRequest(BaseModel):
-    username: str
-    password: str
-    phone: str
-    name: str
-
-
-@router.post("/users/admin", status_code=201)
-async def create_admin(
-    req: AdminCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
-    if not current_user.is_org_owner:
-        raise HTTPException(403, "최상위 관리자만 담당자를 추가할 수 있습니다.")
-    if len(req.password) < 4:
-        raise HTTPException(400, "비밀번호는 4자 이상이어야 합니다.")
-    exists = await db.execute(select(User).where(User.username == req.username.strip()))
-    if exists.scalar_one_or_none():
-        raise HTTPException(409, f"이미 존재하는 아이디입니다: {req.username}")
-    user = User(
-        username=req.username.strip(),
-        password_hash=hash_password(req.password),
-        role=UserRole.admin,
-        name=req.name.strip(),
-        phone=normalize_phone(req.phone),
-        organization_id=current_user.organization_id,
-        is_org_owner=False,
-        permissions={key: True for key in sorted(ADMIN_PERMISSION_KEYS)},
-    )
-    db.add(user)
-    await db.flush()
-    record_entity_event(
-        db,
-        organization_id=current_user.organization_id,
-        entity_type="staff",
-        entity_id=user.id,
-        actor=current_user,
-        action="created",
-        summary=f"담당자 '{user.name or user.username}' 추가",
-    )
-    await db.commit()
-    await db.refresh(user)
-    return {
-        "id": str(user.id),
-        "username": user.username,
-        "name": user.name,
-        "phone": user.phone,
-        "role": user.role,
-        "is_org_owner": user.is_org_owner,
-        "permissions": user.permissions,
-        "created_at": user.created_at.isoformat(),
-    }
-
-
 @router.post("/auth/approve/{user_id}")
-async def approve_driver(
+async def approve_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """관리자: pending 기사를 승인하여 driver로 변경 (같은 기업만)"""
+    """기업 관리자: 같은 기업의 가입 신청 승인."""
     import uuid as uuid_lib
     _r = await db.execute(select(User).where(
         User.id == uuid_lib.UUID(user_id),
@@ -186,14 +143,70 @@ async def approve_driver(
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
     if user.organization_id != current_user.organization_id:
         raise HTTPException(403, "같은 기업의 기사만 승인할 수 있습니다.")
-    if user.role != UserRole.pending:
+    if user.account_status != AccountStatus.pending:
         raise HTTPException(400, "승인 대기 중인 계정이 아닙니다.")
+    if user.role == UserRole.admin and not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 기업관리자만 관리자 가입을 승인할 수 있습니다.")
 
-    user.role = UserRole.driver
+    user.account_status = AccountStatus.approved
+    if user.role == UserRole.admin:
+        user.permissions = {key: True for key in sorted(ADMIN_PERMISSION_KEYS)}
+        record_entity_event(
+            db,
+            organization_id=current_user.organization_id,
+            entity_type="staff",
+            entity_id=user.id,
+            actor=current_user,
+            action="approved",
+            summary=f"관리자 '{user.name or user.username}' 가입 승인",
+        )
     await db.commit()
     await db.refresh(user)
 
-    return {"id": str(user.id), "username": user.username, "role": user.role}
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "role": user.role,
+        "account_status": user.account_status,
+    }
+
+
+@router.post("/auth/reject/{user_id}")
+async def reject_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """기업 관리자: 같은 기업의 가입 신청 반려."""
+    user = (await db.execute(select(User).where(
+        User.id == uuid_lib.UUID(user_id),
+        User.organization_id == current_user.organization_id,
+    ))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "유저를 찾을 수 없습니다.")
+    if user.account_status != AccountStatus.pending:
+        raise HTTPException(400, "승인 대기 중인 계정이 아닙니다.")
+    if user.role == UserRole.admin and not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 기업관리자만 관리자 가입을 반려할 수 있습니다.")
+
+    user.account_status = AccountStatus.rejected
+    if user.role == UserRole.admin:
+        record_entity_event(
+            db,
+            organization_id=current_user.organization_id,
+            entity_type="staff",
+            entity_id=user.id,
+            actor=current_user,
+            action="rejected",
+            summary=f"관리자 '{user.name or user.username}' 가입 반려",
+        )
+    await db.commit()
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "role": user.role,
+        "account_status": user.account_status,
+    }
 
 
 @router.post("/auth/reissue-org-code")
@@ -223,6 +236,10 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = _r.scalar_one_or_none()
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(401, "아이디 또는 비밀번호가 올바르지 않습니다.")
+    if user.account_status == AccountStatus.pending:
+        raise HTTPException(403, "가입 승인 대기 중입니다. 최상위 기업관리자의 승인 후 로그인할 수 있습니다.")
+    if user.account_status == AccountStatus.rejected:
+        raise HTTPException(403, "가입 신청이 반려된 계정입니다.")
 
     token = create_token(str(user.id), user.role.value)
     return {
@@ -255,6 +272,7 @@ async def me(
         "org_code": org_code,
         "is_org_owner": current_user.is_org_owner,
         "permissions": current_user.permissions or {},
+        "account_status": current_user.account_status,
     }
 
 
@@ -322,6 +340,7 @@ async def update_me(
 @router.get("/users")
 async def get_users(
     role: Optional[str] = None,
+    account_status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -332,6 +351,11 @@ async def get_users(
             stmt = stmt.where(User.role == UserRole(role))
         except ValueError:
             raise HTTPException(400, f"올바르지 않은 role 값: {role}")
+    if account_status:
+        try:
+            stmt = stmt.where(User.account_status == AccountStatus(account_status))
+        except ValueError:
+            raise HTTPException(400, f"올바르지 않은 account_status 값: {account_status}")
     stmt = stmt.order_by(User.created_at.desc())
     _r = await db.execute(stmt)
     users = _r.scalars().all()
@@ -348,6 +372,7 @@ async def get_users(
             "created_at":    u.created_at.isoformat(),
             "is_org_owner":  u.is_org_owner,
             "permissions":   u.permissions or {},
+            "account_status": u.account_status,
         }
         for u in users
     ]

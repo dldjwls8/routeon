@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-06 (v1.0.97 기준, 담당자 권한·관리 마스터 감사 기록 추가)
+> 최종 검토: 2026-06-06 (v1.0.98 기준, 관리자 가입 승인 상태 분리)
 
 ---
 
@@ -11,7 +11,8 @@
 
 | ENUM | 값 |
 |------|----|
-| `userrole` | `superadmin`, `admin`, `driver`, `pending` |
+| `userrole` | `superadmin`, `admin`, `driver`, `pending` (`pending`은 레거시 호환 값이며 신규 가입에는 사용하지 않음) |
+| `accountstatus` | `pending`, `approved`, `rejected` |
 | `orgstatus` | `pending_review`, `approved`, `rejected` |
 | `tripstatus` | `scheduled`, `in_progress`, `completed`, `cancelled` |
 | `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual`, `cancelled` |
@@ -21,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.97은 `users`에 조직 최상위 관리자와 화면별 접근 권한을 추가하고, 고객·기사·차량·담당자·기업 정보 변경을 저장하는 `entity_events` 테이블을 추가한다. `init_db()`가 기존 DB에 컬럼을 보강하고 조직별 최초 관리자 한 명을 최상위 관리자로 자동 지정한다.
+> v1.0.98은 `users.role`과 가입 승인 여부를 분리하는 `account_status`를 추가한다. `init_db()`가 기존 `role=pending` 계정을 `role=driver`, `account_status=pending`으로 보정한다.
 
 ### `organizations`
 
@@ -37,7 +38,7 @@
 | `doc_path` | VARCHAR(512) | | 서버 저장 경로 (`backend/uploads/{id}/`) |
 | `reject_reason` | TEXT | | 반려 사유 |
 | `reviewed_at` | DATETIME | | 심사 완료 시각 |
-| `auto_approve_drivers` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사 자동승인 여부 — ON 시 가입 즉시 `driver` 역할 부여 (기본: 수동 승인) |
+| `auto_approve_drivers` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사 자동승인 여부. 관리자 가입 신청에는 적용하지 않음 |
 | `created_at` | DATETIME | NOT NULL | |
 
 ---
@@ -73,12 +74,16 @@
 | `driver_status` | VARCHAR(20) | NULLABLE | 기사 운행 상태 — `운행가능` / `운행중` / `휴무` 등 |
 | `is_org_owner` | BOOLEAN | NOT NULL DEFAULT FALSE | 기업 최상위 관리자 여부. 조직별 최초 `admin`을 자동 보정 |
 | `permissions` | JSONB | NOT NULL DEFAULT `{}` | 일반 관리자 메인 화면 접근 권한. 키: `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` |
+| `account_status` | accountstatus | NOT NULL DEFAULT 'approved' | 가입 승인 상태. 역할과 독립적으로 `pending` / `approved` / `rejected` 관리 |
 | `created_at` | DATETIME | NOT NULL | |
 
 권한 규칙:
 - 기업 등록과 함께 생성되는 첫 관리자 계정은 `is_org_owner=true`이며 전체 화면 권한을 가진다.
 - 기존 조직은 `init_db()` 실행 시 `created_at`, `id` 순으로 가장 이른 관리자 한 명을 최상위 관리자로 보정한다.
-- 일반 담당자 생성은 최상위 관리자 전용 `POST /users/admin`을 사용한다. 공개 `POST /auth/register`는 기사 가입만 허용한다.
+- 일반 관리자는 공개 `POST /auth/register`에 `role=admin`과 승인된 기업의 조직코드를 전달해 신청하며 항상 `account_status=pending`으로 생성된다.
+- 같은 기업의 최상위 기업관리자만 관리자 신청을 승인·반려할 수 있다. 승인 시 `account_status=approved`와 기본 전체 화면 권한을 적용한다.
+- 기사는 `role=driver`로 생성되며 `auto_approve_drivers=true`일 때만 즉시 `account_status=approved`, 그 외에는 `pending`이다.
+- `account_status=pending/rejected` 계정은 로그인과 인증된 API 이용이 차단된다.
 - `permissions`의 빈 JSON은 기존 계정 호환을 위해 프론트에서 전체 허용으로 해석하며, 명시적인 `false` 키만 접근을 차단한다.
 - 최상위 관리자만 다른 일반 관리자의 `permissions`를 수정하거나 계정을 삭제할 수 있고, 최상위 관리자 계정은 삭제할 수 없다.
 

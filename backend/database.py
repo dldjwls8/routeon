@@ -142,6 +142,24 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'::jsonb;"
         ))
         await conn.execute(text("""
+            DO $$
+            BEGIN
+                CREATE TYPE accountstatus AS ENUM ('pending', 'approved', 'rejected');
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $$;
+        """))
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status "
+            "accountstatus NOT NULL DEFAULT 'approved';"
+        ))
+        await conn.execute(text("""
+            UPDATE users
+               SET role = 'driver',
+                   account_status = 'pending'
+             WHERE role = 'pending';
+        """))
+        await conn.execute(text("""
             WITH ranked_admins AS (
                 SELECT id,
                        ROW_NUMBER() OVER (

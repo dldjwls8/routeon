@@ -22,7 +22,13 @@ class UserRole(str, enum.Enum):
     superadmin = "superadmin"  # 루트온 팀 (전체 기업 관리)
     admin      = "admin"
     driver     = "driver"
-    pending    = "pending"     # 승인 대기 중
+    pending    = "pending"     # 레거시 데이터 마이그레이션용
+
+
+class AccountStatus(str, enum.Enum):
+    pending  = "pending"
+    approved = "approved"
+    rejected = "rejected"
 
 
 class OrgStatus(str, enum.Enum):
@@ -106,6 +112,8 @@ class User(Base):
     driver_status   = Column(String(20), nullable=True, default='운행가능')
     is_org_owner    = Column(Boolean, nullable=False, default=False)
     permissions     = Column(JSONB, nullable=False, default=dict)
+    account_status  = Column(SAEnum(AccountStatus), nullable=False,
+                             default=AccountStatus.approved)
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     organization = relationship("Organization", back_populates="users")

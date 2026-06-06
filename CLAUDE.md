@@ -88,7 +88,7 @@ routeon/
     ├── index.html          랜딩 페이지
     ├── intro.html          서비스 소개
     ├── login.html
-    ├── register.html       기업 등록 (사업자등록증 업로드 포함)
+    ├── register.html       기업 등록 또는 일반 관리자 가입 신청
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (dashboard.html에서 분리)
     ├── dashboard.js        대시보드 JS 로직 (dashboard.html에서 분리)
@@ -388,6 +388,15 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `approved` | 승인 완료 — 서비스 이용 가능 |
 | `rejected` | 반려 (reject_reason 참고) |
 
+### 계정(User) 승인 상태 값
+`users.role`은 실제 역할(`admin`, `driver`)이고, 가입 승인 여부는 `users.account_status`로 별도 관리한다.
+
+| 값 | 의미 |
+|----|------|
+| `pending` | 기사 또는 일반 관리자 가입 승인 대기 |
+| `approved` | 로그인 및 역할별 서비스 이용 가능 |
+| `rejected` | 가입 신청 반려, 로그인 불가 |
+
 ---
 
 ## API 전체 목록
@@ -401,18 +410,18 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 인증
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `POST /auth/register` | 없음 | 기사 가입 전용 (조직코드 필수, 기업 설정에 따라 pending 또는 driver 처리). `role=admin` 요청은 거부 |
+| `POST /auth/register` | 없음 | 승인된 기업의 조직코드로 기사 또는 일반 관리자 가입 신청. 기사는 기업 설정에 따라 자동 승인 가능하고, 관리자는 항상 승인 대기 |
 | `POST /auth/login` | 없음 | 로그인 → JWT |
 | `GET /auth/me` | 로그인 | 내 정보 |
 | `PATCH /auth/me` | 로그인 | 전화번호/비밀번호 변경 |
 | `GET /auth/check-username` | 없음 | 아이디 중복 확인 |
-| `POST /auth/approve/{id}` | 관리자 | 같은 기업 기사 승인 |
+| `POST /auth/approve/{id}` | 관리자 | 같은 기업 가입 신청 승인. 관리자 신청은 최상위 기업관리자만 가능 |
+| `POST /auth/reject/{id}` | 관리자 | 같은 기업 가입 신청 반려. 관리자 신청은 최상위 기업관리자만 가능 |
 
 ### 유저/차량
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `GET /users?role=driver` | 관리자 | 같은 기업 유저 목록 |
-| `POST /users/admin` | 최상위 관리자 | 같은 기업 일반 담당자 계정 추가 |
+| `GET /users?role=&account_status=` | 관리자 | 같은 기업 유저를 역할과 승인 상태로 조회 |
 | `PATCH /users/{id}` | 관리자 | 기사 정보 수정. 담당자 `permissions` 수정은 최상위 관리자만 가능 |
 | `DELETE /users/{id}` | 관리자 | 같은 조직 유저 삭제. 담당자 삭제는 최상위 관리자만 가능하며 최상위 관리자 삭제는 거부 |
 | `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 연결 기사(`driver_id`, `driver_name`)와 차량 위치 스냅샷 `last_gps` 포함 |
@@ -491,8 +500,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 사용자/차량
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `GET /users?role=` | 관리자 | 같은 조직 사용자 목록. `role=driver/admin/pending` 필터 지원 |
-| `POST /users/admin` | 최상위 관리자 | 일반 담당자 추가. 기본 화면 권한 전체 허용 |
+| `GET /users?role=&account_status=` | 관리자 | 같은 조직 사용자 목록. 역할(`driver/admin`)과 승인 상태(`pending/approved/rejected`) 필터 지원 |
 | `PATCH /users/{id}` | 관리자 | 기사 상태·배정 차량 변경. 담당자 화면 권한은 최상위 관리자만 수정 |
 | `DELETE /users/{id}` | 관리자 | 같은 조직 사용자 삭제. 본인·최상위 관리자 삭제 불가, 담당자 삭제는 최상위 관리자만 가능 |
 | `GET /vehicles` | 관리자 | 같은 조직 활성 차량 목록. 차량 위치 스냅샷 `last_gps`, `driver_id`, `driver_name` 포함 |
@@ -525,7 +533,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 
 채팅 권한 규칙:
 - 같은 `organization_id` 안의 `admin` ↔ `driver` 조합만 허용한다.
-- `superadmin`, `pending`, admin↔admin, driver↔driver 조합은 거부한다.
+- `superadmin`, 승인 대기·반려 계정, admin↔admin, driver↔driver 조합은 거부한다.
 - 실시간 전송 실패는 DB 저장을 롤백하지 않는다. 재접속 시 REST 히스토리로 복구한다.
 
 프론트엔드 진입점:
@@ -554,7 +562,8 @@ settings.html 구조 (레거시 관리자 설정 진입점):
 - 상단 메인 탭의 세부탭은 hover/focus 드롭다운 방식으로 표시한다. 메인 탭 클릭은 해당 그룹의 첫 세부 페이지로 이동한다.
 - hover 세부 메뉴는 고정 폭을 사용해 오더관리 등 메뉴별 길이 차이가 나지 않도록 유지한다.
 - `기본정보 > 기업 정보`는 기업명·조직코드·기사 자동승인 설정, 현재 관리자 연락처·비밀번호, 기업 수정 기록을 통합한다. 상단 사용자 메뉴에는 별도 `내 프로필` 항목을 두지 않는다.
-- 담당자는 조직별 `is_org_owner=true`인 최상위 관리자와 일반 관리자로 구분한다. 최상위 관리자만 일반 담당자를 추가하고 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 화면 접근 권한을 수정하거나 담당자를 삭제할 수 있다.
+- 담당자는 조직별 `is_org_owner=true`인 최상위 관리자와 일반 관리자로 구분한다. 일반 관리자는 가입 페이지에서 조직코드로 신청하며, 최상위 기업관리자가 `기본정보 > 담당자`에서 승인·반려한다.
+- 관리자 신청은 기사 자동승인 설정과 무관하게 항상 승인 대기다. 승인 시 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 권한이 기본 활성화되며, 이후 최상위 관리자만 권한을 수정하거나 담당자를 삭제할 수 있다.
 - 일반 관리자는 `users.permissions`에서 명시적으로 `false`인 메인 탭을 볼 수 없으며 직접 URL 접근 시 첫 허용 탭으로 이동한다. 빈 권한 JSON은 기존 계정 호환을 위해 전체 허용으로 해석한다.
 
 chat.html 구조:

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from database import get_db
-from models import User, UserRole
+from models import AccountStatus, User, UserRole
 
 JWT_SECRET       = os.getenv("JWT_SECRET", "change-me-in-production")
 JWT_ALGORITHM    = "HS256"
@@ -74,8 +74,10 @@ async def get_current_user_from_token(token: str, db: AsyncSession) -> User:
     user    = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="유저를 찾을 수 없습니다.")
-    if user.role == UserRole.pending:
-        raise HTTPException(status_code=403, detail="관리자 승인 대기 중입니다. 승인 후 이용 가능합니다.")
+    if user.account_status == AccountStatus.pending:
+        raise HTTPException(status_code=403, detail="가입 승인 대기 중입니다. 승인 후 이용 가능합니다.")
+    if user.account_status == AccountStatus.rejected:
+        raise HTTPException(status_code=403, detail="가입 신청이 반려된 계정입니다.")
 
     # 기업 심사 상태 확인 (superadmin 제외)
     if user.role != UserRole.superadmin and user.organization_id:

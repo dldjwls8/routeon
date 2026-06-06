@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>루트온 — 기업 등록</title>
+  <title>루트온 — 회원가입</title>
   <script>
     (function () {
       var s = localStorage.getItem('theme');
@@ -85,28 +85,52 @@
     .link:hover { color: var(--t-text); text-decoration: underline; }
     .error-msg { color: #f87171; font-size: 12px; margin-top: 5px; display: none; }
     .info-box { background: var(--t-info-bg); border: 1px solid var(--t-info-border); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--t-info-text); margin-bottom: 20px; line-height: 1.6; }
+    .join-type { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 20px; background: var(--t-input-bg); border: 1px solid var(--t-border); border-radius: 8px; }
+    .join-type button { padding: 10px; border: 0; border-radius: 5px; background: transparent; color: var(--t-text-muted); font-weight: bold; cursor: pointer; }
+    .join-type button.active { background: var(--t-card); color: var(--t-text-strong); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <div class="auth-card">
     <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
-    <h2>기업 등록</h2>
-    <p class="subtitle">루트온 서비스를 시작하려면 기업을 먼저 등록하세요</p>
+    <h2 id="formTitle">기업 등록</h2>
+    <p class="subtitle" id="formSubtitle">루트온 서비스를 시작하려면 기업을 먼저 등록하세요</p>
 
-    <div class="info-box">
-      📋 서류 심사 완료 후 <strong>조직코드</strong>가 활성화됩니다.<br>
-      심사는 영업일 기준 1~2일이 소요될 수 있습니다.
+    <div class="join-type" role="tablist" aria-label="가입 유형">
+      <button type="button" class="active" data-mode="company">기업 등록</button>
+      <button type="button" data-mode="admin">관리자 가입</button>
+    </div>
+
+    <div class="info-box" id="infoBox">
+      서류 심사 완료 후 조직코드가 활성화됩니다.<br>
+      최초 계정은 최상위 기업관리자로 등록됩니다.
     </div>
 
     <form id="registerForm">
-      <div class="section-label">기업 정보</div>
+      <div id="companyFields">
+        <div class="section-label">기업 정보</div>
 
-      <div class="form-group">
-        <label>기업명</label>
-        <input type="text" id="orgName" required placeholder="예: (주)루트물류">
+        <div class="form-group">
+          <label>기업명</label>
+          <input type="text" id="orgName" required placeholder="예: (주)루트물류">
+        </div>
       </div>
 
-      <div class="section-label">관리자 계정</div>
+      <div id="adminOrgFields" hidden>
+        <div class="section-label">소속 기업</div>
+        <div class="form-group">
+          <label>조직코드</label>
+          <input type="text" id="orgCode" placeholder="예: RT-ABC123">
+        </div>
+      </div>
+
+      <div class="section-label">계정 정보</div>
+
+      <div class="form-group">
+        <label>이름</label>
+        <input type="text" id="name" required placeholder="이름 입력">
+      </div>
 
       <div class="form-group">
         <label>아이디</label>
@@ -114,7 +138,7 @@
       </div>
 
       <div class="form-group">
-        <label>이메일 (승인/반려 알림 수신)</label>
+        <label>이메일</label>
         <input type="email" id="email" required placeholder="admin@company.com">
       </div>
 
@@ -135,20 +159,22 @@
         <div id="pwd-match-error" class="error-msg">비밀번호가 일치하지 않습니다.</div>
       </div>
 
-      <div class="section-label">사업자 서류</div>
+      <div id="documentFields">
+        <div class="section-label">사업자 서류</div>
 
-      <div class="form-group">
-        <label>첨부 파일 (사업자등록증 등)</label>
-        <label class="file-drop" for="docFile">
-          <span class="file-drop-icon">📎</span>
-          <span class="file-drop-text" id="fileLabel">클릭하여 파일 선택</span>
-          <span class="file-drop-hint">PDF · JPG · PNG / 최대 10MB</span>
-        </label>
-        <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required>
-        <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
+        <div class="form-group">
+          <label>첨부 파일 (사업자등록증 등)</label>
+          <label class="file-drop" for="docFile">
+            <span class="file-drop-icon">파일</span>
+            <span class="file-drop-text" id="fileLabel">클릭하여 파일 선택</span>
+            <span class="file-drop-hint">PDF · JPG · PNG / 최대 10MB</span>
+          </label>
+          <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required>
+          <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
+        </div>
       </div>
 
-      <button type="submit" class="btn-submit">기업 등록 완료</button>
+      <button type="submit" class="btn-submit" id="submitButton">기업 등록 신청</button>
     </form>
 
     <a href="/login.html" class="link">이미 계정이 있으신가요? 로그인</a>
@@ -161,6 +187,30 @@
       if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
       return `${location.protocol}//${location.host}/api`;
     })();
+
+    let registerMode = 'company';
+
+    document.querySelectorAll('[data-mode]').forEach(button => {
+      button.addEventListener('click', () => {
+        registerMode = button.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(item => item.classList.toggle('active', item === button));
+        const isCompany = registerMode === 'company';
+        document.getElementById('companyFields').hidden = !isCompany;
+        document.getElementById('documentFields').hidden = !isCompany;
+        document.getElementById('adminOrgFields').hidden = isCompany;
+        document.getElementById('orgName').required = isCompany;
+        document.getElementById('docFile').required = isCompany;
+        document.getElementById('orgCode').required = !isCompany;
+        document.getElementById('formTitle').textContent = isCompany ? '기업 등록' : '관리자 가입';
+        document.getElementById('formSubtitle').textContent = isCompany
+          ? '루트온 서비스를 시작하려면 기업을 먼저 등록하세요'
+          : '소속 기업의 조직코드로 관리자 가입을 신청하세요';
+        document.getElementById('infoBox').innerHTML = isCompany
+          ? '서류 심사 완료 후 조직코드가 활성화됩니다.<br>최초 계정은 최상위 기업관리자로 등록됩니다.'
+          : '가입 신청 후 최상위 기업관리자의 승인이 필요합니다.<br>승인 전에는 로그인할 수 없습니다.';
+        document.getElementById('submitButton').textContent = isCompany ? '기업 등록 신청' : '관리자 가입 신청';
+      });
+    });
 
     document.getElementById('docFile').addEventListener('change', function () {
       const label = document.getElementById('fileLabel');
@@ -182,6 +232,8 @@
       e.preventDefault();
 
       const orgName         = document.getElementById('orgName').value.trim();
+      const orgCode         = document.getElementById('orgCode').value.trim().toUpperCase();
+      const name            = document.getElementById('name').value.trim();
       const username        = document.getElementById('username').value.trim();
       const email           = document.getElementById('email').value.trim();
       const phone           = document.getElementById('phone').value.trim();
@@ -201,18 +253,38 @@
         return;
       }
 
+      if (registerMode === 'admin') {
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username, password, phone, name, email,
+            org_code: orgCode,
+            role: 'admin'
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('관리자 가입 신청이 접수되었습니다.\n최상위 기업관리자의 승인 후 로그인할 수 있습니다.');
+          window.location.href = '/login.html';
+        } else {
+          alert(data.detail || '가입 신청에 실패했습니다.');
+        }
+        return;
+      }
+
       const docFile = document.getElementById('docFile').files[0];
       if (!docFile) {
         document.getElementById('file-error').style.display = 'block';
         return;
       }
-
       const formData = new FormData();
       formData.append('name',     orgName);
       formData.append('username', username);
       formData.append('password', password);
       formData.append('phone',    phone);
       formData.append('email',    email);
+      formData.append('admin_name', name);
       formData.append('doc_file', docFile);
 
       const res = await fetch(`${API}/organizations`, {
