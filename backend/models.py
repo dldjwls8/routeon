@@ -77,6 +77,7 @@ class Organization(Base):
     reject_reason         = Column(Text)          # 반려 사유
     reviewed_at           = Column(DateTime)      # 심사 완료 시각
     auto_approve_drivers  = Column(Boolean, nullable=False, default=False)
+    auto_approve_admins   = Column(Boolean, nullable=False, default=False)
     created_at            = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     users = relationship("User", back_populates="organization")
@@ -139,7 +140,7 @@ class User(Base):
 
 
 # ────────────────────────────────────────────────
-# conversations / messages  (관리자 ↔ 기사 1:1 채팅)
+# conversations / messages  (같은 기업 사용자 간 1:1 채팅)
 # ────────────────────────────────────────────────
 class Conversation(Base):
     __tablename__ = "conversations"

@@ -117,6 +117,7 @@
     }
     .conv-info { flex: 1; min-width: 0; }
     .conv-name { font-size: 14px; font-weight: 600; color: var(--t-text-strong); margin-bottom: 2px; }
+    .partner-role { margin-left: 5px; color: var(--t-text-muted); font-size: 10px; font-weight: 500; }
     .conv-preview { font-size: 12px; color: var(--t-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .conv-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
     .conv-time { font-size: 11px; color: var(--t-text-muted); white-space: nowrap; }
@@ -298,8 +299,9 @@
       await Promise.all([loadPartners(), loadConversations()]);
       renderList();
       connectWs();
-      const driverId = new URLSearchParams(location.search).get('driver_id');
-      if (driverId) selectPartner(driverId);
+      const params = new URLSearchParams(location.search);
+      const partnerId = params.get('partner_id') || params.get('driver_id');
+      if (partnerId && allPartners.some(partner => partner.id === partnerId)) selectPartner(partnerId);
     }
 
     // ────────────────────────────────────────────────
@@ -358,7 +360,7 @@
           <div class="conv-item ${active}" onclick="selectPartner('${p.id}')">
             <div class="conv-avatar">${escHtml((p.name || p.username)[0].toUpperCase())}</div>
             <div class="conv-info">
-              <div class="conv-name">${escHtml(p.name || p.username)}</div>
+              <div class="conv-name">${escHtml(p.name || p.username)}<span class="partner-role">${p.role === 'admin' ? '관리자' : '기사'}</span></div>
               <div class="conv-preview">${preview}</div>
             </div>
             <div class="conv-meta">

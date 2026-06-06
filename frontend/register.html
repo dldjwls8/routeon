@@ -207,7 +207,7 @@
           : '소속 기업의 조직코드로 관리자 가입을 신청하세요';
         document.getElementById('infoBox').innerHTML = isCompany
           ? '서류 심사 완료 후 조직코드가 활성화됩니다.<br>최초 계정은 최상위 기업관리자로 등록됩니다.'
-          : '가입 신청 후 최상위 기업관리자의 승인이 필요합니다.<br>승인 전에는 로그인할 수 없습니다.';
+          : '기업의 승인 정책에 따라 즉시 승인되거나 승인 대기 상태로 접수됩니다.';
         document.getElementById('submitButton').textContent = isCompany ? '기업 등록 신청' : '관리자 가입 신청';
       });
     });
@@ -265,7 +265,9 @@
         });
         const data = await res.json();
         if (res.ok) {
-          alert('관리자 가입 신청이 접수되었습니다.\n최상위 기업관리자의 승인 후 로그인할 수 있습니다.');
+          alert(data.account_status === 'approved'
+            ? '관리자 가입이 승인되었습니다.\n바로 로그인할 수 있습니다.'
+            : '관리자 가입 신청이 접수되었습니다.\n최상위 기업관리자의 승인 후 로그인할 수 있습니다.');
           window.location.href = '/login.html';
         } else {
           alert(data.detail || '가입 신청에 실패했습니다.');

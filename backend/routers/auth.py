@@ -66,7 +66,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     기사 또는 일반 관리자 가입 신청.
     - org_code로 소속 기업 확인 후 가입
     - role=driver → 기업 설정에 따라 자동 승인 또는 승인 대기
-    - role=admin  → 최상위 기업관리자 승인 전까지 항상 승인 대기
+    - role=admin  → 기업 설정에 따라 자동 승인 또는 최상위 기업관리자 승인 대기
     """
     if req.role not in {"driver", "admin"}:
         raise HTTPException(400, "가입 유형은 기사 또는 관리자여야 합니다.")
@@ -95,7 +95,10 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     actual_role = UserRole.admin if req.role == "admin" else UserRole.driver
     account_status = (
         AccountStatus.approved
-        if req.role == "driver" and org.auto_approve_drivers
+        if (
+            (req.role == "driver" and org.auto_approve_drivers)
+            or (req.role == "admin" and org.auto_approve_admins)
+        )
         else AccountStatus.pending
     )
 
@@ -111,6 +114,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         is_org_owner    = False,
         permissions     = {},
     )
+    if actual_role == UserRole.admin and account_status == AccountStatus.approved:
+        user.permissions = {key: True for key in sorted(ADMIN_PERMISSION_KEYS)}
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -214,17 +219,34 @@ async def reissue_org_code(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """관리자: 조직코드 재발급 (Organization.org_code 갱신)"""
+    """최상위 기업관리자: 조직코드 재발급 (레거시 호환 경로)."""
     import random, string
     if not current_user.organization_id:
         raise HTTPException(400, "소속 조직이 없습니다.")
+    if not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 기업관리자만 조직코드를 재발급할 수 있습니다.")
     org = (await db.execute(
         select(Organization).where(Organization.id == current_user.organization_id)
     )).scalar_one_or_none()
     if not org:
         raise HTTPException(404, "소속 조직을 찾을 수 없습니다.")
-    new_code = "RT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    while True:
+        new_code = "RT-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        existing = await db.execute(select(Organization).where(Organization.org_code == new_code))
+        if not existing.scalar_one_or_none():
+            break
+    old_code = org.org_code
     org.org_code = new_code
+    record_entity_event(
+        db,
+        organization_id=org.id,
+        entity_type="organization",
+        entity_id=org.id,
+        actor=current_user,
+        action="org_code_regenerated",
+        summary="기업 조직코드 재발급",
+        changes={"org_code": {"before": old_code, "after": new_code}},
+    )
     await db.commit()
     return {"org_code": new_code}
 

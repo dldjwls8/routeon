@@ -85,6 +85,10 @@ async def init_db():
             "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS "
             "auto_approve_drivers BOOLEAN NOT NULL DEFAULT FALSE;"
         ))
+        await conn.execute(text(
+            "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS "
+            "auto_approve_admins BOOLEAN NOT NULL DEFAULT FALSE;"
+        ))
 
         # trips.dest_* 컬럼 NOT NULL 제거 (상차지/하차지 플로우 지원)
         await conn.execute(text(

@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-06 (v1.0.98 기준, 관리자 가입 승인 상태 분리)
+> 최종 검토: 2026-06-06 (v1.0.99 기준, 관리자 자동승인·기업 내 채팅 확장)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.98은 `users.role`과 가입 승인 여부를 분리하는 `account_status`를 추가한다. `init_db()`가 기존 `role=pending` 계정을 `role=driver`, `account_status=pending`으로 보정한다.
+> v1.0.99는 `organizations.auto_approve_admins`를 추가한다. 기존 v1.0.98의 `users.account_status` 분리와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 
@@ -38,7 +38,8 @@
 | `doc_path` | VARCHAR(512) | | 서버 저장 경로 (`backend/uploads/{id}/`) |
 | `reject_reason` | TEXT | | 반려 사유 |
 | `reviewed_at` | DATETIME | | 심사 완료 시각 |
-| `auto_approve_drivers` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사 자동승인 여부. 관리자 가입 신청에는 적용하지 않음 |
+| `auto_approve_drivers` | BOOLEAN | NOT NULL DEFAULT FALSE | 기사 가입 자동승인 여부 |
+| `auto_approve_admins` | BOOLEAN | NOT NULL DEFAULT FALSE | 일반 관리자 가입 자동승인 여부. 최상위 기업관리자만 변경 가능 |
 | `created_at` | DATETIME | NOT NULL | |
 
 ---
@@ -80,8 +81,8 @@
 권한 규칙:
 - 기업 등록과 함께 생성되는 첫 관리자 계정은 `is_org_owner=true`이며 전체 화면 권한을 가진다.
 - 기존 조직은 `init_db()` 실행 시 `created_at`, `id` 순으로 가장 이른 관리자 한 명을 최상위 관리자로 보정한다.
-- 일반 관리자는 공개 `POST /auth/register`에 `role=admin`과 승인된 기업의 조직코드를 전달해 신청하며 항상 `account_status=pending`으로 생성된다.
-- 같은 기업의 최상위 기업관리자만 관리자 신청을 승인·반려할 수 있다. 승인 시 `account_status=approved`와 기본 전체 화면 권한을 적용한다.
+- 일반 관리자는 공개 `POST /auth/register`에 `role=admin`과 승인된 기업의 조직코드를 전달해 신청한다. `auto_approve_admins=true`이면 즉시 `approved`, 아니면 `pending`으로 생성된다.
+- 승인 대기 관리자 신청은 같은 기업의 최상위 기업관리자만 승인·반려할 수 있다. 자동 또는 수동 승인 시 기본 전체 화면 권한을 적용한다.
 - 기사는 `role=driver`로 생성되며 `auto_approve_drivers=true`일 때만 즉시 `account_status=approved`, 그 외에는 `pending`이다.
 - `account_status=pending/rejected` 계정은 로그인과 인증된 API 이용이 차단된다.
 - `permissions`의 빈 JSON은 기존 계정 호환을 위해 프론트에서 전체 허용으로 해석하며, 명시적인 `false` 키만 접근을 차단한다.
@@ -280,7 +281,7 @@
 
 조회 규칙:
 - `GET /entity-events?entity_type=&entity_id=`는 로그인 관리자의 `organization_id`를 항상 조건에 포함하고 최신순 최대 100건을 반환한다.
-- 고객·차량 등록/수정, 기사·담당자 수정, 담당자 추가/삭제, 기업명·기사 자동승인 변경, 관리자 본인 연락처·비밀번호 변경을 기록한다.
+- 고객·차량 등록/수정, 기사·담당자 수정, 담당자 추가/삭제, 기업명·기사/관리자 자동승인 변경, 조직코드 재발급, 관리자 본인 연락처·비밀번호 변경을 기록한다.
 - 비밀번호 원문·해시는 저장하지 않고 `password: {before: null, after: "changed"}`만 남긴다.
 
 ---
@@ -323,16 +324,16 @@ GPS 이동 이력. TimescaleDB hypertable (7일 retention).
 
 ### `conversations`
 
-관리자와 기사 간 조직 내부 1:1 대화방. 운행과는 독립된 MVP 채팅이다.
+같은 기업의 승인된 사용자 간 1:1 대화방. 관리자-기사와 관리자-관리자를 지원하며 운행과 독립적으로 저장한다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |------|------|------|------|
 | `id` | UUID | PK | |
 | `organization_id` | INTEGER | FK → organizations.id, NOT NULL | 대화방 소속 조직 |
-| `admin_id` | UUID | FK → users.id, NOT NULL | 관리자 참여자 |
-| `driver_id` | UUID | FK → users.id, NOT NULL | 기사 참여자 |
-| `admin_last_read_at` | DATETIME | | 관리자 읽음 워터마크 |
-| `driver_last_read_at` | DATETIME | | 기사 읽음 워터마크 |
+| `admin_id` | UUID | FK → users.id, NOT NULL | 참여자 A. 관리자-기사 대화에서는 관리자 |
+| `driver_id` | UUID | FK → users.id, NOT NULL | 참여자 B. 관리자-기사 대화에서는 기사, 관리자 간 대화에서는 두 번째 관리자 |
+| `admin_last_read_at` | DATETIME | | 참여자 A 읽음 워터마크 |
+| `driver_last_read_at` | DATETIME | | 참여자 B 읽음 워터마크 |
 | `created_at` | DATETIME | NOT NULL | |
 | `updated_at` | DATETIME | NOT NULL | 최근 메시지 시각 |
 
@@ -340,6 +341,12 @@ GPS 이동 이력. TimescaleDB hypertable (7일 retention).
 - UNIQUE (`organization_id`, `admin_id`, `driver_id`)
 - INDEX `admin_id`, `driver_id`
 - INDEX (`organization_id`, `updated_at`)
+
+대화 규칙:
+- 관리자 간 대화는 UUID 문자열 정렬 결과로 참여자 A/B를 고정해 중복 방지 UNIQUE 제약을 재사용한다.
+- 기사는 기존 대화가 있으면 최근 연결 관리자, 없으면 최상위 관리자 우선·가입일 순으로 관리자 한 명과 자동 매칭된다.
+- 일반 관리자 파트너 목록에는 다른 승인 관리자와 자신에게 지정된 기사만 포함된다.
+- 레거시 컬럼명은 마이그레이션 없이 호환 유지하며 API 응답의 `partner.role`은 실제 `users.role`에서 계산한다.
 
 ---
 
@@ -374,7 +381,7 @@ organizations ──── users ──────── trips ─────�
 
 users ──────── locations (1:N, GPS 이력)
 users ──────── conversations ──────── messages
-              admin/driver (1:1)
+              participant A/B (1:1)
 organizations ──────── entity_events (1:N, 관리 마스터 감사 기록)
 
 rest_stops (독립 — trips.optimized_route JSONB에서 참조)

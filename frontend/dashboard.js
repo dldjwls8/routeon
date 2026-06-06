@@ -35,8 +35,9 @@
   let _locationWS = null;
   let _chatWS = null;
   let _currentUserId = null;
-  const _convDriverMap = {};  // conversation_id → driver_id
-  const _driverUnread = {};   // driver_id → unread count
+  const _convDriverMap = {};  // conversation_id → partner_id
+  const _driverUnread = {};   // partner_id → unread count
+  const _chatPartnerMap = {}; // partner_id → partner summary
   let _trajectoryPolyline = null;
   let _miniMapInstance = null;
   let _miniMapMarkers = [];
@@ -1778,6 +1779,9 @@
             <div class="vehicle-preview" id="driverVehiclePreview">${vehiclePreviewHtml(vehicleById(d.vehicleId))}</div>
           </div>
         </div>
+        <div class="detail-danger-zone">
+          <button type="button" class="btn btn-sm btn-danger-outline" id="deleteDriverBtn">기사 삭제</button>
+        </div>
       </div>
       <div class="tab-panel" data-panel="hist">${d._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(d.auditEvents)}</div>`;
   }
@@ -1811,6 +1815,18 @@
         if (prev) prev.innerHTML = vehiclePreviewHtml(vehicleById(vehSel.value));
       };
     }
+    $('#deleteDriverBtn', root).onclick = async () => {
+      if (!confirm(`기사 «${d.name}»를 삭제하시겠습니까?\n관련 배송·대화 이력도 함께 삭제됩니다.`)) return;
+      const res = await apiFetch(`/users/${d.id}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        const error = await res.json().catch(() => ({}));
+        toast(error.detail || '삭제 실패', 'error');
+        return;
+      }
+      selectedDriverId = null;
+      toast('기사가 삭제되었습니다');
+      await loadRealData();
+    };
   }
 
   function selectDriver(id) {
@@ -1851,6 +1867,9 @@
       <div class="vehicle-preview" id="vehCoordPreview" style="margin-top:16px">
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 6px">배차 출발점 · 최근 GPS</p>
         ${vehiclePreviewHtml(v)}
+      </div>
+      <div class="detail-danger-zone">
+        <button type="button" class="btn btn-sm btn-danger-outline" id="deleteVehicleBtn">차량 비활성화</button>
       </div></div>
       <div class="tab-panel" data-panel="hist">${v._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(v.auditEvents)}</div>`;
   }
@@ -1883,6 +1902,18 @@
       await loadEntityEvents(v, 'vehicle', v.id);
     };
     bindDetailTabs($('#inlineDetail', root));
+    $('#deleteVehicleBtn', root).onclick = async () => {
+      if (!confirm(`차량 «${v.plate}»를 비활성화하시겠습니까?`)) return;
+      const res = await apiFetch(`/vehicles/${v.id}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) {
+        const error = await res.json().catch(() => ({}));
+        toast(error.detail || '비활성화 실패', 'error');
+        return;
+      }
+      selectedVehicleId = null;
+      toast(`차량 «${v.plate}» 비활성화 완료`);
+      await loadRealData();
+    };
   }
 
   function selectVehicle(id) {
@@ -2104,7 +2135,7 @@
           <strong>화면 접근 권한</strong>
           ${Object.entries(permissionLabels).map(([key, label]) => {
             const checked = s.is_org_owner || s.permissions?.[key] !== false;
-            return `<label><input type="checkbox" data-permission="${key}" ${checked ? 'checked' : ''} ${canManage ? '' : 'disabled'}> ${label}</label>`;
+            return `<label class="permission-toggle"><span>${label}</span><span class="ui-switch"><input type="checkbox" data-permission="${key}" ${checked ? 'checked' : ''} ${canManage ? '' : 'disabled'}><span class="ui-switch-track"></span></span></label>`;
           }).join('')}
         </div>
         ${canManage ? '<p class="text-muted-hint">최상위 관리자만 일반 관리자의 접근 권한을 수정할 수 있습니다.</p>' : ''}
@@ -2187,8 +2218,8 @@
       const hasOrder = evts.some(e => e.type === 'order');
       const hasTrip = evts.some(e => e.type === 'trip');
       const cls = ['cal-cell', d === todayNum ? 'today' : '', hasOrder && hasTrip ? 'has-both' : hasOrder ? 'has-order' : hasTrip ? 'has-trip' : ''].filter(Boolean).join(' ');
-      const dots = evts.map(e => `<span class="cal-dot ${e.type}" title="${e.orderId}"></span>`).join('');
-      const hint = evts[0] ? `<div class="cal-event-hint">${evts[0].label} · ${evts[0].orderId}</div>` : '';
+      const dots = evts.map(e => `<span class="cal-dot ${e.type}" title="${escapeHtml(e.orderId)}"></span>`).join('');
+      const hint = evts[0] ? `<div class="cal-event-hint" title="${escapeHtml(`${evts[0].label} · ${evts[0].orderId}`)}">${escapeHtml(evts[0].label)} · ${escapeHtml(evts[0].orderId)}</div>` : '';
       cells += `<div class="${cls}"><div class="cal-day-num">${d}</div><div class="cal-dots">${dots}</div>${hint}</div>`;
     }
     return cells;
@@ -2209,12 +2240,16 @@
       </div>
       <div class="page-scroll-main">
       <div class="cal-wrap">
-        <div class="cal-hd" style="display:flex;align-items:center;gap:8px">
-          <button type="button" class="btn btn-sm" id="calPrev">&#8249;</button>
-          <h3 style="margin:0">${monthLabel}</h3>
-          <button type="button" class="btn btn-sm" id="calNext">&#8250;</button>
-          ${isCurrentMonth ? '' : `<button type="button" class="btn btn-sm" id="calToday" style="margin-left:4px">오늘</button>`}
-          <span class="badge badge-info" style="margin-left:4px">${monthEvents.length}건</span>
+        <div class="cal-hd">
+          <div class="cal-month-nav">
+            <button type="button" class="btn btn-sm cal-nav-btn" id="calPrev" aria-label="이전 달">&#8249;</button>
+            <h3>${monthLabel}</h3>
+            <button type="button" class="btn btn-sm cal-nav-btn" id="calNext" aria-label="다음 달">&#8250;</button>
+          </div>
+          <div class="cal-month-actions">
+            ${isCurrentMonth ? '' : `<button type="button" class="btn btn-sm" id="calToday">오늘</button>`}
+            <span class="badge badge-info">${monthEvents.length}건</span>
+          </div>
         </div>
         <div class="cal-legend">
           <span><i class="dot-order"></i>오더·배차</span>
@@ -2784,12 +2819,12 @@
   function renderDrivers(root) {
     const q = root._search || '';
     const allRows = DATA.drivers.filter(d =>
-      !q || d.name.includes(q) || driverVehicleLabel(d).includes(q) || d.phone.includes(q)
+      !q || (d.name || '').includes(q) || driverVehicleLabel(d).includes(q) || (d.phone || '').includes(q)
     );
     const rows = allRows.slice((driverPage - 1) * PAGE_SIZE, driverPage * PAGE_SIZE);
     const selected = selectedDriverId ? DATA.drivers.find(d => d.id === selectedDriverId) : null;
     const pendingHtml = DATA.pendingDrivers.length ? `
-      <div class="card" style="margin-bottom:12px;border-left:3px solid var(--lime)">
+      <div class="staff-requests driver-requests">
         <div class="card-hd" style="padding:12px 16px">
           <h3 style="font-size:14px;margin:0">승인 대기 <span class="badge badge-warn">${DATA.pendingDrivers.length}</span></h3>
         </div>
@@ -2814,17 +2849,15 @@
           <h2>기사 목록</h2>
           <div class="toolbar">
             <input type="search" class="search" placeholder="이름·번호판·연락처 검색" id="driverSearch" value="${q}">
-            <button type="button" class="btn btn-primary" id="addDriver">+ 추가</button>
           </div>
         </div>
-        <div class="card-bd" style="padding:8px 12px 0;overflow-y:auto;flex:1;min-height:0">
+        <div class="card-bd master-list-body">
           ${pendingHtml}
           ${tableScrollWrap(`<table id="driverTable">
-            <thead><tr><th>이름</th><th>배정 차량</th><th>상태</th><th>연락처</th><th></th></tr></thead>
+            <thead><tr><th>이름</th><th>배정 차량</th><th>상태</th><th>연락처</th></tr></thead>
             <tbody>${rows.map(d => `
               <tr data-id="${d.id}" class="${selectedDriverId === d.id ? 'selected' : ''}">
                 <td>${d.name}${(_driverUnread[d.id] || 0) > 0 ? `<span class="badge badge-info driver-chat-badge" style="margin-left:4px">${_driverUnread[d.id]}</span>` : ''}</td><td>${driverVehicleLabel(d)}</td><td>${statusBadge(d.status)}</td><td>${d.phone}</td>
-                <td><button type="button" class="btn btn-sm btn-danger-outline btn-del-driver" data-uid="${d.id}" data-name="${escapeHtml(d.name)}">삭제</button></td>
               </tr>`).join('')}
             </tbody>
           </table>`)}
@@ -2837,46 +2870,14 @@
       selected ? inlineDetailCardHtml(selected.name, driverDetailBodyHtml(selected)) : ''
     );
 
-    $('#driverSearch', root).oninput = (e) => { driverPage = 1; root._search = e.target.value; renderDrivers(root); };
-
-    // 기사 추가
-    $('#addDriver', root).onclick = () => {
-      openModal('기사 추가', `
-        <form id="driverForm">
-          <div class="form-grid" style="max-width:100%">
-            <label>아이디 *</label><input name="username" required placeholder="로그인 아이디">
-            <label>이름 *</label><input name="name" required>
-            <label>연락처 *</label><input name="phone" required placeholder="010-0000-0000">
-            <label>비밀번호 *</label><input name="password" type="password" required placeholder="초기 비밀번호">
-          </div>
-        </form>`, async () => {
-        const form = document.getElementById('driverForm');
-        const fd = Object.fromEntries(new FormData(form));
-        if (!fd.username || !fd.name || !fd.phone || !fd.password) { toast('모든 필수 항목을 입력하세요'); return; }
-        const orgRes = await apiFetch(`/organizations/me`);
-        const org = orgRes.ok ? await orgRes.json() : {};
-        const res = await apiFetch(`/auth/register`, {
-          method: 'POST',
-          body: JSON.stringify({ username: fd.username, password: fd.password, phone: normalizePhone(fd.phone), name: fd.name, org_code: org.org_code || '', role: 'driver' }),
-        });
-        if (!res.ok) { const e = await res.json(); toast(e.detail || '등록 실패'); return; }
-        toast(`기사 «${fd.name}» 등록 완료 · 승인 후 앱 이용 가능`);
-        await loadRealData();
-      });
+    $('#driverSearch', root).oninput = (e) => {
+      driverPage = 1;
+      root._search = e.target.value;
+      renderDrivers(root);
+      const search = $('#driverSearch', root);
+      search?.focus();
+      search?.setSelectionRange(root._search.length, root._search.length);
     };
-
-    // 기사 삭제
-    root.querySelectorAll('.btn-del-driver').forEach(btn => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        if (!confirm(`기사 «${btn.dataset.name}»를 삭제하시겠습니까?\n관련 배송·대화 이력도 함께 삭제됩니다.`)) return;
-        const res = await apiFetch(`/users/${btn.dataset.uid}`, { method: 'DELETE' });
-        if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패'); return; }
-        toast('기사가 삭제되었습니다');
-        if (selectedDriverId === btn.dataset.uid) selectedDriverId = null;
-        await loadRealData();
-      };
-    });
 
     // pending 기사 승인
     root.querySelectorAll('.btn-approve-driver').forEach(btn => {
@@ -2929,7 +2930,7 @@
         </div>
         <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
           ${tableScrollWrap(`<table id="vehicleTable">
-            <thead><tr><th>번호판</th><th>톤급</th><th>차종</th><th>최근 위치</th><th>상태</th><th>연결 기사</th><th></th></tr></thead>
+            <thead><tr><th>번호판</th><th>톤급</th><th>차종</th><th>최근 위치</th><th>상태</th><th>연결 기사</th></tr></thead>
             <tbody>${rows.length ? rows.map(v => `
               <tr data-id="${v.id}" class="${selectedVehicleId === v.id ? 'selected' : ''}">
                 <td><strong>${v.plate}</strong></td>
@@ -2938,7 +2939,6 @@
                 <td>${vehicleLastGpsTableCell(v)}</td>
                 <td>${statusBadge(v.status)}</td>
                 <td>${vehicleDriverLabel(v)}</td>
-                <td><button type="button" class="btn btn-sm btn-danger-outline btn-del-vehicle" data-vid="${v.id}" data-plate="${escapeHtml(v.plate)}">삭제</button></td>
               </tr>`).join('') : `
               <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">검색 결과가 없습니다</td></tr>`}
             </tbody>
@@ -2952,7 +2952,14 @@
       selected ? inlineDetailCardHtml(selected.plate, vehicleDetailBodyHtml(selected)) : ''
     );
 
-    $('#vehicleSearch', root).oninput = (e) => { vehiclePage = 1; root._search = e.target.value; renderVehicles(root); };
+    $('#vehicleSearch', root).oninput = (e) => {
+      vehiclePage = 1;
+      root._search = e.target.value;
+      renderVehicles(root);
+      const search = $('#vehicleSearch', root);
+      search?.focus();
+      search?.setSelectionRange(root._search.length, root._search.length);
+    };
     $('#addVehicle', root).onclick = () => {
       openModal('차량 등록', `
         <form id="vehicleForm">
@@ -2990,19 +2997,6 @@
     const tbody = $('#vehicleTable tbody', root);
     tbody.querySelectorAll('tr[data-id]').forEach(tr => {
       tr.onclick = (e) => { if (e.target.closest('button')) return; selectVehicle(tr.dataset.id); };
-    });
-
-    // 차량 삭제
-    root.querySelectorAll('.btn-del-vehicle').forEach(btn => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        if (!confirm(`차량 «${btn.dataset.plate}»를 비활성화하시겠습니까?`)) return;
-        const res = await apiFetch(`/vehicles/${btn.dataset.vid}`, { method: 'DELETE' });
-        if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패'); return; }
-        toast(`차량 «${btn.dataset.plate}» 비활성화 완료`);
-        if (selectedVehicleId === Number(btn.dataset.vid)) selectedVehicleId = null;
-        await loadRealData();
-      };
     });
 
     if (selected) bindVehicleDetail(root, selected);
@@ -3094,35 +3088,38 @@
   function renderProfile(root) {
     const me = DATA.me || {};
     const org = DATA.organization || {};
+    const ownerOnly = me.is_org_owner ? '' : 'disabled';
     root.innerHTML = `
       <div class="page-sticky-top">
-      ${pageChromeHtml('profile', { title: '기업 정보', desc: '기업 운영 정보와 관리자 계정 설정' })}
+      ${pageChromeHtml('profile', { title: '기업 정보', desc: '기업 운영 정보와 가입 승인 정책' })}
       </div>
       <div class="page-scroll-main">
       <div class="card">
         <div class="card-bd">
           <div class="tabs" id="profileTabs">
             <button type="button" class="tab active" data-tab="company">기업 정보</button>
-            <button type="button" class="tab" data-tab="account">계정 보안</button>
             <button type="button" class="tab" data-tab="hist">수정 기록</button>
           </div>
           <div class="tab-panel active" data-panel="company">
             <form id="companyForm" class="form-grid">
               <label>기업명</label><input name="name" value="${escapeHtml(org.name || '')}">
-              <label>조직코드</label><input value="${escapeHtml(org.org_code || '')}" disabled>
+              <label>조직코드</label>
+              <div class="org-code-control">
+                <code id="companyOrgCode">${escapeHtml(org.org_code || '—')}</code>
+                <button type="button" class="btn btn-sm" id="regenOrgCode" ${ownerOnly}>재발급</button>
+              </div>
               <label>기사 자동승인</label>
-              <label class="inline-toggle"><input type="checkbox" name="auto_approve_drivers" ${org.auto_approve_drivers ? 'checked' : ''}> 조직코드 가입 즉시 승인</label>
+              <label class="setting-toggle-row">
+                <span>조직코드 가입 즉시 승인</span>
+                <span class="ui-switch"><input type="checkbox" name="auto_approve_drivers" ${org.auto_approve_drivers ? 'checked' : ''}><span class="ui-switch-track"></span></span>
+              </label>
+              <label>관리자 자동승인</label>
+              <label class="setting-toggle-row">
+                <span>관리자 가입 신청 즉시 승인</span>
+                <span class="ui-switch"><input type="checkbox" name="auto_approve_admins" ${org.auto_approve_admins ? 'checked' : ''} ${ownerOnly}><span class="ui-switch-track"></span></span>
+              </label>
             </form>
-          </div>
-          <div class="tab-panel" data-panel="account">
-            <form id="accountForm" class="form-grid">
-              <label>아이디</label><input value="${escapeHtml(me.username || '')}" disabled>
-              <label>관리 등급</label><input value="${me.is_org_owner ? '최상위 관리자' : '일반 관리자'}" disabled>
-              <label>전화번호</label><input type="tel" name="phone" value="${escapeHtml(me.phone || '')}" placeholder="010-0000-0000">
-              <label>현재 비밀번호 *</label><input type="password" name="current_password" required minlength="1">
-              <label>새 비밀번호</label><input type="password" name="new_password" minlength="4" placeholder="변경할 때만 입력">
-              <label>새 비밀번호 확인 *</label><input type="password" name="new_password_confirm" required>
-            </form>
+            ${me.is_org_owner ? '' : '<p class="text-muted-hint">조직코드 재발급과 관리자 자동승인은 최상위 기업관리자만 변경할 수 있습니다.</p>'}
           </div>
           <div class="tab-panel" data-panel="hist">${org._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(org.auditEvents)}</div>
           <div style="margin-top:16px">
@@ -3147,34 +3144,32 @@
         const form = activePanel.querySelector('#companyForm');
         const name = form.querySelector('[name="name"]').value.trim();
         const auto_approve_drivers = form.querySelector('[name="auto_approve_drivers"]').checked;
+        const auto_approve_admins = form.querySelector('[name="auto_approve_admins"]').checked;
         const res = await apiFetch(`/organizations/me/settings`, {
           method: 'PATCH',
-          body: JSON.stringify({ name, auto_approve_drivers }),
+          body: JSON.stringify({ name, auto_approve_drivers, ...(me.is_org_owner ? { auto_approve_admins } : {}) }),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
         const updated = await res.json();
         Object.assign(DATA.organization, updated);
         toast('기업 정보가 저장됐습니다');
         await loadEntityEvents(DATA.organization, 'organization', org.id);
-      } else if (tab === 'account') {
-        const form = activePanel.querySelector('#accountForm');
-        const phone = normalizePhone(form.querySelector('[name="phone"]').value);
-        const current_password = form.querySelector('[name="current_password"]').value;
-        const new_password     = form.querySelector('[name="new_password"]').value;
-        const confirm          = form.querySelector('[name="new_password_confirm"]').value;
-        if (!phone) { toast('전화번호를 입력하세요', 'error'); return; }
-        if (new_password && !current_password) { toast('현재 비밀번호를 입력하세요', 'error'); return; }
-        if (new_password && new_password.length < 4) { toast('새 비밀번호는 4자 이상이어야 합니다', 'error'); return; }
-        if (new_password !== confirm) { toast('새 비밀번호가 일치하지 않습니다', 'error'); return; }
-        const res = await apiFetch(`/auth/me`, {
-          method: 'PATCH',
-          body: JSON.stringify({ phone, current_password: current_password || null, new_password: new_password || null }),
-        });
-        if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '비밀번호 변경 실패', 'error'); return; }
-        DATA.me.phone = phone;
-        toast(new_password ? '계정 정보와 비밀번호가 변경됐습니다' : '계정 정보가 저장됐습니다');
       }
     };
+    $('#regenOrgCode', root)?.addEventListener('click', async () => {
+      if (!confirm('조직코드를 재발급하시겠습니까?\n기존 코드는 즉시 사용할 수 없게 됩니다.')) return;
+      const res = await apiFetch('/organizations/regen-code', { method: 'POST' });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        toast(error.detail || '조직코드 재발급 실패', 'error');
+        return;
+      }
+      const updated = await res.json();
+      org.org_code = updated.org_code;
+      $('#companyOrgCode', root).textContent = updated.org_code;
+      toast('조직코드가 재발급됐습니다');
+      await loadEntityEvents(org, 'organization', org.id);
+    });
     if (org.id && !org._auditLoaded && !org._auditLoading) {
       loadEntityEvents(org, 'organization', org.id);
     }
@@ -6234,10 +6229,10 @@
       drop.innerHTML = '<div class="topbar-dropdown-header">알림</div><div class="topbar-dropdown-empty">새 알림이 없습니다</div>';
       return;
     }
-    const items = entries.map(([driverId, n]) => {
-      const d = DATA.drivers.find(x => x.id === driverId);
-      const name = d ? escapeHtml(d.name) : '기사';
-      return `<button type="button" class="topbar-dropdown-item" onclick="window.open('/chat.html?driver_id=${driverId}','_blank')">💬 ${name}<span class="badge badge-info" style="margin-left:auto">${n}</span></button>`;
+    const items = entries.map(([partnerId, n]) => {
+      const partner = _chatPartnerMap[partnerId] || DATA.drivers.find(x => x.id === partnerId);
+      const name = partner ? escapeHtml(partner.name || partner.username) : '사용자';
+      return `<button type="button" class="topbar-dropdown-item" onclick="window.open('/chat.html?partner_id=${partnerId}','_blank')">💬 ${name}<span class="badge badge-info" style="margin-left:auto">${n}</span></button>`;
     }).join('');
     drop.innerHTML = `<div class="topbar-dropdown-header">새 메시지</div>${items}`;
 
@@ -6262,6 +6257,7 @@
         const partnerId = c.partner?.id;
         if (!partnerId) return;
         _convDriverMap[c.id] = partnerId;
+        _chatPartnerMap[partnerId] = c.partner;
         if ((c.unread_count || 0) > 0) _driverUnread[partnerId] = c.unread_count;
       });
       updateChatNotifUI();
@@ -6276,12 +6272,12 @@
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
-        if (msg.type === 'chat.message' && msg.sender_id !== _currentUserId) {
-          const driverId = _convDriverMap[msg.conversation_id];
-          if (driverId) { _driverUnread[driverId] = (_driverUnread[driverId] || 0) + 1; updateChatNotifUI(); }
+        if (msg.type === 'chat.message' && msg.message?.sender_id !== _currentUserId) {
+          const partnerId = _convDriverMap[msg.conversation_id];
+          if (partnerId) { _driverUnread[partnerId] = (_driverUnread[partnerId] || 0) + 1; updateChatNotifUI(); }
         } else if (msg.type === 'chat.read' && msg.reader_id === _currentUserId) {
-          const driverId = _convDriverMap[msg.conversation_id];
-          if (driverId) { _driverUnread[driverId] = 0; updateChatNotifUI(); }
+          const partnerId = _convDriverMap[msg.conversation_id];
+          if (partnerId) { _driverUnread[partnerId] = 0; updateChatNotifUI(); }
         }
       } catch {}
     };
@@ -6313,10 +6309,10 @@
     $('#modalOverlay').onclick = (e) => { if (e.target === $('#modalOverlay')) closeModal(); };
     // 탑바 버튼 이벤트
     $('#messageBtn').onclick = () => { location.href = '/chat.html'; };
-    $('#settingsBtn').onclick = () => gotoPage('basic', 'profile');
+    $('#settingsBtn').onclick = () => { location.href = '/settings.html'; };
     $('#notifBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('notifDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('notifDropdown'); } };
     $('#userMenuBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('userDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('userDropdown'); } };
-    $('#ddSettings').onclick = () => { _closeAllDropdowns(); gotoPage('basic', 'profile'); };
+    $('#ddSettings').onclick = () => { _closeAllDropdowns(); location.href = '/settings.html'; };
     $('#ddLogout').onclick = () => logout();
     document.addEventListener('click', () => _closeAllDropdowns());
     bindIntakeStopShortcuts();

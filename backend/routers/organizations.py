@@ -348,6 +348,7 @@ async def get_my_organization(
         "name":                 org.name,
         "org_code":             org.org_code,
         "auto_approve_drivers": org.auto_approve_drivers,
+        "auto_approve_admins":  org.auto_approve_admins,
     }
 
 
@@ -370,6 +371,7 @@ async def update_org_settings(
     before = {
         "name": org.name,
         "auto_approve_drivers": org.auto_approve_drivers,
+        "auto_approve_admins": org.auto_approve_admins,
     }
     if "name" in req:
         name = str(req["name"]).strip()
@@ -378,10 +380,15 @@ async def update_org_settings(
         org.name = name
     if "auto_approve_drivers" in req:
         org.auto_approve_drivers = bool(req["auto_approve_drivers"])
+    if "auto_approve_admins" in req:
+        if not current_user.is_org_owner:
+            raise HTTPException(403, "최상위 기업관리자만 관리자 자동승인을 변경할 수 있습니다.")
+        org.auto_approve_admins = bool(req["auto_approve_admins"])
 
     changes = changed_fields(before, {
         "name": org.name,
         "auto_approve_drivers": org.auto_approve_drivers,
+        "auto_approve_admins": org.auto_approve_admins,
     })
     if changes:
         record_entity_event(
@@ -400,6 +407,7 @@ async def update_org_settings(
         "name": org.name,
         "org_code": org.org_code,
         "auto_approve_drivers": org.auto_approve_drivers,
+        "auto_approve_admins": org.auto_approve_admins,
     }
 
 
@@ -408,11 +416,13 @@ async def regen_org_code(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """관리자: 조직코드 재발급"""
+    """최상위 기업관리자: 조직코드 재발급"""
     import random, string
 
     if not current_user.organization_id:
         raise HTTPException(404, "소속 기업이 없습니다.")
+    if not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 기업관리자만 조직코드를 재발급할 수 있습니다.")
     _r = await db.execute(
         select(Organization).where(Organization.id == current_user.organization_id)
     )
@@ -424,7 +434,18 @@ async def regen_org_code(
         if not _o.scalar_one_or_none():
             break
 
+    old_code = org.org_code
     org.org_code = new_code
+    record_entity_event(
+        db,
+        organization_id=org.id,
+        entity_type="organization",
+        entity_id=org.id,
+        actor=current_user,
+        action="org_code_regenerated",
+        summary="기업 조직코드 재발급",
+        changes={"org_code": {"before": old_code, "after": new_code}},
+    )
     await db.commit()
     return {"org_code": org.org_code}
 

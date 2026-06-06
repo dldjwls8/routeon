@@ -96,7 +96,7 @@ routeon/
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
-    ├── settings.html       관리자 설정 (조직코드·계정정보·운영설정)
+    ├── settings.html       관리자 계정 보안·화면 테마 설정
     ├── superadmin.html     슈퍼 관리자 (기업 심사·전역 운영 설정)
     ├── terms.html          이용약관 안내
     ├── privacy.html        개인정보 처리방침 안내
@@ -410,7 +410,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 인증
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `POST /auth/register` | 없음 | 승인된 기업의 조직코드로 기사 또는 일반 관리자 가입 신청. 기사는 기업 설정에 따라 자동 승인 가능하고, 관리자는 항상 승인 대기 |
+| `POST /auth/register` | 없음 | 승인된 기업의 조직코드로 기사 또는 일반 관리자 가입 신청. 역할별 기업 자동승인 설정에 따라 즉시 승인 또는 승인 대기 |
 | `POST /auth/login` | 없음 | 로그인 → JWT |
 | `GET /auth/me` | 로그인 | 내 정보 |
 | `PATCH /auth/me` | 로그인 | 전화번호/비밀번호 변경 |
@@ -432,10 +432,10 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
 | `POST /organizations` | 없음 | 기업 등록 + 관리자 계정 생성 (사업자서류 첨부 필수). 슈퍼관리자 자동 수락 ON이면 즉시 approved |
-| `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 + `auto_approve_drivers` 조회 |
-| `POST /organizations/regen-code` | 관리자 | 조직코드 재발급 |
+| `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 + 기사/관리자 자동승인 설정 조회 |
+| `POST /organizations/regen-code` | 최상위 기업관리자 | 조직코드 재발급 + 기업 수정 기록 저장 |
 | `GET /organizations/lookup?org_code=` | 없음 | 조직코드로 기업명 조회 |
-| `PATCH /organizations/me/settings` | 관리자 | 기업명·운영 설정 변경 `{name?, auto_approve_drivers?}` |
+| `PATCH /organizations/me/settings` | 관리자 | 기업명·기사 자동승인 변경. `auto_approve_admins` 변경은 최상위 기업관리자만 가능 |
 
 ### 슈퍼 관리자 (superadmin)
 | 엔드포인트 | 권한 | 설명 |
@@ -523,33 +523,34 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 채팅
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `GET /chat/partners` | 관리자/기사 | 같은 조직의 채팅 가능 상대 목록. 관리자면 기사, 기사면 관리자만 반환 |
+| `GET /chat/partners` | 관리자/기사 | 같은 조직의 채팅 가능 상대. 관리자는 다른 관리자와 자신에게 연결된 기사, 기사는 자동 매칭 관리자 1명만 반환 |
 | `GET /chat/conversations` | 관리자/기사 | 본인이 참여한 대화방 목록 + unread_count |
-| `POST /chat/conversations` | 관리자/기사 | `{partner_id}`로 같은 조직 admin-driver 대화방 생성 또는 조회 |
+| `POST /chat/conversations` | 관리자/기사 | `{partner_id}`로 같은 조직의 허용된 1:1 대화방 생성 또는 조회 |
 | `GET /chat/conversations/{id}/messages?before_message_id=&limit=50` | 관리자/기사 | 메시지 히스토리. 응답은 항상 과거→현재 시간 오름차순 |
 | `POST /chat/conversations/{id}/messages` | 관리자/기사 | `{content}` 텍스트 메시지 전송. 공백/2,000자 초과 거부 |
 | `POST /chat/conversations/{id}/read` | 관리자/기사 | `{last_read_message_id?}` 기준 읽음 워터마크 갱신 |
 | `WS /ws/chat?token={JWT}` | 관리자/기사 | 사용자 단위 채팅 WebSocket. `chat.ready`, `chat.message`, `chat.read` 이벤트 수신 |
 
 채팅 권한 규칙:
-- 같은 `organization_id` 안의 `admin` ↔ `driver` 조합만 허용한다.
-- `superadmin`, 승인 대기·반려 계정, admin↔admin, driver↔driver 조합은 거부한다.
+- 같은 `organization_id`의 승인된 `admin` ↔ `admin`, `admin` ↔ `driver` 조합을 허용한다.
+- 기사는 기존 대화가 있으면 가장 최근 연결 관리자, 없으면 `is_org_owner=true` 최상위 관리자 우선·가입일 순으로 관리자 한 명과 자동 매칭된다.
+- 일반 관리자는 자신이 지정 관리자인 기사만 파트너 목록에서 볼 수 있으며, 다른 관리자에게 연결된 기사와 새 대화방을 만들 수 없다.
+- `superadmin`, 승인 대기·반려 계정, 자기 자신, driver↔driver 조합은 거부한다.
 - 실시간 전송 실패는 DB 저장을 롤백하지 않는다. 재접속 시 REST 히스토리로 복구한다.
 
 프론트엔드 진입점:
-- 관리자: `/dashboard.html` 기사 카드의 💬 버튼 클릭 → `/chat.html?driver_id=xxx` 새 탭으로 열기
-- 기사: `/driver.html` → 같은 조직 관리자 목록에서 선택, 기본값은 첫 번째 관리자
+- 관리자: 대시보드 상단 메시지 버튼 → `/chat.html`. 직접 상대를 열 때는 `?partner_id={user_id}`를 사용하며 기존 `?driver_id=`도 호환한다.
+- 기사: `/driver.html` → 서버가 반환한 연결 관리자 한 명과 자동으로 대화방을 연다.
 - 로그인 후 `role === "driver"`는 `/driver.html`, `role === "superadmin"`은 `/superadmin.html`, `role === "admin"`은 `/dashboard.html`로 이동한다.
 - `superadmin`은 기업 소속 관리자 계정이 아니라 루트온 운영자 계정이므로 기업 대시보드와 기업-기사 채팅 화면 접근 대상에서 제외한다.
 
-settings.html 구조 (레거시 관리자 설정 진입점):
+settings.html 구조:
 - 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
 - 디자인: 대시보드 CSS 변수 시스템 공유 (다크/라이트 모드, FOUC 방지 스크립트)
-- 섹션 ①: 조직코드 관리 — `GET /organizations/me` 조회, 복사(clipboard/fallback), `POST /organizations/regen-code` 재발급
-- 섹션 ②: 계정 정보 — `GET /auth/me`로 초기값 채움, 전화번호·비밀번호 변경 `PATCH /auth/me`
-- 섹션 ③: 화면 설정 — 🖥 자동 / 🌙 다크 / ☀️ 라이트 세그먼트 선택, `localStorage('theme')` 저장, 즉시 반영
-- 섹션 ④: 운영 설정 — 기사 자동승인 토글 (`PATCH /organizations/me/settings` 호출, DB 반영, 초기값 OFF)
-- 현재 탑바 ⚙ 버튼과 관리자 드롭다운의 `계정 설정`은 통합 대시보드 `기본정보 > 기업 정보`로 이동한다. `settings.html`은 기존 직접 링크 호환용으로 유지한다.
+- 섹션 ①: 계정 정보 — `GET /auth/me`로 초기값 채움, 전화번호·비밀번호 변경 `PATCH /auth/me`
+- 섹션 ②: 화면 설정 — 자동/다크/라이트 세그먼트 선택, `localStorage('theme')` 저장, 즉시 반영
+- 조직코드·기업명·기사/관리자 자동승인은 중복 배치를 피하기 위해 `기본정보 > 기업 정보`에서만 관리한다.
+- 탑바 설정 버튼과 관리자 드롭다운의 `계정 설정`은 `/settings.html`로 이동한다.
 
 통합 대시보드 진입점:
 - 메인 탭 순서: `대시보드` → `운행관제` → `오더관리` → `고객관리` → `일정·통계` → `기본정보`
@@ -561,16 +562,20 @@ settings.html 구조 (레거시 관리자 설정 진입점):
 - `drivers.html`, `vehicles.html`, `stats.html`은 북마크/기존 링크 호환용 리다이렉트 파일만 유지한다.
 - 상단 메인 탭의 세부탭은 hover/focus 드롭다운 방식으로 표시한다. 메인 탭 클릭은 해당 그룹의 첫 세부 페이지로 이동한다.
 - hover 세부 메뉴는 고정 폭을 사용해 오더관리 등 메뉴별 길이 차이가 나지 않도록 유지한다.
-- `기본정보 > 기업 정보`는 기업명·조직코드·기사 자동승인 설정, 현재 관리자 연락처·비밀번호, 기업 수정 기록을 통합한다. 상단 사용자 메뉴에는 별도 `내 프로필` 항목을 두지 않는다.
+- `기본정보 > 기업 정보`는 기업명·조직코드 재발급·기사 자동승인·관리자 자동승인·기업 수정 기록을 제공한다. 조직코드 재발급과 관리자 자동승인은 최상위 기업관리자만 사용할 수 있다.
 - 담당자는 조직별 `is_org_owner=true`인 최상위 관리자와 일반 관리자로 구분한다. 일반 관리자는 가입 페이지에서 조직코드로 신청하며, 최상위 기업관리자가 `기본정보 > 담당자`에서 승인·반려한다.
-- 관리자 신청은 기사 자동승인 설정과 무관하게 항상 승인 대기다. 승인 시 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 권한이 기본 활성화되며, 이후 최상위 관리자만 권한을 수정하거나 담당자를 삭제할 수 있다.
+- 관리자 신청은 `auto_approve_admins=true`이면 즉시 승인되고, 아니면 최상위 기업관리자 승인 대기다. 승인된 일반 관리자는 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 권한이 기본 활성화된다.
+- 기사·차량 목록 행에는 삭제 버튼을 두지 않고 선택 후 우측 상세에서 삭제/비활성화한다. 기사 계정은 관리자 화면에서 직접 추가하지 않고 공개 가입·승인 흐름으로만 생성한다.
+- 기사·차량 검색은 목록 재렌더 뒤 검색창 포커스와 커서 위치를 복원해 연속 입력을 유지한다.
+- 담당자 화면 권한과 기업 자동승인 설정은 공통 슬라이드 토글 UI를 사용한다.
+- 일정 캘린더는 7개 열을 고정 비율로 유지하고 긴 일정 텍스트는 셀 안에서 말줄임 처리한다.
 - 일반 관리자는 `users.permissions`에서 명시적으로 `false`인 메인 탭을 볼 수 없으며 직접 URL 접근 시 첫 허용 탭으로 이동한다. 빈 권한 JSON은 기존 계정 호환을 위해 전체 허용으로 해석한다.
 
 chat.html 구조:
-- 좌측: 채팅 가능 상대 목록 (GET /chat/partners) + unread 배지 + 이름 검색
+- 좌측: 관리자·기사 채팅 가능 상대 목록 (GET /chat/partners) + 역할·unread 배지 + 이름 검색
 - 우측: 메시지창 — 날짜 구분선, 위로 스크롤 시 이전 메시지 페이지네이션
 - WS /ws/chat 연결 + 자동 재연결. 한글 IME 중복 전송 방지(e.isComposing), 줄바꿈 표시(white-space: pre-wrap)
-- dashboard.html에서 채팅 WS 연결 제거 — chat.html에서만 관리
+- 대시보드는 알림용 경량 채팅 WS를 유지하고 실제 대화 송수신 UI는 chat.html에서 관리한다.
 
 dashboard.html 관제 지도:
 - 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 차량 위치 스냅샷 기준으로 지도 마커를 표시한다.
@@ -609,9 +614,9 @@ footer 및 법적 안내 페이지:
 
 dashboard.html 채팅 알림 WS:
 - WS /ws/chat 경량 연결 (수신 전용, 전송 없음) — `connectChatWebSocket()`
-- `chat.message` 수신 시: `sender_id ≠ currentUserId`면 해당 기사 카드 unread 배지 +1
-- `chat.read` 수신 시: `reader_id === currentUserId`면 해당 기사 카드 배지 → 0
-- `convDriverMap` (conversation_id → driver_id) 으로 대화방과 기사 카드를 매핑
+- `chat.message` 수신 시: `message.sender_id ≠ currentUserId`면 해당 상대 unread 배지 +1
+- `chat.read` 수신 시: `reader_id === currentUserId`면 해당 상대 배지 → 0
+- 대화방은 `conversation_id → partner_id`로 매핑해 기사와 관리자 알림을 함께 처리한다.
 - 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
 - 대시보드 탑바의 메시지 버튼은 `/chat.html`로 이동한다. 미읽음 메시지가 있으면 기존 알림 점과 동일하게 메시지 버튼에도 배지를 표시한다.
 - 관리자 웹 세션 가드는 `admin`만 대시보드 접근을 허용한다. `superadmin`은 `/superadmin.html` 전용이다.

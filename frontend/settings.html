@@ -217,29 +217,6 @@
 <div class="main">
   <div class="msg" id="page-message"></div>
 
-  <!-- 조직코드 관리 -->
-  <div class="card" role="region" aria-labelledby="org-head">
-    <div class="card-head">
-      <div>
-        <h2 id="org-head">조직코드 관리</h2>
-        <p>기사 가입에 사용하는 조직코드를 확인하고 재발급합니다.</p>
-      </div>
-    </div>
-    <div class="info-row">
-      <span class="info-label">기업명</span>
-      <span class="info-value" id="org-name">—</span>
-    </div>
-    <div class="info-row" style="align-items:flex-start">
-      <span class="info-label" style="padding-top:8px">조직코드</span>
-      <div class="org-code-row">
-        <span class="org-code" id="org-code-value">—</span>
-        <button class="btn btn-ghost" id="copy-org-code-btn" type="button" disabled>복사</button>
-        <button class="btn btn-danger" id="reissue-org-code-btn" type="button" disabled>재발급</button>
-      </div>
-    </div>
-    <div class="msg" id="org-message"></div>
-  </div>
-
   <!-- 계정 정보 -->
   <div class="card" role="region" aria-labelledby="account-head">
     <div class="card-head">
@@ -302,26 +279,6 @@
     </div>
   </div>
 
-  <!-- 운영 설정 -->
-  <div class="card" role="region" aria-labelledby="ops-head">
-    <div class="card-head">
-      <div>
-        <h2 id="ops-head">운영 설정</h2>
-        <p>운영 관련 옵션을 관리합니다.</p>
-      </div>
-    </div>
-    <div class="toggle-row">
-      <div>
-        <div class="toggle-label">기사 자동승인</div>
-        <div class="toggle-desc">켜면 조직코드로 가입한 기사가 승인 절차 없이 즉시 활성화됩니다.</div>
-      </div>
-      <label class="switch" aria-label="기사 자동승인 토글">
-        <input id="auto-approve-toggle" type="checkbox">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="msg" id="ops-message"></div>
-  </div>
 </div>
 
 <script>
@@ -340,8 +297,6 @@
 
   if (!getToken()) redirectToLogin();
 
-  let currentOrgCode = '';
-
   function requireAdmin(user) {
     if (!user || user.role !== 'admin') {
       showMsg('page-message', '관리자 계정만 설정 페이지에 접근할 수 있습니다.', 'error');
@@ -358,8 +313,6 @@
       const user = await loadCurrentUser();
       if (!requireAdmin(user)) return;
       renderCurrentUser(user);
-      const org = await loadOrganization();
-      renderOrganization(org);
     } catch (e) {
       showMsg('page-message', e.message || '설정 정보를 불러오지 못했습니다.', 'error');
     }
@@ -372,85 +325,15 @@
     return r.json();
   }
 
-  async function loadOrganization() {
-    const r = await fetch(`${API}/organizations/me`, { headers: authHeaders() });
-    if (r.status === 401) { redirectToLogin(); throw new Error('로그인이 필요합니다.'); }
-    if (!r.ok) throw new Error(await parseErrorMessage(r, '조직 정보를 불러오지 못했습니다.'));
-    return r.json();
-  }
-
   function renderCurrentUser(user) {
     document.getElementById('account-username').textContent = user.username || '—';
     document.getElementById('account-phone').textContent = user.phone || '—';
     document.getElementById('phone-input').value = user.phone || '';
   }
 
-  function renderOrganization(org) {
-    currentOrgCode = org.org_code || '';
-    document.getElementById('org-name').textContent = org.name || '—';
-    document.getElementById('org-code-value').textContent = currentOrgCode || '—';
-    document.getElementById('copy-org-code-btn').disabled = !currentOrgCode;
-    document.getElementById('reissue-org-code-btn').disabled = false;
+  function enableAccountForms() {
     document.getElementById('update-phone-btn').disabled = false;
     document.getElementById('update-password-btn').disabled = false;
-    document.getElementById('auto-approve-toggle').checked = !!org.auto_approve_drivers;
-  }
-
-  async function toggleAutoApprove(enabled) {
-    try {
-      const r = await fetch(`${API}/organizations/me/settings`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ auto_approve_drivers: enabled }),
-      });
-      if (r.status === 401) { redirectToLogin(); return; }
-      if (!r.ok) throw new Error(await parseErrorMessage(r, '설정 변경에 실패했습니다.'));
-      showMsg('ops-message', `기사 자동승인이 ${enabled ? '활성화' : '비활성화'}됐습니다.`, 'success');
-    } catch (e) {
-      showMsg('ops-message', e.message || '설정 변경에 실패했습니다.', 'error');
-      document.getElementById('auto-approve-toggle').checked = !enabled;
-    }
-  }
-
-  async function copyOrgCode() {
-    if (!currentOrgCode) { showMsg('org-message', '복사할 조직코드가 없습니다.', 'error'); return; }
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(currentOrgCode);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = currentOrgCode;
-        ta.style.cssText = 'position:fixed;top:-1000px';
-        document.body.appendChild(ta);
-        ta.select();
-        if (!document.execCommand('copy')) throw new Error('copy failed');
-        document.body.removeChild(ta);
-      }
-      showMsg('org-message', `조직코드 [${currentOrgCode}]가 복사됐습니다.`, 'success');
-    } catch (e) {
-      showMsg('org-message', '자동 복사에 실패했습니다. 조직코드를 직접 선택해 복사해주세요.', 'error');
-    }
-  }
-
-  async function reissueOrgCode() {
-    if (!confirm('조직코드를 새로 발급하시겠습니까?\n기존 코드로는 더 이상 가입할 수 없으며 되돌릴 수 없습니다.')) return;
-    const btn = document.getElementById('reissue-org-code-btn');
-    setLoading(btn, true);
-    showMsg('org-message', '조직코드를 재발급하는 중입니다.', 'info');
-    try {
-      const r = await fetch(`${API}/organizations/regen-code`, { method: 'POST', headers: authHeaders() });
-      if (r.status === 401) { redirectToLogin(); return; }
-      if (!r.ok) throw new Error(await parseErrorMessage(r, '조직코드 재발급에 실패했습니다.'));
-      const data = await r.json();
-      currentOrgCode = data.org_code || '';
-      document.getElementById('org-code-value').textContent = currentOrgCode || '—';
-      document.getElementById('copy-org-code-btn').disabled = !currentOrgCode;
-      showMsg('org-message', `새 조직코드 [${currentOrgCode}]가 발급됐습니다.`, 'success');
-    } catch (e) {
-      showMsg('org-message', e.message || '조직코드 재발급에 실패했습니다.', 'error');
-    } finally {
-      setLoading(btn, false);
-    }
   }
 
   async function updatePhone(e) {
@@ -551,11 +434,9 @@
   });
   initThemeSeg();
 
-  document.getElementById('copy-org-code-btn').addEventListener('click', copyOrgCode);
-  document.getElementById('reissue-org-code-btn').addEventListener('click', reissueOrgCode);
   document.getElementById('phone-form').addEventListener('submit', updatePhone);
   document.getElementById('password-form').addEventListener('submit', updatePassword);
-  document.getElementById('auto-approve-toggle').addEventListener('change', e => toggleAutoApprove(e.target.checked));
+  enableAccountForms();
   document.addEventListener('DOMContentLoaded', initPage);
 </script>
 </body>

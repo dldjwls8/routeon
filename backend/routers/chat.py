@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from database import get_db
 from models import (
     User, Conversation, Message,
-    UserRole,
+    AccountStatus, UserRole,
 )
 from auth import get_current_user, get_current_user_from_token
 from core.managers import chat_manager
@@ -43,9 +43,9 @@ def _conversation_schema(
     last_message: "Message | None" = None,
 ) -> dict:
     partner_id = conversation.driver_id if current_user.id == conversation.admin_id else conversation.admin_id
-    partner_role = UserRole.driver if current_user.id == conversation.admin_id else UserRole.admin
     partner_attr = "driver" if current_user.id == conversation.admin_id else "admin"
     partner = conversation.__dict__.get(partner_attr)
+    partner_role = getattr(partner, "role", UserRole.admin)
     return {
         "id": str(conversation.id),
         "organization_id": conversation.organization_id,
@@ -90,10 +90,42 @@ async def _assert_chat_pair(current_user: User, partner: User) -> None:
         raise HTTPException(403, "채팅은 관리자와 기사만 사용할 수 있습니다.")
     if partner.role not in (UserRole.admin, UserRole.driver):
         raise HTTPException(403, "채팅 가능한 상대가 아닙니다.")
-    if current_user.role == partner.role:
-        raise HTTPException(403, "관리자와 기사 간 1:1 채팅만 가능합니다.")
+    if current_user.id == partner.id:
+        raise HTTPException(400, "자기 자신과는 채팅할 수 없습니다.")
+    if current_user.role == UserRole.driver and partner.role != UserRole.admin:
+        raise HTTPException(403, "기사는 연결된 관리자와만 채팅할 수 있습니다.")
+    if current_user.role == partner.role == UserRole.driver:
+        raise HTTPException(403, "기사 간 채팅은 지원하지 않습니다.")
     if not current_user.organization_id or current_user.organization_id != partner.organization_id:
         raise HTTPException(403, "같은 조직 사용자와만 채팅할 수 있습니다.")
+    if partner.account_status != AccountStatus.approved:
+        raise HTTPException(403, "승인된 사용자와만 채팅할 수 있습니다.")
+
+
+async def _designated_admin(db: AsyncSession, driver: User) -> User | None:
+    existing = await db.execute(
+        select(User)
+        .join(Conversation, Conversation.admin_id == User.id)
+        .where(
+            Conversation.organization_id == driver.organization_id,
+            Conversation.driver_id == driver.id,
+            User.role == UserRole.admin,
+            User.account_status == AccountStatus.approved,
+        )
+        .order_by(Conversation.updated_at.desc())
+        .limit(1)
+    )
+    admin = existing.scalar_one_or_none()
+    if admin:
+        return admin
+    result = await db.execute(
+        select(User).where(
+            User.organization_id == driver.organization_id,
+            User.role == UserRole.admin,
+            User.account_status == AccountStatus.approved,
+        ).order_by(User.is_org_owner.desc(), User.created_at.asc(), User.id.asc()).limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def _get_accessible_conversation(
@@ -126,8 +158,21 @@ async def _get_or_create_conversation(
     partner: User,
 ) -> Conversation:
     await _assert_chat_pair(current_user, partner)
-    admin = current_user if current_user.role == UserRole.admin else partner
-    driver = current_user if current_user.role == UserRole.driver else partner
+    if current_user.role == UserRole.driver:
+        designated = await _designated_admin(db, current_user)
+        if not designated or designated.id != partner.id:
+            raise HTTPException(403, "현재 연결 가능한 관리자와만 채팅할 수 있습니다.")
+    elif partner.role == UserRole.driver:
+        designated = await _designated_admin(db, partner)
+        if designated and designated.id != current_user.id:
+            raise HTTPException(409, "해당 기사는 다른 관리자와 연결되어 있습니다.")
+
+    if current_user.role == UserRole.admin and partner.role == UserRole.admin:
+        first, second = sorted((current_user, partner), key=lambda user: str(user.id))
+        admin, driver = first, second
+    else:
+        admin = current_user if current_user.role == UserRole.admin else partner
+        driver = current_user if current_user.role == UserRole.driver else partner
 
     _r = await db.execute(
         select(Conversation).where(
@@ -199,21 +244,31 @@ async def list_chat_partners(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role == UserRole.admin:
-        partner_role = UserRole.driver
+        _r = await db.execute(
+            select(User).where(
+                User.organization_id == current_user.organization_id,
+                User.account_status == AccountStatus.approved,
+                User.role.in_((UserRole.admin, UserRole.driver)),
+                User.id != current_user.id,
+            ).order_by(User.role.asc(), User.is_org_owner.desc(), User.created_at.asc())
+        )
+        candidates = _r.scalars().all()
+        users = []
+        for user in candidates:
+            if user.role == UserRole.admin:
+                users.append(user)
+                continue
+            designated = await _designated_admin(db, user)
+            if designated and designated.id == current_user.id:
+                users.append(user)
     elif current_user.role == UserRole.driver:
-        partner_role = UserRole.admin
+        admin = await _designated_admin(db, current_user)
+        users = [admin] if admin else []
     else:
         raise HTTPException(403, "채팅은 관리자와 기사만 사용할 수 있습니다.")
-
-    _r = await db.execute(
-        select(User).where(
-            User.organization_id == current_user.organization_id,
-            User.role == partner_role,
-        ).order_by(User.created_at.asc())
-    )
     return [
-        {"id": str(user.id), "username": user.username, "role": user.role.value}
-        for user in _r.scalars().all()
+        {"id": str(user.id), "username": user.username, "name": user.name, "role": user.role.value}
+        for user in users
     ]
 
 
@@ -273,8 +328,8 @@ async def create_or_get_chat_conversation(
 ):
     partner = await _get_user_by_id(db, req.partner_id)
     conversation = await _get_or_create_conversation(db, current_user, partner)
-    conversation.admin = current_user if current_user.role == UserRole.admin else partner
-    conversation.driver = current_user if current_user.role == UserRole.driver else partner
+    conversation.admin = current_user if conversation.admin_id == current_user.id else partner
+    conversation.driver = current_user if conversation.driver_id == current_user.id else partner
     unread = await _count_unread_messages(db, conversation, current_user)
     _r2 = await db.execute(
         select(Message)

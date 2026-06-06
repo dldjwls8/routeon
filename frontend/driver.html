@@ -124,7 +124,7 @@
         const button = document.createElement('button');
         button.className = 'partner';
         button.id = `partner-${partner.id}`;
-        button.innerHTML = `<strong>${escapeHtml(partner.username)}</strong><br><small>관리자</small>`;
+        button.innerHTML = `<strong>${escapeHtml(partner.name || partner.username)}</strong><br><small>연결 관리자</small>`;
         button.onclick = () => openConversation(partner.id);
         box.appendChild(button);
       });
@@ -135,7 +135,7 @@
       document.querySelectorAll('.partner').forEach(el => el.classList.remove('active'));
       document.getElementById(`partner-${partnerId}`)?.classList.add('active');
       const partner = partners.find(p => p.id === partnerId);
-      document.getElementById('conversation-title').textContent = partner ? `${partner.username} 관리자` : '대화';
+      document.getElementById('conversation-title').textContent = partner ? `${partner.name || partner.username} 관리자` : '대화';
       const res = await fetch(`${API}/chat/conversations`, {
         method: 'POST',
         headers: authHeaders(),
