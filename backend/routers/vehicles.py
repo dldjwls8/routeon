@@ -13,6 +13,7 @@ from models import (
     RestStopType, UserRole,
 )
 from auth import require_admin
+from services.entity_events import changed_fields, record_entity_event
 
 router = APIRouter()
 
@@ -40,7 +41,18 @@ async def get_vehicles(db: AsyncSession = Depends(get_db),
 async def create_vehicle(req: VehicleCreate, db: AsyncSession = Depends(get_db),
                    current_user: User = Depends(require_admin)):
     v = Vehicle(**req.model_dump(), organization_id=current_user.organization_id)
-    db.add(v); await db.commit(); await db.refresh(v)
+    db.add(v)
+    await db.flush()
+    record_entity_event(
+        db,
+        organization_id=current_user.organization_id,
+        entity_type="vehicle",
+        entity_id=v.id,
+        actor=current_user,
+        action="created",
+        summary=f"차량 '{v.plate_number}' 등록",
+    )
+    await db.commit(); await db.refresh(v)
     return await _vehicle_schema(v, db)
 
 class VehicleUpdate(BaseModel):
@@ -63,6 +75,19 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
     v = _r.scalar_one_or_none()
     if not v:
         raise HTTPException(404, "차량을 찾을 수 없습니다.")
+    old_driver_id = next(iter((await db.execute(
+        select(User.id).where(
+            User.vehicle_id == vehicle_id,
+            User.organization_id == current_user.organization_id,
+        ).limit(1)
+    )).scalars()), None)
+    before = {
+        "vehicle_type": v.vehicle_type,
+        "weight_kg": v.weight_kg,
+        "height_m": v.height_m,
+        "status": v.status,
+        "driver_id": str(old_driver_id) if old_driver_id else None,
+    }
     if req.vehicle_type is not None:
         v.vehicle_type = req.vehicle_type
     if req.weight_kg is not None:
@@ -94,6 +119,25 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
             if not new_d:
                 raise HTTPException(404, "같은 조직의 기사를 찾을 수 없습니다.")
             new_d.vehicle_id = vehicle_id
+    after = {
+        "vehicle_type": v.vehicle_type,
+        "weight_kg": v.weight_kg,
+        "height_m": v.height_m,
+        "status": v.status,
+        "driver_id": req.driver_id if "driver_id" in req.model_fields_set else before["driver_id"],
+    }
+    changes = changed_fields(before, after)
+    if changes:
+        record_entity_event(
+            db,
+            organization_id=current_user.organization_id,
+            entity_type="vehicle",
+            entity_id=v.id,
+            actor=current_user,
+            action="updated",
+            summary=f"차량 '{v.plate_number}' 정보 수정",
+            changes=changes,
+        )
     await db.commit()
     await db.refresh(v)
     return await _vehicle_schema(v, db)

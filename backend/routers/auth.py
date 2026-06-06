@@ -18,6 +18,9 @@ from auth import (
     get_current_user, require_admin,
 )
 from core.utils import normalize_phone
+from services.entity_events import changed_fields, record_entity_event
+
+ADMIN_PERMISSION_KEYS = {"dashboard", "control", "dispatch", "customers", "schedule", "basic"}
 
 router = APIRouter()
 
@@ -64,8 +67,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     - role=driver  → pending (관리자 승인 필요)
     - role=admin   → admin 즉시 (같은 기업 관리자 추가)
     """
-    if req.role not in ("driver", "admin"):
-        raise HTTPException(400, "role은 'driver' 또는 'admin'이어야 합니다.")
+    if req.role != "driver":
+        raise HTTPException(403, "담당자 계정은 최상위 관리자가 담당자 화면에서 추가해야 합니다.")
     if not req.phone:
         raise HTTPException(400, "전화번호는 필수입니다.")
     if not req.org_code:
@@ -84,9 +87,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if _r.scalar_one_or_none():
         raise HTTPException(409, f"이미 존재하는 아이디입니다: {req.username}")
 
-    if req.role == "admin":
-        actual_role = UserRole.admin
-    elif org.auto_approve_drivers:
+    if org.auto_approve_drivers:
         actual_role = UserRole.driver
     else:
         actual_role = UserRole.pending
@@ -113,6 +114,61 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     }
 
 
+class AdminCreateRequest(BaseModel):
+    username: str
+    password: str
+    phone: str
+    name: str
+
+
+@router.post("/users/admin", status_code=201)
+async def create_admin(
+    req: AdminCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    if not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 관리자만 담당자를 추가할 수 있습니다.")
+    if len(req.password) < 4:
+        raise HTTPException(400, "비밀번호는 4자 이상이어야 합니다.")
+    exists = await db.execute(select(User).where(User.username == req.username.strip()))
+    if exists.scalar_one_or_none():
+        raise HTTPException(409, f"이미 존재하는 아이디입니다: {req.username}")
+    user = User(
+        username=req.username.strip(),
+        password_hash=hash_password(req.password),
+        role=UserRole.admin,
+        name=req.name.strip(),
+        phone=normalize_phone(req.phone),
+        organization_id=current_user.organization_id,
+        is_org_owner=False,
+        permissions={key: True for key in sorted(ADMIN_PERMISSION_KEYS)},
+    )
+    db.add(user)
+    await db.flush()
+    record_entity_event(
+        db,
+        organization_id=current_user.organization_id,
+        entity_type="staff",
+        entity_id=user.id,
+        actor=current_user,
+        action="created",
+        summary=f"담당자 '{user.name or user.username}' 추가",
+    )
+    await db.commit()
+    await db.refresh(user)
+    return {
+        "id": str(user.id),
+        "username": user.username,
+        "name": user.name,
+        "phone": user.phone,
+        "role": user.role,
+        "is_org_owner": user.is_org_owner,
+        "permissions": user.permissions,
+        "created_at": user.created_at.isoformat(),
+    }
+
+
 @router.post("/auth/approve/{user_id}")
 async def approve_driver(
     user_id: str,
@@ -121,7 +177,10 @@ async def approve_driver(
 ):
     """관리자: pending 기사를 승인하여 driver로 변경 (같은 기업만)"""
     import uuid as uuid_lib
-    _r = await db.execute(select(User).where(User.id == uuid_lib.UUID(user_id)))
+    _r = await db.execute(select(User).where(
+        User.id == uuid_lib.UUID(user_id),
+        User.organization_id == current_user.organization_id,
+    ))
     user = _r.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
@@ -194,6 +253,8 @@ async def me(
         "role":     current_user.role,
         "phone":    current_user.phone,
         "org_code": org_code,
+        "is_org_owner": current_user.is_org_owner,
+        "permissions": current_user.permissions or {},
     }
 
 
@@ -214,6 +275,8 @@ async def update_me(
     if not req.phone and not req.new_password:
         raise HTTPException(400, "변경할 정보를 입력해주세요.")
 
+    before_phone = current_user.phone
+    password_changed = False
     # 비밀번호 변경
     if req.new_password:
         if not req.current_password:
@@ -223,11 +286,28 @@ async def update_me(
         if len(req.new_password) < 4:
             raise HTTPException(400, "새 비밀번호는 4자 이상이어야 합니다.")
         current_user.password_hash = hash_password(req.new_password)
+        password_changed = True
 
     # 전화번호 변경
     if req.phone:
         current_user.phone = normalize_phone(req.phone)
 
+    changes = {}
+    if before_phone != current_user.phone:
+        changes["phone"] = {"before": before_phone, "after": current_user.phone}
+    if password_changed:
+        changes["password"] = {"before": None, "after": "changed"}
+    if changes and current_user.organization_id:
+        record_entity_event(
+            db,
+            organization_id=current_user.organization_id,
+            entity_type="staff" if current_user.role == UserRole.admin else "driver",
+            entity_id=current_user.id,
+            actor=current_user,
+            action="updated",
+            summary="관리자 계정 정보 수정" if current_user.role == UserRole.admin else "기사 계정 정보 수정",
+            changes=changes,
+        )
     await db.commit()
     await db.refresh(current_user)
 
@@ -266,6 +346,8 @@ async def get_users(
             "vehicle_id":    u.vehicle_id,
             "driver_status": u.driver_status,
             "created_at":    u.created_at.isoformat(),
+            "is_org_owner":  u.is_org_owner,
+            "permissions":   u.permissions or {},
         }
         for u in users
     ]
@@ -276,6 +358,7 @@ class UserUpdate(BaseModel):
     phone:         Optional[str] = None
     driver_status: Optional[str] = None
     vehicle_id:    Optional[int] = None
+    permissions:   Optional[dict[str, bool]] = None
 
 
 @router.patch("/users/{user_id}")
@@ -287,10 +370,32 @@ async def update_user(
 ):
     """관리자: 기사 정보 수정 (상태, 배정 차량 등)"""
     import uuid as uuid_lib
-    _r = await db.execute(select(User).where(User.id == uuid_lib.UUID(user_id)))
+    _r = await db.execute(select(User).where(
+        User.id == uuid_lib.UUID(user_id),
+        User.organization_id == current_user.organization_id,
+    ))
     user = _r.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
+    before = {
+        "name": user.name,
+        "phone": user.phone,
+        "driver_status": user.driver_status,
+        "vehicle_id": user.vehicle_id,
+        "permissions": user.permissions or {},
+    }
+    if req.permissions is not None:
+        if not current_user.is_org_owner:
+            raise HTTPException(403, "최상위 관리자만 담당자 권한을 수정할 수 있습니다.")
+        if user.role != UserRole.admin or user.is_org_owner:
+            raise HTTPException(400, "최상위 관리자 권한은 변경할 수 없습니다.")
+        unknown = set(req.permissions) - ADMIN_PERMISSION_KEYS
+        if unknown:
+            raise HTTPException(400, f"지원하지 않는 권한: {', '.join(sorted(unknown))}")
+        user.permissions = {
+            key: bool(req.permissions.get(key, False))
+            for key in sorted(ADMIN_PERMISSION_KEYS)
+        }
     if req.name is not None:
         user.name = req.name
     if req.phone is not None:
@@ -310,6 +415,25 @@ async def update_user(
             for dup in _dup.scalars().all():
                 dup.vehicle_id = None
         user.vehicle_id = req.vehicle_id
+    after = {
+        "name": user.name,
+        "phone": user.phone,
+        "driver_status": user.driver_status,
+        "vehicle_id": user.vehicle_id,
+        "permissions": user.permissions or {},
+    }
+    changes = changed_fields(before, after)
+    if changes:
+        record_entity_event(
+            db,
+            organization_id=current_user.organization_id,
+            entity_type="staff" if user.role == UserRole.admin else "driver",
+            entity_id=user.id,
+            actor=current_user,
+            action="updated",
+            summary=f"{'담당자' if user.role == UserRole.admin else '기사'} '{user.name or user.username}' 정보 수정",
+            changes=changes,
+        )
     await db.commit()
     await db.refresh(user)
     return {
@@ -317,6 +441,7 @@ async def update_user(
         "name":          user.name,
         "driver_status": user.driver_status,
         "vehicle_id":    user.vehicle_id,
+        "permissions":   user.permissions or {},
     }
 
 
@@ -334,8 +459,21 @@ async def delete_user(
         raise HTTPException(404, "유저를 찾을 수 없습니다.")
     if str(user.id) == str(current_user.id):
         raise HTTPException(400, "자기 자신은 삭제할 수 없습니다.")
+    if user.is_org_owner:
+        raise HTTPException(400, "최상위 관리자 계정은 삭제할 수 없습니다.")
+    if user.role == UserRole.admin and not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 관리자만 담당자를 삭제할 수 있습니다.")
 
     uid = user.id
+    record_entity_event(
+        db,
+        organization_id=current_user.organization_id,
+        entity_type="staff" if user.role == UserRole.admin else "driver",
+        entity_id=user.id,
+        actor=current_user,
+        action="deleted",
+        summary=f"{'담당자' if user.role == UserRole.admin else '기사'} '{user.name or user.username}' 삭제",
+    )
 
     # 1. 메시지 삭제 (sender_id = uid)
     await db.execute(delete(Message).where(Message.sender_id == uid))

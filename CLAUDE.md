@@ -68,6 +68,7 @@ routeon/
 │   │   └── trip.py                 Trip/Delivery ORM → API 응답 변환
 │   ├── uploads/            기업 등록 서류 업로드 저장소
 │   ├── services/
+│   │   ├── entity_events.py       고객·기사·차량·담당자·기업 감사 기록 helper
 │   │   ├── trip_service.py         운행 생성·상태·재배정·진행 유스케이스
 │   │   ├── location_service.py     GPS 저장·도착 판정·ETA·위치 알림
 │   │   ├── kakao_mobility.py      카카오 모빌리티 API + 경로행렬 캐시 + find_best_rest_stop
@@ -151,6 +152,7 @@ routeon/
 - `backend/routers/`: 요청 DTO 수신, 인증·권한, 엔티티 조회, 서비스 호출, 응답 반환을 담당한다. 여러 테이블 상태 변경·Redis·이벤트·WebSocket 알림이 결합된 유스케이스는 `services/`에 둔다.
 - `backend/services/trip_service.py`: 운행 생성, 완료·취소, 재배정, waypoint 진행 기록, 차량 마지막 위치 고정을 담당한다.
 - `backend/services/location_service.py`: 기사 GPS 저장, 운행 차량 위치 갱신, 배송 도착 판정, ETA 계산, 관리자 위치 알림을 담당한다.
+- `backend/services/entity_events.py`: 관리 마스터의 생성·수정 변경 필드 계산과 `entity_events` 감사 기록 생성을 담당한다.
 - `backend/serializers/`: ORM 엔티티의 API 응답 변환을 담당한다. `schemas.py` 입력 DTO에 ORM 모델 의존을 추가하지 않는다.
 - `frontend/api-client.js`: 관리자 대시보드의 API/WS 주소, 토큰, 인증 헤더와 JSON 요청 기본값을 담당한다. `dashboard.js`에서 직접 `fetch()`나 API 호스트를 조립하지 않는다.
 - 분리 작업 후에는 `python -m compileall -q /app`, `python -m pyflakes /app`, `node --check frontend/api-client.js`, `node --check frontend/dashboard.js`, `/openapi.json`, `/auth/login`, `/vehicles`, `/deliveries`, `/trips`, `/stats/summary` smoke를 확인한다.
@@ -399,7 +401,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 인증
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `POST /auth/register` | 없음 | 기사 가입 (조직코드 필수, 기업 설정에 따라 pending 또는 driver 처리) |
+| `POST /auth/register` | 없음 | 기사 가입 전용 (조직코드 필수, 기업 설정에 따라 pending 또는 driver 처리). `role=admin` 요청은 거부 |
 | `POST /auth/login` | 없음 | 로그인 → JWT |
 | `GET /auth/me` | 로그인 | 내 정보 |
 | `PATCH /auth/me` | 로그인 | 전화번호/비밀번호 변경 |
@@ -410,7 +412,9 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
 | `GET /users?role=driver` | 관리자 | 같은 기업 유저 목록 |
-| `DELETE /users/{id}` | 관리자 | 유저 삭제 |
+| `POST /users/admin` | 최상위 관리자 | 같은 기업 일반 담당자 계정 추가 |
+| `PATCH /users/{id}` | 관리자 | 기사 정보 수정. 담당자 `permissions` 수정은 최상위 관리자만 가능 |
+| `DELETE /users/{id}` | 관리자 | 같은 조직 유저 삭제. 담당자 삭제는 최상위 관리자만 가능하며 최상위 관리자 삭제는 거부 |
 | `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 연결 기사(`driver_id`, `driver_name`)와 차량 위치 스냅샷 `last_gps` 포함 |
 | `POST /vehicles` | 관리자 | 같은 조직 차량 등록 (`organization_id` 자동 지정) |
 | `DELETE /vehicles/{id}` | 관리자 | 같은 조직 차량 비활성화 |
@@ -422,7 +426,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `GET /organizations/me` | 관리자 | 내 기업 정보 + 조직코드 + `auto_approve_drivers` 조회 |
 | `POST /organizations/regen-code` | 관리자 | 조직코드 재발급 |
 | `GET /organizations/lookup?org_code=` | 없음 | 조직코드로 기업명 조회 |
-| `PATCH /organizations/me/settings` | 관리자 | 운영 설정 변경 `{auto_approve_drivers: bool}` |
+| `PATCH /organizations/me/settings` | 관리자 | 기업명·운영 설정 변경 `{name?, auto_approve_drivers?}` |
 
 ### 슈퍼 관리자 (superadmin)
 | 엔드포인트 | 권한 | 설명 |
@@ -481,14 +485,16 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /customers` | 관리자 | 거래처 등록 `{name, contact?, phone?, address?, lat?, lon?, memo?, temporary, valid_date?}` |
 | `PATCH /customers/{id}` | 관리자 | 거래처 수정. `lat`/`lon` 명시 전달 시 `null`도 반영 |
 | `DELETE /customers/{id}` | 관리자 | 거래처 삭제 |
+| `GET /entity-events?entity_type=&entity_id=` | 관리자 | 같은 조직의 고객·기사·차량·담당자·기업 수정 기록 최신순 조회 |
 | `WS /ws/location` | 로그인 | 실시간 위치 + 재경로 알림 WebSocket. 관리자→GPS 수신, 기사→replan_requested 수신 |
 
 ### 사용자/차량
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
 | `GET /users?role=` | 관리자 | 같은 조직 사용자 목록. `role=driver/admin/pending` 필터 지원 |
-| `PATCH /users/{id}` | 관리자 | 기사/관리자 정보 수정. 기사 상태·배정 차량 변경 포함 |
-| `DELETE /users/{id}` | 관리자 | 같은 조직 사용자 삭제. 본인 삭제 불가 |
+| `POST /users/admin` | 최상위 관리자 | 일반 담당자 추가. 기본 화면 권한 전체 허용 |
+| `PATCH /users/{id}` | 관리자 | 기사 상태·배정 차량 변경. 담당자 화면 권한은 최상위 관리자만 수정 |
+| `DELETE /users/{id}` | 관리자 | 같은 조직 사용자 삭제. 본인·최상위 관리자 삭제 불가, 담당자 삭제는 최상위 관리자만 가능 |
 | `GET /vehicles` | 관리자 | 같은 조직 활성 차량 목록. 차량 위치 스냅샷 `last_gps`, `driver_id`, `driver_name` 포함 |
 | `POST /vehicles` | 관리자 | 차량 등록 |
 | `PATCH /vehicles/{id}` | 관리자 | 차량 제원·상태·배정 기사 수정 |
@@ -528,14 +534,14 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 - 로그인 후 `role === "driver"`는 `/driver.html`, `role === "superadmin"`은 `/superadmin.html`, `role === "admin"`은 `/dashboard.html`로 이동한다.
 - `superadmin`은 기업 소속 관리자 계정이 아니라 루트온 운영자 계정이므로 기업 대시보드와 기업-기사 채팅 화면 접근 대상에서 제외한다.
 
-settings.html 구조 (관리자 전용):
+settings.html 구조 (레거시 관리자 설정 진입점):
 - 인증 가드: 토큰 없음 → `/login.html`, `role !== 'admin'` → 리다이렉트
 - 디자인: 대시보드 CSS 변수 시스템 공유 (다크/라이트 모드, FOUC 방지 스크립트)
 - 섹션 ①: 조직코드 관리 — `GET /organizations/me` 조회, 복사(clipboard/fallback), `POST /organizations/regen-code` 재발급
 - 섹션 ②: 계정 정보 — `GET /auth/me`로 초기값 채움, 전화번호·비밀번호 변경 `PATCH /auth/me`
 - 섹션 ③: 화면 설정 — 🖥 자동 / 🌙 다크 / ☀️ 라이트 세그먼트 선택, `localStorage('theme')` 저장, 즉시 반영
 - 섹션 ④: 운영 설정 — 기사 자동승인 토글 (`PATCH /organizations/me/settings` 호출, DB 반영, 초기값 OFF)
-- 탑바 ⚙ 버튼 또는 관리자 드롭다운 → `/settings.html` 이동
+- 현재 탑바 ⚙ 버튼과 관리자 드롭다운의 `계정 설정`은 통합 대시보드 `기본정보 > 기업 정보`로 이동한다. `settings.html`은 기존 직접 링크 호환용으로 유지한다.
 
 통합 대시보드 진입점:
 - 메인 탭 순서: `대시보드` → `운행관제` → `오더관리` → `고객관리` → `일정·통계` → `기본정보`
@@ -546,6 +552,10 @@ settings.html 구조 (관리자 전용):
 - 운행 통계: `/dashboard.html?main=schedule&page=trip-stats`
 - `drivers.html`, `vehicles.html`, `stats.html`은 북마크/기존 링크 호환용 리다이렉트 파일만 유지한다.
 - 상단 메인 탭의 세부탭은 hover/focus 드롭다운 방식으로 표시한다. 메인 탭 클릭은 해당 그룹의 첫 세부 페이지로 이동한다.
+- hover 세부 메뉴는 고정 폭을 사용해 오더관리 등 메뉴별 길이 차이가 나지 않도록 유지한다.
+- `기본정보 > 기업 정보`는 기업명·조직코드·기사 자동승인 설정, 현재 관리자 연락처·비밀번호, 기업 수정 기록을 통합한다. 상단 사용자 메뉴에는 별도 `내 프로필` 항목을 두지 않는다.
+- 담당자는 조직별 `is_org_owner=true`인 최상위 관리자와 일반 관리자로 구분한다. 최상위 관리자만 일반 담당자를 추가하고 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 화면 접근 권한을 수정하거나 담당자를 삭제할 수 있다.
+- 일반 관리자는 `users.permissions`에서 명시적으로 `false`인 메인 탭을 볼 수 없으며 직접 URL 접근 시 첫 허용 탭으로 이동한다. 빈 권한 JSON은 기존 계정 호환을 위해 전체 허용으로 해석한다.
 
 chat.html 구조:
 - 좌측: 채팅 가능 상대 목록 (GET /chat/partners) + unread 배지 + 이름 검색
@@ -557,6 +567,7 @@ dashboard.html 관제 지도:
 - 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 차량 위치 스냅샷 기준으로 지도 마커를 표시한다.
 - `/ws/location` 수신은 기사 실시간 위치 이벤트다. 진행 중 운행 차량만 화면 좌표와 서버 `vehicles.last_lat/last_lon`을 갱신하며, 운행 완료/취소 후 차량 스냅샷은 더 이상 기사 GPS를 따라가지 않는다.
 - 대시보드 요약 지도와 운행관제 지도는 사용자 줌/드래그를 막고 고정 배율로 표시한다. 대시보드는 Kakao level 13, 운행관제는 level 12 기준이며 마커 갱신 시 자동 `setBounds()`로 배율을 변경하지 않는다.
+- 운행관제는 좌측 정사각형 지도, 우측 확대된 요약·차량 위치 패널을 한 viewport에 표시한다. 차량 행 선택 시 선택 마커를 확대하고 나머지 마커를 반투명 처리하며 선택 좌표로 중심만 이동한다.
 - 대시보드 오더 요약 카드는 상태 필터별 최대 5건만 표시하며, 전체 목록은 `오더관리 > 오더 목록` 페이지에서 페이지네이션으로 조회한다.
 
 dashboard.html 오더·배차 UI:
@@ -566,6 +577,7 @@ dashboard.html 오더·배차 UI:
 - 접수창 상차 블록에도 화물 종류/규격 입력을 제공한다. 하차 화물/규격이 있으면 하차 값이 우선이고, 없으면 상차 화물/규격을 오더의 `cargo_type`/`cargo_size`로 사용한다.
 - 접수창 화주 선택은 고객 마스터가 비어 있어도 `등록된 화주 없음` placeholder와 별도 `+ 임시 화주 추가` 버튼을 표시한다. 임시 화주 생성 후에는 select 옵션과 연락처 입력값을 즉시 갱신한다.
 - `오더관리 > 오더목록`은 행 클릭을 상세 조회, 체크박스를 다중 선택으로 사용한다. 현재 페이지 선택/해제와 선택 해제 버튼을 제공하며, 선택한 `접수` 상태 오더만 `오더관리 > 배차관리`로 전달한다.
+- 오더목록 행에는 별도 수정 버튼을 두지 않는다. 행을 선택한 뒤 우측 상세 상단 `수정` 버튼으로 수정 모달을 연다.
 - 오더 목록 컬럼 순서는 `상태`, `접수 시간`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `시간창`, `오더번호` 순서를 기본으로 한다. 오더번호는 `RO-YYMMDD-XXXXXX` 표시 형식을 사용하고 상세 화면에서 원본 UUID도 확인할 수 있다.
 - 오더 상세의 기록 탭 명칭은 `처리 기록`이다. `GET /deliveries/{id}/events`로 서버의 `order_events`를 불러오며, 오더 접수/수정/취소와 기사 앱 운행 시작·상차·하차·취소 요청/처리 이벤트를 표시한다.
 - 오더 수정 모달은 현재 상태 기준 가능한 상태만 표시한다. `접수`는 `접수/운행중/취소`, `운행중`은 `운행중/완료/취소`만 선택 가능하며 완료·취소 오더는 조회 전용이다.
@@ -576,9 +588,10 @@ dashboard.html 오더·배차 UI:
 - 배차 실행 전 프론트에서도 선택 차량보다 큰 톤수 규격 오더를 감지해 요청을 중단한다. 최종 방어는 서버 `/trips/auto-dispatch`의 차량 적재 검증이다.
 
 dashboard.html 고객관리 UI:
-- `고객관리 > 고객 관리`의 `+ 추가`/`수정` 모달 주소칸은 `bindPlaceSearch()` 기반 카카오 장소 자동완성을 사용한다.
+- 고객 목록 행에는 별도 수정 버튼을 두지 않는다. 행 선택 시 우측 상세는 조회 전용으로 열리고 상단 `수정` 버튼을 누른 뒤에만 담당자·연락처·주소 편집과 `bindPlaceSearch()` 주소 자동완성이 활성화된다.
 - 고객 주소칸은 `data-place-value="address"` 분기를 사용해 자동완성 선택 시 장소명 대신 도로명주소/지번주소를 우선 입력하고, `customers.lat`/`customers.lon`에 좌표를 함께 저장한다.
 - `고객관리 > 고객 위치`는 오더 하차지 좌표가 아니라 고객 마스터의 `lat`/`lon` 기준으로 위치 목록과 지도 마커를 표시한다. 좌표가 없는 고객은 미등록 건수로 집계되며 지도에는 표시하지 않는다.
+- 고객·기사·차량·담당자·기업 정보 상세는 `수정 기록` 탭에서 `GET /entity-events` 결과를 표시한다. 오더 상세의 운행 처리 기록은 목적이 다르므로 기존 `order_events` 기반 `처리 기록` 탭을 유지한다.
 
 footer 및 법적 안내 페이지:
 - `dashboard.html`, `index.html`, `intro.html` footer는 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`로 이동하는 링크를 제공한다.

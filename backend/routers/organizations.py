@@ -21,6 +21,7 @@ from auth import (
 from services.email_service import send_approved, send_rejected
 from core.config import UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE
 from core.utils import normalize_phone
+from services.entity_events import changed_fields, record_entity_event
 
 router = APIRouter()
 
@@ -111,6 +112,15 @@ async def create_organization(
         phone           = normalize_phone(phone),
         email           = email,
         organization_id = org.id,
+        is_org_owner    = True,
+        permissions     = {
+            "dashboard": True,
+            "control": True,
+            "dispatch": True,
+            "customers": True,
+            "schedule": True,
+            "basic": True,
+        },
     )
     db.add(admin)
     await db.commit()
@@ -355,11 +365,40 @@ async def update_org_settings(
     if not org:
         raise HTTPException(404, "기업을 찾을 수 없습니다.")
 
+    before = {
+        "name": org.name,
+        "auto_approve_drivers": org.auto_approve_drivers,
+    }
+    if "name" in req:
+        name = str(req["name"]).strip()
+        if not name:
+            raise HTTPException(400, "기업명을 입력하세요.")
+        org.name = name
     if "auto_approve_drivers" in req:
         org.auto_approve_drivers = bool(req["auto_approve_drivers"])
 
+    changes = changed_fields(before, {
+        "name": org.name,
+        "auto_approve_drivers": org.auto_approve_drivers,
+    })
+    if changes:
+        record_entity_event(
+            db,
+            organization_id=org.id,
+            entity_type="organization",
+            entity_id=org.id,
+            actor=current_user,
+            action="updated",
+            summary=f"기업 '{org.name}' 정보 수정",
+            changes=changes,
+        )
     await db.commit()
-    return {"auto_approve_drivers": org.auto_approve_drivers}
+    return {
+        "id": org.id,
+        "name": org.name,
+        "org_code": org.org_code,
+        "auto_approve_drivers": org.auto_approve_drivers,
+    }
 
 
 @router.post("/organizations/regen-code")

@@ -123,7 +123,7 @@
       flex-direction: column;
       align-items: stretch;
       gap: 2px;
-      min-width: 178px;
+      width: 210px;
       padding: 8px;
       border: 1px solid var(--dark-border);
       border-radius: 10px;
@@ -1383,10 +1383,12 @@
     }
     .control-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(360px, .65fr);
+      grid-template-columns: minmax(420px, .9fr) minmax(560px, 1.1fr);
       gap: 16px;
       align-items: stretch;
-      min-height: 620px;
+      height: calc(100vh - 220px);
+      min-height: 500px;
+      overflow: hidden;
     }
     @media (max-width: 1180px) {
       .control-layout { grid-template-columns: 1fr; }
@@ -1400,7 +1402,7 @@
     }
     .control-map-panel {
       overflow: hidden;
-      min-height: 620px;
+      min-height: 0;
       display: flex;
       flex-direction: column;
     }
@@ -1424,14 +1426,19 @@
       color: var(--t-text-muted);
     }
     .control-map-card {
-      flex: 1;
-      min-height: 520px;
+      width: min(100%, calc(100vh - 278px));
+      aspect-ratio: 1;
+      min-height: 0;
+      margin: auto;
       overflow: hidden;
       background: var(--t-deep);
     }
     .control-side-panel {
       padding: 14px;
       overflow: hidden;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
     }
     .control-metric-grid {
       display: grid;
@@ -1457,6 +1464,10 @@
     }
     .control-table-card {
       overflow: hidden;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
     }
     .control-table-card h2 {
       font-size: 13px;
@@ -1465,6 +1476,29 @@
       border-bottom: 1px solid var(--dark-border);
       color: var(--t-text-strong);
     }
+    .control-table-card .table-scroll { flex: 1; min-height: 0; max-height: none; }
+    .control-table-card tbody tr { cursor: pointer; }
+    .control-table-card tbody tr.selected { background: rgba(198,241,53,.12); }
+    .vehicle-map-marker {
+      width: 28px;
+      height: 28px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: #2563eb;
+      box-shadow: 0 3px 10px rgba(0,0,0,.35);
+      cursor: pointer;
+      transition: transform .16s ease, opacity .16s ease;
+    }
+    .vehicle-map-marker span {
+      display: block;
+      width: 8px;
+      height: 8px;
+      margin: auto;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .vehicle-map-marker.is-selected { transform: scale(1.55); opacity: 1; }
+    .vehicle-map-marker.is-dimmed { opacity: .24; transform: scale(.85); }
     .dash-orders-card {
       background: var(--dark-card);
       border: 1px solid var(--dark-border);
@@ -2283,6 +2317,23 @@
       font-size: 12px;
       padding: 16px;
       text-align: center;
+    }
+    .staff-permissions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 14px;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--dark-border);
+    }
+    .staff-permissions strong { grid-column: 1 / -1; font-size: 12px; color: var(--t-text-strong); }
+    .staff-permissions label { font-size: 12px; color: var(--t-text-dim); }
+    .inline-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--t-text-dim);
+      font-size: 12px;
     }
 
     .dispatch-two-pane {

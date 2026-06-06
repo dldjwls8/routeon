@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-06 (v1.0.96 기준, 오더·배차 탭 통합 — DB 변경 없음)
+> 최종 검토: 2026-06-06 (v1.0.97 기준, 담당자 권한·관리 마스터 감사 기록 추가)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## 테이블 구조
 
-> v1.0.96은 관리자 웹의 일괄·수동 배차 화면을 `오더관리 > 배차관리`로 통합하고 기사별 배차 요청 조립과 혼적 ON/OFF 규칙을 정리한 프론트 변경 버전이다. 기존 ORM 모델과 저장 구조를 그대로 사용하며 신규 테이블·컬럼·ENUM·마이그레이션은 없다.
+> v1.0.97은 `users`에 조직 최상위 관리자와 화면별 접근 권한을 추가하고, 고객·기사·차량·담당자·기업 정보 변경을 저장하는 `entity_events` 테이블을 추가한다. `init_db()`가 기존 DB에 컬럼을 보강하고 조직별 최초 관리자 한 명을 최상위 관리자로 자동 지정한다.
 
 ### `organizations`
 
@@ -71,7 +71,16 @@
 | `organization_id` | INTEGER | FK → organizations.id | 소속 기업 |
 | `vehicle_id` | INTEGER | FK → vehicles.id NULLABLE | 배정 차량 ID (기사 상세에서 수동 배정) |
 | `driver_status` | VARCHAR(20) | NULLABLE | 기사 운행 상태 — `운행가능` / `운행중` / `휴무` 등 |
+| `is_org_owner` | BOOLEAN | NOT NULL DEFAULT FALSE | 기업 최상위 관리자 여부. 조직별 최초 `admin`을 자동 보정 |
+| `permissions` | JSONB | NOT NULL DEFAULT `{}` | 일반 관리자 메인 화면 접근 권한. 키: `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` |
 | `created_at` | DATETIME | NOT NULL | |
+
+권한 규칙:
+- 기업 등록과 함께 생성되는 첫 관리자 계정은 `is_org_owner=true`이며 전체 화면 권한을 가진다.
+- 기존 조직은 `init_db()` 실행 시 `created_at`, `id` 순으로 가장 이른 관리자 한 명을 최상위 관리자로 보정한다.
+- 일반 담당자 생성은 최상위 관리자 전용 `POST /users/admin`을 사용한다. 공개 `POST /auth/register`는 기사 가입만 허용한다.
+- `permissions`의 빈 JSON은 기존 계정 호환을 위해 프론트에서 전체 허용으로 해석하며, 명시적인 `false` 키만 접근을 차단한다.
+- 최상위 관리자만 다른 일반 관리자의 `permissions`를 수정하거나 계정을 삭제할 수 있고, 최상위 관리자 계정은 삭제할 수 없다.
 
 ---
 
@@ -244,6 +253,33 @@
 
 ---
 
+### `entity_events`
+
+고객·기사·차량·담당자·기업 정보의 생성·수정·삭제를 추적하는 공통 감사 로그다. 오더·운행 처리 흐름은 계속 `order_events`를 사용한다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `id` | UUID | PK | |
+| `organization_id` | INTEGER | FK → organizations.id, NOT NULL, INDEX | 소속 기업 |
+| `entity_type` | VARCHAR(30) | NOT NULL, INDEX | `customer`, `driver`, `vehicle`, `staff`, `organization` |
+| `entity_id` | VARCHAR(80) | NOT NULL, INDEX | 대상 PK 문자열. UUID/INTEGER 공통 저장 |
+| `actor_id` | UUID | FK → users.id ON DELETE SET NULL | 수정 처리자 |
+| `actor_name` | VARCHAR(100) | | 처리 당시 표시명 |
+| `action` | VARCHAR(30) | NOT NULL | `created`, `updated`, `deleted` |
+| `summary` | VARCHAR(255) | NOT NULL | 화면 표시용 요약 |
+| `changes` | JSONB | NOT NULL DEFAULT `{}` | `{필드: {before, after}}` 형식의 변경 전후 값 |
+| `created_at` | DATETIME | NOT NULL, INDEX | 이벤트 발생 시각 |
+
+복합 인덱스:
+- INDEX (`organization_id`, `entity_type`, `entity_id`, `created_at`)
+
+조회 규칙:
+- `GET /entity-events?entity_type=&entity_id=`는 로그인 관리자의 `organization_id`를 항상 조건에 포함하고 최신순 최대 100건을 반환한다.
+- 고객·차량 등록/수정, 기사·담당자 수정, 담당자 추가/삭제, 기업명·기사 자동승인 변경, 관리자 본인 연락처·비밀번호 변경을 기록한다.
+- 비밀번호 원문·해시는 저장하지 않고 `password: {before: null, after: "changed"}`만 남긴다.
+
+---
+
 ### `customers`
 
 거래처 마스터. 조직 단위로 격리, 임시 화주(당일 의뢰용) 포함.
@@ -334,6 +370,7 @@ organizations ──── users ──────── trips ─────�
 users ──────── locations (1:N, GPS 이력)
 users ──────── conversations ──────── messages
               admin/driver (1:1)
+organizations ──────── entity_events (1:N, 관리 마스터 감사 기록)
 
 rest_stops (독립 — trips.optimized_route JSONB에서 참조)
 ```
@@ -428,7 +465,7 @@ cancelled 처리 시:
 | `done` / `done_manual` | `'완료'` | 미표시 |
 | `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
 
-> v1.0.96 기준 `오더관리 > 배차관리`의 오더·기사 선택과 기사별 배정 묶음은 모두 프론트 임시 상태다. 최종 실행 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, 기사별 `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 하단 결과 컨테이너는 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
+> v1.0.97 기준 `오더관리 > 배차관리`의 오더·기사 선택과 기사별 배정 묶음은 모두 프론트 임시 상태다. 최종 실행 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, 기사별 `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 하단 결과 컨테이너는 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
 
 ### 법적 안내 페이지와 DB
 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`은 정적 프론트 페이지다.
@@ -445,6 +482,7 @@ v1.0.93 기준 템플릿은 `상차지1~3/상차화물/상차규격`, `하차지
 ### 고객관리 주소 자동완성과 DB
 `고객관리 > 고객 관리`의 주소 자동완성은 선택 주소 문자열을 `customers.address`, 좌표를 `customers.lat`/`customers.lon`에 저장한다.
 `고객관리 > 고객 위치` 지도는 오더 하차지 좌표가 아니라 고객 마스터의 `lat`/`lon`을 기준으로 마커를 표시한다.
+고객 상세 수정은 우측 패널의 명시적 편집 모드에서만 가능하며 저장 시 `entity_events(entity_type='customer')`에도 변경 전후 값이 기록된다.
 
 ### users ID 타입
 | 테이블 | PK 타입 | 프론트 비교 방식 |

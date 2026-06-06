@@ -135,6 +135,36 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS driver_status VARCHAR(20);"
         ))
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_org_owner BOOLEAN NOT NULL DEFAULT FALSE;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'::jsonb;"
+        ))
+        await conn.execute(text("""
+            WITH ranked_admins AS (
+                SELECT id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY organization_id
+                           ORDER BY created_at ASC, id ASC
+                       ) AS rn
+                  FROM users
+                 WHERE role = 'admin'
+                   AND organization_id IS NOT NULL
+            )
+            UPDATE users
+               SET is_org_owner = TRUE
+              FROM ranked_admins
+             WHERE users.id = ranked_admins.id
+               AND ranked_admins.rn = 1
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM users owner_user
+                    WHERE owner_user.organization_id = users.organization_id
+                      AND owner_user.role = 'admin'
+                      AND owner_user.is_org_owner = TRUE
+               );
+        """))
 
         # deliveries.organization_id 컬럼 추가
         await conn.execute(text(

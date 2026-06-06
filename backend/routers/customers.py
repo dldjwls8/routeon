@@ -10,6 +10,7 @@ from database import get_db
 from models import Customer, User
 from auth import require_admin
 from core.utils import normalize_phone
+from services.entity_events import changed_fields, record_entity_event
 
 router = APIRouter()
 
@@ -95,6 +96,16 @@ async def create_customer(
         valid_date      = _parse_date(req.valid_date),
     )
     db.add(c)
+    await db.flush()
+    record_entity_event(
+        db,
+        organization_id=current_user.organization_id,
+        entity_type="customer",
+        entity_id=c.id,
+        actor=current_user,
+        action="created",
+        summary=f"고객 '{c.name}' 등록",
+    )
     await db.commit()
     await db.refresh(c)
     return _schema(c)
@@ -117,6 +128,7 @@ async def update_customer(
     if not c:
         raise HTTPException(404, "고객을 찾을 수 없습니다.")
 
+    before = _schema(c)
     if req.name     is not None: c.name     = req.name.strip()
     if req.contact  is not None: c.contact  = req.contact
     sent_fields = getattr(req, "model_fields_set", getattr(req, "__fields_set__", set()))
@@ -129,6 +141,18 @@ async def update_customer(
     if req.valid_date is not None:
         c.valid_date = _parse_date(req.valid_date)
 
+    changes = changed_fields(before, _schema(c))
+    if changes:
+        record_entity_event(
+            db,
+            organization_id=current_user.organization_id,
+            entity_type="customer",
+            entity_id=c.id,
+            actor=current_user,
+            action="updated",
+            summary=f"고객 '{c.name}' 정보 수정",
+            changes=changes,
+        )
     await db.commit()
     await db.refresh(c)
     return _schema(c)

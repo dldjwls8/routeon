@@ -104,6 +104,8 @@ class User(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     vehicle_id      = Column(Integer, ForeignKey("vehicles.id"), nullable=True)
     driver_status   = Column(String(20), nullable=True, default='운행가능')
+    is_org_owner    = Column(Boolean, nullable=False, default=False)
+    permissions     = Column(JSONB, nullable=False, default=dict)
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     organization = relationship("Organization", back_populates="users")
@@ -324,6 +326,28 @@ class OrderEvent(Base):
     __table_args__ = (
         Index("ix_order_events_delivery_created", "delivery_id", "created_at"),
         Index("ix_order_events_trip_created", "trip_id", "created_at"),
+    )
+
+
+# ────────────────────────────────────────────────
+# entity_events  (관리 마스터 수정 감사 기록)
+# ────────────────────────────────────────────────
+class EntityEvent(Base):
+    __tablename__ = "entity_events"
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    entity_type     = Column(String(30), nullable=False, index=True)
+    entity_id       = Column(String(80), nullable=False, index=True)
+    actor_id        = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_name      = Column(String(100), nullable=True)
+    action          = Column(String(30), nullable=False)
+    summary         = Column(String(255), nullable=False)
+    changes         = Column(JSONB, nullable=False, default=dict)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_entity_events_lookup", "organization_id", "entity_type", "entity_id", "created_at"),
     )
 
 
