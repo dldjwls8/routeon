@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.95 (2026-06-06)
+### 백엔드·프론트 결합도 개선
+- **Trip 유스케이스 서비스 분리**: 운행 생성, 접근 권한 확인, 완료·취소 상태 변경, 기사·차량 재배정, waypoint 진행 기록, 운행 종료 시 차량 위치 고정을 `services/trip_service.py`로 이동
+- **위치 수집 파이프라인 분리**: GPS 이력 저장, 운행 차량 위치 갱신, 도착 판정, ETA 계산, 관리자 WebSocket 알림을 `services/location_service.py`로 이동
+- **DTO·ORM 응답 변환 분리**: `schemas.py`는 `WaypointSchema` 입력 DTO만 유지하고, Trip/Delivery ORM 기반 API 응답 조립은 `serializers/trip.py`로 분리
+- **라우터 의존 축소**: `routers/trips.py`를 1,026줄에서 520줄로 줄이고 ORM 모델 import를 15개에서 4개로 정리. `routers/location.py`는 308줄에서 177줄로 축소
+- **프론트 API 클라이언트 분리**: `api-client.js`에 API/WS 주소 결정, 토큰, 인증 헤더, JSON 요청 기본값을 통합하고 `dashboard.js`의 직접 `fetch` 59개를 공용 `apiFetch`로 전환
+- **검증**: Python `compileall`·`pyflakes`, JavaScript `node --check`, 주요 API smoke, 위치 입력 방어, Playwright 오더 목록 렌더링 및 콘솔/API 오류 검사를 통과
+- **DB 변경 없음**: 신규 테이블·컬럼·ENUM 또는 데이터 마이그레이션 없음
+
+---
+
 ## v1.0.94 (2026-06-06)
 ### 백엔드 라우터 리팩터링 회귀 수정
 - **라우터 import 누락 복구**: `schemas.py` 분리와 라우터 import 정리 이후 `/ws/location`, `/ws/chat`, 차량 연결 수정, Trip 생성/조회, 오더 처리 기록, 운행 통계 경로에서 런타임 `NameError`가 발생할 수 있던 누락 import를 복구

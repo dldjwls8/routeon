@@ -60,12 +60,16 @@ routeon/
 │   ├── auth.py             JWT 인증 (비동기)
 │   ├── database.py         DB 연결 — AsyncEngine, AsyncSession
 │   ├── models.py           DB 테이블
-│   ├── schemas.py          공용 Pydantic/응답 스키마 — WaypointSchema, trip_schema
+│   ├── schemas.py          공용 Pydantic 입력 DTO — WaypointSchema
 │   ├── requirements.txt
 │   ├── Dockerfile
-│   ├── routers/            도메인별 API 라우터
+│   ├── routers/            HTTP·WebSocket 엔드포인트
+│   ├── serializers/
+│   │   └── trip.py                 Trip/Delivery ORM → API 응답 변환
 │   ├── uploads/            기업 등록 서류 업로드 저장소
 │   ├── services/
+│   │   ├── trip_service.py         운행 생성·상태·재배정·진행 유스케이스
+│   │   ├── location_service.py     GPS 저장·도착 판정·ETA·위치 알림
 │   │   ├── kakao_mobility.py      카카오 모빌리티 API + 경로행렬 캐시 + find_best_rest_stop
 │   │   ├── optimizer.py           OR-Tools TSP
 │   │   ├── email_service.py       기업 승인/반려 이메일 알림
@@ -87,6 +91,7 @@ routeon/
     ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
     ├── dashboard.css       대시보드 스타일 (dashboard.html에서 분리)
     ├── dashboard.js        대시보드 JS 로직 (dashboard.html에서 분리)
+    ├── api-client.js       API/WS 주소·토큰·인증 헤더·공용 fetch
     ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
     ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
     ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
@@ -139,12 +144,17 @@ routeon/
 - `cargo_weight_ton`: 과거 톤수 값 호환용. 신규 프론트 입력은 숫자 파싱 없이 `cargo_size`로 전달한다.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 - `order_no`: 표시용 오더번호. DB 컬럼이 아니라 `/deliveries`/`/trips` 응답에서 `created_at`과 Delivery UUID 기반으로 계산되는 `RO-YYMMDD-XXXXXX` 형식.
-- `WaypointSchema`, `trip_schema`, 목적지 waypoint 보강 helper는 `backend/schemas.py`에 있다. `dispatch`, `optimize`, `stats`, `trips` 라우터가 필요 시 여기서 import해야 하며, 라우터끼리 `from routers.trips import ...`처럼 서로 의존하지 않는다.
+- `WaypointSchema` 입력 DTO는 `backend/schemas.py`에 있다.
+- `serialize_trip`, `trip_waypoints_for_response`와 waypoint 응답 보강 helper는 `backend/serializers/trip.py`에 있다. 라우터끼리 `from routers.trips import ...`처럼 서로 의존하지 않는다.
 
-### 라우터 import 주의사항
-- `backend/routers/`는 도메인별로 분리되어 있고, FastAPI는 엔드포인트 함수가 실제 호출될 때 누락 import가 드러나는 경우가 있다.
-- import 정리 후에는 최소 `python -m compileall -q /app`, `python -m pyflakes /app/routers /app/schemas.py`, `/openapi.json`, `/auth/login`, `/vehicles`, `/deliveries`, `/trips`, `/stats/summary` smoke를 확인한다.
-- WebSocket 라우터는 HTTP smoke만으로 충분하지 않다. `/ws/location`은 `get_current_user_from_token`, `Vehicle`, `_haversine_km` 참조가 필요하고, `/ws/chat`은 `get_current_user_from_token`, `UserRole` 참조가 필요하다.
+### 계층·결합도 원칙
+- `backend/routers/`: 요청 DTO 수신, 인증·권한, 엔티티 조회, 서비스 호출, 응답 반환을 담당한다. 여러 테이블 상태 변경·Redis·이벤트·WebSocket 알림이 결합된 유스케이스는 `services/`에 둔다.
+- `backend/services/trip_service.py`: 운행 생성, 완료·취소, 재배정, waypoint 진행 기록, 차량 마지막 위치 고정을 담당한다.
+- `backend/services/location_service.py`: 기사 GPS 저장, 운행 차량 위치 갱신, 배송 도착 판정, ETA 계산, 관리자 위치 알림을 담당한다.
+- `backend/serializers/`: ORM 엔티티의 API 응답 변환을 담당한다. `schemas.py` 입력 DTO에 ORM 모델 의존을 추가하지 않는다.
+- `frontend/api-client.js`: 관리자 대시보드의 API/WS 주소, 토큰, 인증 헤더와 JSON 요청 기본값을 담당한다. `dashboard.js`에서 직접 `fetch()`나 API 호스트를 조립하지 않는다.
+- 분리 작업 후에는 `python -m compileall -q /app`, `python -m pyflakes /app`, `node --check frontend/api-client.js`, `node --check frontend/dashboard.js`, `/openapi.json`, `/auth/login`, `/vehicles`, `/deliveries`, `/trips`, `/stats/summary` smoke를 확인한다.
+- WebSocket 라우터는 HTTP smoke만으로 충분하지 않으므로 `/ws/location`, `/ws/chat` 연결 accepted 여부도 확인한다.
 - `services/kakao_mobility.py`의 `_cache_future`, `_cache_realtime`, `_cache_multi`는 모듈 상단에서 초기화되는 프로세스 메모리 캐시다. 경로행렬 계산 함수에서 직접 참조하므로 삭제하지 않는다.
 
 ### 비동기 패턴

@@ -15,7 +15,8 @@ from models import (
 from auth import require_admin
 from core.managers import manager, redis
 from core.utils import _haversine_km
-from schemas import WaypointSchema, trip_schema
+from schemas import WaypointSchema
+from serializers.trip import serialize_trip
 from services.cargo_capacity import validate_vehicle_capacity_for_waypoints, vehicle_can_carry_waypoints
 
 router = APIRouter()
@@ -69,8 +70,6 @@ async def auto_dispatch_trips(
     배송 태스크를 가용 기사에게 균등 분배하여 운행을 일괄 생성.
     라운드 로빈으로 기사당 여러 태스크가 배정되면 경유지를 합쳐 하나의 trip으로 생성.
     """
-    import uuid as uuid_lib
-
     if not req.tasks:
         raise HTTPException(400, "태스크를 1개 이상 입력하세요.")
 
@@ -288,7 +287,7 @@ async def auto_dispatch_trips(
                 )
             )
 
-        created_trips.append(trip_schema(t))
+        created_trips.append(serialize_trip(t))
 
     await db.commit()
 

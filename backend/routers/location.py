@@ -1,6 +1,4 @@
 import asyncio
-import uuid as uuid_lib
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect
@@ -9,21 +7,13 @@ from sqlalchemy import select
 from pydantic import BaseModel
 
 from database import get_db
-from models import (
-    User, Delivery, Trip, Vehicle, Location,
-    TripStatus, DeliveryStatus, UserRole,
-)
+from models import User, Trip, Location, TripStatus, UserRole
 from auth import get_current_user, get_current_user_from_token, require_admin
-from core.config import ARRIVAL_RADIUS_M
 from core.managers import manager, redis
-from core.utils import _haversine, _haversine_km
+from core.utils import _haversine_km
+from services.location_service import record_driver_location
 
 router = APIRouter()
-
-class LatLng(BaseModel):
-    lat: float
-    lon: float
-    name: Optional[str] = None
 
 class LocationUpdate(BaseModel):
     user_id: str
@@ -43,135 +33,14 @@ async def create_location_log(
     2. TimescaleDB에 이력 저장
     3. 진행 중 배송지와 거리 계산 → 50m 이내 시 자동 완료
     """
-    import uuid as uuid_lib
-    from datetime import datetime
-
-    if req.lat is None or req.lon is None:
-        await db.commit()
-        return {"ok": True}
-
-    # 1. Redis — 현재 위치 갱신 (TTL 5분)
-    redis.setex(
-        f"location:{req.user_id}",
-        300,
-        f"{req.lat},{req.lon}"
+    return await record_driver_location(
+        db,
+        current_user,
+        user_id=req.user_id,
+        lat=req.lat,
+        lon=req.lon,
+        speed=req.speed,
     )
-
-    # 2. TimescaleDB — 이력 저장
-    loc = Location(
-        user_id     = uuid_lib.UUID(req.user_id),
-        lat         = req.lat,
-        lon         = req.lon,
-        speed       = req.speed,
-        recorded_at = datetime.utcnow(),
-    )
-    db.add(loc)
-    await db.flush()
-
-    active_trip_for_vehicle = (await db.execute(
-        select(Trip).where(
-            Trip.driver_id == uuid_lib.UUID(req.user_id),
-            Trip.status == TripStatus.in_progress,
-            Trip.vehicle_id != None,
-        ).order_by(Trip.started_at.desc().nullslast(), Trip.created_at.desc()).limit(1)
-    )).scalar_one_or_none()
-    if active_trip_for_vehicle:
-        vehicle = (await db.execute(
-            select(Vehicle).where(Vehicle.id == active_trip_for_vehicle.vehicle_id)
-        )).scalar_one_or_none()
-        if vehicle:
-            vehicle.last_lat = req.lat
-            vehicle.last_lon = req.lon
-            vehicle.last_gps_at = loc.recorded_at
-
-    # 3. 도착 감지 — 해당 기사의 in_progress 배송지 조회
-    current = LatLng(lat=req.lat, lon=req.lon)
-    _r = await db.execute(
-        select(Delivery).where(
-            Delivery.assigned_to == uuid_lib.UUID(req.user_id),
-            Delivery.status == DeliveryStatus.in_progress,
-        ).order_by(Delivery.sequence)
-    )
-    pending = _r.scalars().all()
-
-    arrived = []
-    for delivery in pending:
-        if delivery.lat is None or delivery.lon is None:
-            continue
-        dest = LatLng(lat=delivery.lat, lon=delivery.lon)
-        dist = _haversine(current, dest)
-        if dist <= ARRIVAL_RADIUS_M:
-            delivery.status       = DeliveryStatus.done
-            delivery.completed_at = datetime.utcnow()
-            arrived.append(str(delivery.id))
-
-    await db.commit()
-
-    # 4. ETA 재계산 — 현재 위치에서 남은 경유지까지 haversine 거리 합산 (평균 60km/h 기준)
-    eta_remaining_min = None
-    active_trip_id = None
-    active_trip_r = await db.execute(
-        select(Trip).where(
-            Trip.driver_id == uuid_lib.UUID(req.user_id),
-            Trip.status == TripStatus.in_progress,
-        )
-    )
-    active_trip = active_trip_r.scalar_one_or_none()
-
-    if active_trip and active_trip.optimized_route:
-        active_trip_id = str(active_trip.id)
-        if arrived:
-            active_trip.current_phase = "unloading_completed"
-            active_trip.phase_updated_at = datetime.utcnow()
-        route = active_trip.optimized_route.get("route", [])
-
-        done_r = await db.execute(
-            select(Delivery.lat, Delivery.lon).where(
-                Delivery.trip_id == active_trip.id,
-                Delivery.status.in_([DeliveryStatus.done, DeliveryStatus.done_manual]),
-            )
-        )
-        done_coords = [(row.lat, row.lon) for row in done_r.all()]
-
-        remaining = [
-            n for n in route
-            if n.get("type") in ("waypoint", "destination")
-            and not any(
-                abs(n["lat"] - d[0]) < 0.001 and abs(n["lon"] - d[1]) < 0.001
-                for d in done_coords
-            )
-        ]
-
-        if remaining:
-            prev_lat, prev_lon = req.lat, req.lon
-            total_km = 0.0
-            for n in remaining:
-                total_km += _haversine_km(prev_lat, prev_lon, n["lat"], n["lon"])
-                prev_lat, prev_lon = n["lat"], n["lon"]
-            eta_remaining_min = round((total_km / 60.0) * 60, 1)
-        else:
-            eta_remaining_min = 0.0
-        redis.setex(f"eta:{active_trip.id}", 600, str(eta_remaining_min))
-        if arrived:
-            await db.commit()
-
-    # 5. WebSocket 브로드캐스트 — 같은 조직 관리자에게만 전송
-    if current_user.organization_id:
-        await manager.broadcast_to_org(current_user.organization_id, {
-            "user_id":           req.user_id,
-            "lat":               req.lat,
-            "lon":               req.lon,
-            "speed":             req.speed,
-            "arrived_deliveries": arrived,
-            "eta_remaining_min": eta_remaining_min,
-            "trip_id":           active_trip_id,
-        })
-
-    return {
-        "received":            True,
-        "arrived_deliveries":  arrived,
-        "eta_remaining_min":   eta_remaining_min,
-    }
 
 
 @router.websocket("/ws/location")

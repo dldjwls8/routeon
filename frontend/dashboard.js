@@ -1,20 +1,9 @@
 (function () {
   'use strict';
 
-  function apiBase() {
-    const h = location.hostname;
-    if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
-    if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
-    return `${location.protocol}//${location.host}/api`;
-  }
-  function wsBase() {
-    const h = location.hostname;
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    if (!h || h === 'localhost' || h === '127.0.0.1') return `${proto}//localhost:8000`;
-    if (location.port && location.port !== '80' && location.port !== '443') return `${proto}//${h}:8000`;
-    return `${proto}//${location.host}`;
-  }
-  const API = apiBase();
+  const apiClient = window.RouteOnApi;
+  const apiFetch = apiClient.fetch;
+  const WS_BASE = apiClient.wsBase;
   const CARGO_TYPE_OPTIONS = ['식품', '원자재/에너지', '화학/소재', '잡화', '기계/전자', '기타'];
 
   /* ── 탑바 드롭다운 ── */
@@ -58,11 +47,7 @@
   };
   const LIVE_MAP_DEFAULT_CENTER = { lat: 36.5, lon: 127.8 };
 
-  function getToken() { return localStorage.getItem('token'); }
-  function getAuthHeaders() {
-    const t = getToken();
-    return t ? { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` } : { 'Content-Type': 'application/json' };
-  }
+  function getToken() { return apiClient.getToken(); }
   function requireAdminSession() {
     const role = localStorage.getItem('role');
     if (!getToken() || role !== 'admin') {
@@ -416,10 +401,8 @@
   async function loadRealData(opts = {}) {
     const scrollState = opts.preserveScroll !== false ? captureScrollState() : null;
     try {
-      const hdrs = getAuthHeaders();
-
       // 기사 목록
-      const dr = await fetch(`${API}/users?role=driver`, { headers: hdrs });
+      const dr = await apiFetch(`/users?role=driver`);
       if (dr.ok) {
         const users = await dr.json();
         DATA.drivers = users.map(u => ({
@@ -433,7 +416,7 @@
       }
 
       // 차량 목록
-      const vr = await fetch(`${API}/vehicles`, { headers: hdrs });
+      const vr = await apiFetch(`/vehicles`);
       if (vr.ok) {
         const vehs = await vr.json();
         DATA.vehicles.splice(0);
@@ -454,7 +437,7 @@
       }
 
       // 운행 목록
-      const tr = await fetch(`${API}/trips`, { headers: hdrs });
+      const tr = await apiFetch(`/trips`);
       if (tr.ok) {
         const trips = await tr.json();
         const statusMap = { in_progress: '운행중', completed: '완료', cancelled: '취소', scheduled: '배차' };
@@ -542,7 +525,7 @@
       }
 
       // 통계 요약
-      const sr = await fetch(`${API}/stats/summary?period=all`, { headers: hdrs });
+      const sr = await apiFetch(`/stats/summary?period=all`);
       if (sr.ok) {
         const s = await sr.json();
         Object.assign(DATA.statsSummary, {
@@ -557,7 +540,7 @@
       }
 
       // 기사별 통계
-      const dbdr = await fetch(`${API}/stats/by-driver?period=all`, { headers: hdrs });
+      const dbdr = await apiFetch(`/stats/by-driver?period=all`);
       if (dbdr.ok) {
         const rows = await dbdr.json();
         DATA.driverStats = rows.map(r => ({
@@ -573,7 +556,7 @@
       }
 
       // 차량별 통계
-      const dbv = await fetch(`${API}/stats/by-vehicle?period=all`, { headers: hdrs });
+      const dbv = await apiFetch(`/stats/by-vehicle?period=all`);
       if (dbv.ok) {
         const rows = await dbv.json();
         DATA.vehicleStats = rows.map(r => {
@@ -590,7 +573,7 @@
       }
 
       // 조직명 + 로그인 사용자 이름
-      const meRes = await fetch(`${API}/auth/me`, { headers: hdrs });
+      const meRes = await apiFetch(`/auth/me`);
       if (meRes.ok) {
         const me = await meRes.json();
         DATA.me = me;
@@ -600,7 +583,7 @@
         const roleEl = document.getElementById('topbarUserRole');
         if (roleEl) roleEl.textContent = me.role === 'admin' ? '관리자' : me.role;
       }
-      const or2 = await fetch(`${API}/organizations/me`, { headers: hdrs });
+      const or2 = await apiFetch(`/organizations/me`);
       if (or2.ok) {
         const org = await or2.json();
         const bt = document.querySelector('.brand-text');
@@ -608,7 +591,7 @@
       }
 
       // 배송(오더) 목록
-      const dvr = await fetch(`${API}/deliveries`, { headers: hdrs });
+      const dvr = await apiFetch(`/deliveries`);
       if (dvr.ok) {
         const deliveries = await dvr.json();
         const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
@@ -646,7 +629,7 @@
       }
 
       // 승인 대기 기사 목록
-      const pr = await fetch(`${API}/users?role=pending`, { headers: hdrs });
+      const pr = await apiFetch(`/users?role=pending`);
       if (pr.ok) {
         const pending = await pr.json();
         DATA.pendingDrivers = pending.map(u => ({
@@ -658,7 +641,7 @@
       }
 
       // 고객(거래처) 목록
-      const cr = await fetch(`${API}/customers`, { headers: hdrs });
+      const cr = await apiFetch(`/customers`);
       if (cr.ok) {
         const customers = await cr.json();
         DATA.customers = customers.map(c => ({
@@ -679,7 +662,7 @@
       }
 
       // 담당자(관리자) 목록
-      const admR = await fetch(`${API}/users?role=admin`, { headers: hdrs });
+      const admR = await apiFetch(`/users?role=admin`);
       if (admR.ok) {
         const admins = await admR.json();
         DATA.staff = admins.map(u => ({
@@ -1006,7 +989,6 @@
   }
 
   async function commitPendingRowsToOrders(rows) {
-    const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
     const batch = rows.map(r => ({
       address: r.delivery || '주소 미입력',
       lat: r.lat ?? null,
@@ -1024,9 +1006,8 @@
       shipper_phone: normalizePhone(r.contact) || null,
       mixed_load: !!r.mixed_load,
     }));
-    const res = await fetch(`${API}/deliveries/batch`, {
+    const res = await apiFetch(`/deliveries/batch`, {
       method: 'POST',
-      headers: hdrs,
       body: JSON.stringify(batch),
     });
     if (!res.ok) {
@@ -1159,9 +1140,8 @@
       const reason = form.querySelector('[name="reason"]').value;
       if (!driverId || !reason) { toast('기사와 사유를 선택하세요'); return; }
       const d = driverById(driverId);
-      const res = await fetch(`${API}/trips/${trip.id}/reassign`, {
+      const res = await apiFetch(`/trips/${trip.id}/reassign`, {
         method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_driver_id: driverId, transfer_remaining: false }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '기사 교체 실패'); return; }
@@ -1204,9 +1184,8 @@
       const reason = form.querySelector('[name="reason"]').value;
       if (!vehicleId || !reason) { toast('차량과 사유를 선택하세요'); return; }
       if (vehicleId === curVid) { toast('동일 차량입니다'); return; }
-      const res = await fetch(`${API}/trips/${trip.id}/reassign`, {
+      const res = await apiFetch(`/trips/${trip.id}/reassign`, {
         method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_vehicle_id: vehicleId, transfer_remaining: false }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 교체 실패'); return; }
@@ -1243,9 +1222,8 @@
       const reason = form.querySelector('[name="reason"]').value;
       const needsRelay = form.querySelector('[name="needsRelay"]').checked;
       if (!reason) { toast('사유를 선택하세요', 'error'); return; }
-      const res = await fetch(`${API}/trips/${trip.id}/safety`, {
+      const res = await apiFetch(`/trips/${trip.id}/safety`, {
         method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ safety_issue: true }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '신고 처리 실패', 'error'); return; }
@@ -1269,7 +1247,7 @@
     $('#btnHandoverAccident', root)?.addEventListener('click', () => openAccidentReportModal(trip));
     $('#btnTripComplete', root)?.addEventListener('click', async () => {
       if (!confirm('운행을 완료 처리하시겠습니까?')) return;
-      const res = await fetch(`${API}/trips/${trip.id}/status?status=completed`, { method: 'PATCH', headers: getAuthHeaders() });
+      const res = await apiFetch(`/trips/${trip.id}/status?status=completed`, { method: 'PATCH' });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '처리 실패'); return; }
       toast('운행 완료 처리됨');
       await loadRealData();
@@ -1277,7 +1255,7 @@
     });
     $('#btnTripCancel', root)?.addEventListener('click', async () => {
       if (!confirm('운행을 취소하시겠습니까?')) return;
-      const res = await fetch(`${API}/trips/${trip.id}/status?status=cancelled`, { method: 'PATCH', headers: getAuthHeaders() });
+      const res = await apiFetch(`/trips/${trip.id}/status?status=cancelled`, { method: 'PATCH' });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '처리 실패'); return; }
       toast('운행 취소됨');
       await loadRealData();
@@ -1373,9 +1351,8 @@
       const phone = normalizePhone(form.querySelector('[name="phone"]').value);
       const memo  = form.querySelector('[name="memo"]').value.trim() || '당일 의뢰';
       const today = todayStr();
-      const res = await fetch(`${API}/customers`, {
+      const res = await apiFetch(`/customers`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, phone: phone || null, memo, temporary: true, valid_date: today }),
       });
       let created;
@@ -1564,7 +1541,7 @@
   async function geocodeIntakePlace(query) {
     const q = String(query || '').trim();
     if (!q) return null;
-    const byAddress = await fetch(`${API}/address/coord?query=${encodeURIComponent(q)}`, { headers: getAuthHeaders() })
+    const byAddress = await apiFetch(`/address/coord?query=${encodeURIComponent(q)}` )
       .then(r => r.ok ? r.json() : null)
       .catch(() => null);
     if (byAddress?.lat && byAddress?.lon) return { lat: Number(byAddress.lat), lon: Number(byAddress.lon) };
@@ -1671,9 +1648,8 @@
       const contact = $('#custContact', root).value.trim();
       const phone   = normalizePhone($('#custPhone', root).value);
       const address = $('#custAddress', root).value.trim();
-      const res = await fetch(`${API}/customers/${c.id}`, {
+      const res = await apiFetch(`/customers/${c.id}`, {
         method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ contact: contact || null, phone: phone || null, address: address || null }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패'); return; }
@@ -1734,9 +1710,8 @@
       const vid = $('#driverVehicleAssign', root).value;
       const newVehicleId = vid ? Number(vid) : null;
 
-      const res = await fetch(`${API}/users/${d.id}`, {
+      const res = await apiFetch(`/users/${d.id}`, {
         method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ driver_status: newStatus, vehicle_id: newVehicleId }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '기사 정보 저장 실패', 'error'); return; }
@@ -1803,9 +1778,8 @@
       const tonMap = { '1톤': 1000, '1.4톤': 1400, '2.5톤': 2500, '3.5톤': 3500, '5톤': 5000 };
       const weight_kg = tonMap[tonnageStr] ?? v.weight_kg;
 
-      const res = await fetch(`${API}/vehicles/${v.id}`, {
+      const res = await apiFetch(`/vehicles/${v.id}`, {
         method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ vehicle_type: type, weight_kg, status, driver_id: driverId || null }),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 정보 저장 실패', 'error'); return; }
@@ -1919,7 +1893,7 @@
     if (!o || o._eventsLoading || o._eventsLoaded) return;
     o._eventsLoading = true;
     try {
-      const res = await fetch(`${API}/deliveries/${orderId}/events`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/deliveries/${orderId}/events`);
       if (res.ok) {
         const events = await res.json();
         o.changeHistory = events.map(ev => ({
@@ -2030,7 +2004,7 @@
     const delBtn = $('#deleteStaffBtn', root);
     if (delBtn) delBtn.onclick = async () => {
       if (!confirm(`"${s.name}" 계정을 삭제하시겠습니까?`)) return;
-      const res = await fetch(`${API}/users/${s.id}`, { method: 'DELETE', headers: getAuthHeaders() });
+      const res = await apiFetch(`/users/${s.id}`, { method: 'DELETE' });
       if (res.ok || res.status === 204) {
         toast('담당자가 삭제되었습니다.');
         selectedStaffId = null;
@@ -2722,11 +2696,10 @@
         const form = document.getElementById('driverForm');
         const fd = Object.fromEntries(new FormData(form));
         if (!fd.username || !fd.name || !fd.phone || !fd.password) { toast('모든 필수 항목을 입력하세요'); return; }
-        const orgRes = await fetch(`${API}/organizations/me`, { headers: getAuthHeaders() });
+        const orgRes = await apiFetch(`/organizations/me`);
         const org = orgRes.ok ? await orgRes.json() : {};
-        const res = await fetch(`${API}/auth/register`, {
+        const res = await apiFetch(`/auth/register`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: fd.username, password: fd.password, phone: normalizePhone(fd.phone), name: fd.name, org_code: org.org_code || '', role: 'driver' }),
         });
         if (!res.ok) { const e = await res.json(); toast(e.detail || '등록 실패'); return; }
@@ -2740,7 +2713,7 @@
       btn.onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(`기사 «${btn.dataset.name}»를 삭제하시겠습니까?\n관련 배송·대화 이력도 함께 삭제됩니다.`)) return;
-        const res = await fetch(`${API}/users/${btn.dataset.uid}`, { method: 'DELETE', headers: getAuthHeaders() });
+        const res = await apiFetch(`/users/${btn.dataset.uid}`, { method: 'DELETE' });
         if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패'); return; }
         toast('기사가 삭제되었습니다');
         if (selectedDriverId === btn.dataset.uid) selectedDriverId = null;
@@ -2752,7 +2725,7 @@
     root.querySelectorAll('.btn-approve-driver').forEach(btn => {
       btn.onclick = async (e) => {
         e.stopPropagation();
-        const res = await fetch(`${API}/auth/approve/${btn.dataset.uid}`, { method: 'POST', headers: getAuthHeaders() });
+        const res = await apiFetch(`/auth/approve/${btn.dataset.uid}`, { method: 'POST' });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '승인 실패'); return; }
         toast(`기사 «${btn.dataset.name}» 승인 완료`);
         await loadRealData();
@@ -2764,7 +2737,7 @@
       btn.onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(`기사 «${btn.dataset.name}» 가입을 거절하시겠습니까?`)) return;
-        const res = await fetch(`${API}/users/${btn.dataset.uid}`, { method: 'DELETE', headers: getAuthHeaders() });
+        const res = await apiFetch(`/users/${btn.dataset.uid}`, { method: 'DELETE' });
         if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '거절 실패'); return; }
         toast(`기사 «${btn.dataset.name}» 가입 거절`);
         await loadRealData();
@@ -2847,9 +2820,8 @@
           length_cm: fd.length_cm ? parseFloat(fd.length_cm) : null,
           width_cm: fd.width_cm ? parseFloat(fd.width_cm) : null,
         };
-        const res = await fetch(`${API}/vehicles`, {
+        const res = await apiFetch(`/vehicles`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 등록 실패'); return; }
@@ -2868,7 +2840,7 @@
       btn.onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(`차량 «${btn.dataset.plate}»를 비활성화하시겠습니까?`)) return;
-        const res = await fetch(`${API}/vehicles/${btn.dataset.vid}`, { method: 'DELETE', headers: getAuthHeaders() });
+        const res = await apiFetch(`/vehicles/${btn.dataset.vid}`, { method: 'DELETE' });
         if (!res.ok && res.status !== 204) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패'); return; }
         toast(`차량 «${btn.dataset.plate}» 비활성화 완료`);
         if (selectedVehicleId === Number(btn.dataset.vid)) selectedVehicleId = null;
@@ -2912,7 +2884,7 @@
     });
     if (selected) bindStaffDetail(root, selected);
     $('#addStaff', root).onclick = async () => {
-      const orgRes = await fetch(`${API}/organizations/me`, { headers: getAuthHeaders() });
+      const orgRes = await apiFetch(`/organizations/me`);
       const org = orgRes.ok ? await orgRes.json() : null;
       const orgCode = org?.org_code || '';
       openModal('담당자 추가', `
@@ -2939,9 +2911,8 @@
           org_code: orgCode,
           role: 'admin',
         };
-        const res = await fetch(`${API}/auth/register`, {
+        const res = await apiFetch(`/auth/register`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         if (res.ok || res.status === 201) {
@@ -3005,9 +2976,8 @@
       if (tab === 'info') {
         const phone = normalizePhone(activePanel.querySelector('[name="phone"]').value);
         if (!phone) { toast('전화번호를 입력하세요', 'error'); return; }
-        const res = await fetch(`${API}/auth/me`, {
+        const res = await apiFetch(`/auth/me`, {
           method: 'PATCH',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone }),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
@@ -3023,9 +2993,8 @@
         if (!current_password || !new_password) { toast('모든 항목을 입력하세요', 'error'); return; }
         if (new_password.length < 4) { toast('새 비밀번호는 4자 이상이어야 합니다', 'error'); return; }
         if (new_password !== confirm) { toast('새 비밀번호가 일치하지 않습니다', 'error'); return; }
-        const res = await fetch(`${API}/auth/me`, {
+        const res = await apiFetch(`/auth/me`, {
           method: 'PATCH',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ current_password, new_password }),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '비밀번호 변경 실패', 'error'); return; }
@@ -3132,15 +3101,13 @@
       const body = { name, contact: contact || null, phone: phone || null, address: address || null, lat, lon };
       let res;
       if (isEdit) {
-        res = await fetch(`${API}/customers/${c.id}`, {
+        res = await apiFetch(`/customers/${c.id}`, {
           method: 'PATCH',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
       } else {
-        res = await fetch(`${API}/customers`, {
+        res = await apiFetch(`/customers`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
       }
@@ -3517,7 +3484,7 @@
     $('#bulkDepotMap', root)?.addEventListener('click', () => {
       const address = $('#bulkDepotName', root)?.value?.trim();
       if (!address) { toast('센터 이름/주소를 입력하세요'); return; }
-      fetch(`${API}/address/coord?query=${encodeURIComponent(address)}`, { headers: getAuthHeaders() })
+      apiFetch(`/address/coord?query=${encodeURIComponent(address)}` )
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (!data?.lat) { toast('주소 좌표를 찾을 수 없습니다'); return; }
@@ -3656,8 +3623,8 @@
       btn.innerHTML = '<span class="loading"></span>배차 중…';
       try {
         const body = { tasks, driver_ids, vehicle_assignments, departure_time: new Date().toISOString() };
-        const res = await fetch(`${API}/trips/auto-dispatch`, {
-          method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+        const res = await apiFetch(`/trips/auto-dispatch`, {
+          method: 'POST', body: JSON.stringify(body),
         });
         if (!res.ok) {
           const e = await res.json().catch(() => ({}));
@@ -3846,9 +3813,8 @@
       btn.innerHTML = '<span class="loading"></span>계산 중…';
       box.classList.remove('show');
       try {
-        const res = await fetch(`${API}/route/preview`, {
+        const res = await apiFetch(`/route/preview`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ stops }),
         });
         const routeData = res.ok ? await res.json() : null;
@@ -4272,9 +4238,8 @@
           toast('상차지·하차지 좌표가 필요합니다. 오더를 수정해 좌표를 저장하세요');
           return;
         }
-        const res = await fetch(`${API}/trips/auto-dispatch`, {
+        const res = await apiFetch(`/trips/auto-dispatch`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tasks,
             driver_ids: [dispatchManualDriverId],
@@ -4335,8 +4300,8 @@
           const deadline = (dateEl?.value && hourEl?.value) ? `${dateEl.value} ${hourEl.value}:00` : null;
           try {
             const [coordPu, coordDl] = await Promise.all([
-              fetch(`${API}/address/coord?query=${encodeURIComponent(pickup)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null),
-              fetch(`${API}/address/coord?query=${encodeURIComponent(delivery)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null),
+              apiFetch(`/address/coord?query=${encodeURIComponent(pickup)}` ).then(r => r.ok ? r.json() : null),
+              apiFetch(`/address/coord?query=${encodeURIComponent(delivery)}` ).then(r => r.ok ? r.json() : null),
             ]);
             const body = {
               address: delivery, lat: coordDl?.lat || null, lon: coordDl?.lon || null,
@@ -4348,8 +4313,8 @@
               cargo_size: document.getElementById('addOrdSize')?.value?.trim() || null,
               deadline,
             };
-            const res = await fetch(`${API}/deliveries`, {
-              method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+            const res = await apiFetch(`/deliveries`, {
+              method: 'POST', body: JSON.stringify(body),
             });
             if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '등록 실패'); return false; }
             toast('배송 건이 추가되었습니다');
@@ -4396,8 +4361,8 @@
       btn.disabled = true; btn.innerHTML = '<span class="loading"></span>배차 중…';
       try {
         const body = { tasks, driver_ids, vehicle_assignments, departure_time: new Date().toISOString() };
-        const res = await fetch(`${API}/trips/auto-dispatch`, {
-          method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(body),
+        const res = await apiFetch(`/trips/auto-dispatch`, {
+          method: 'POST', body: JSON.stringify(body),
         });
         if (!res.ok) {
           const e = await res.json().catch(() => ({}));
@@ -4480,9 +4445,8 @@
         if (capacityMessage) { toast(capacityMessage, 'error'); return false; }
         const task = dispatchTaskFromOrder(ord);
         if (!task) { toast('상차지·하차지 좌표가 필요합니다', 'error'); return false; }
-        const res = await fetch(`${API}/trips/auto-dispatch`, {
+        const res = await apiFetch(`/trips/auto-dispatch`, {
           method: 'POST',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tasks: [task],
             driver_ids: [driverId],
@@ -4543,9 +4507,8 @@
       };
       const btn = $('#btnTripCreate', root);
       btn.disabled = true; btn.textContent = '생성 중…';
-      const res = await fetch(`${API}/trips`, {
+      const res = await apiFetch(`/trips`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       btn.disabled = false; btn.textContent = 'Trip 생성';
@@ -4733,7 +4696,7 @@
       const params = new URLSearchParams({ period });
       if (driver) params.set('driver_id', driver.driverId || driver.id);
       if (vehicle) params.set('vehicle_id', vehicle.id);
-      const res = await fetch(`${API}/stats/by-day?${params}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/stats/by-day?${params}`);
       if (!res.ok) { toast('조회 실패'); return; }
       const rows = await res.json();
       const filterLabel = [driverName, vehiclePlate, regionFilter !== '전체' ? regionFilter : ''].filter(Boolean).join(' · ');
@@ -4749,7 +4712,7 @@
         if (!driver) { toast('기사 정보를 찾을 수 없습니다'); return; }
         const periodMap = { '일': 'today', '주': 'week', '월': 'month' };
         const period = periodMap[statsPeriod] || 'week';
-        const res = await fetch(`${API}/stats/route-history?driver_id=${driver.id}&period=${period}`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`/stats/route-history?driver_id=${driver.id}&period=${period}`);
         if (!res.ok) { toast('궤적 조회 실패'); return; }
         const coords = await res.json();
         if (!coords.length) { toast(`${driverName} 궤적 데이터 없음`); return; }
@@ -4836,7 +4799,7 @@
     });
     kakao.maps.event.trigger(_tripRouteMapInstance, 'resize');
 
-    const res = await fetch(`${API}/trips/${tripId}/polyline`, { headers: getAuthHeaders() });
+    const res = await apiFetch(`/trips/${tripId}/polyline`);
     if (!res.ok) {
       el.innerHTML = '<p style="padding:24px;text-align:center;color:var(--text-muted)">경로 데이터 없음 (최적화 전)</p>';
       return;
@@ -5123,8 +5086,8 @@
           const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
           // 주소 변경 시 좌표 재조회
           const [coordPu, coordDl] = await Promise.all([
-            pickup ? fetch(`${API}/address/coord?query=${encodeURIComponent(pickup)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
-            delivery ? fetch(`${API}/address/coord?query=${encodeURIComponent(delivery)}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+            pickup ? apiFetch(`/address/coord?query=${encodeURIComponent(pickup)}` ).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+            delivery ? apiFetch(`/address/coord?query=${encodeURIComponent(delivery)}` ).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
           ]);
           Object.assign(body, {
             address: delivery || undefined,
@@ -5146,9 +5109,8 @@
           o.recipient = recipient; o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
           o.window = latest ? formatIntakeWindow(latest) : '—';
         }
-        const res = await fetch(`${API}/deliveries/${o.id}`, {
+        const res = await apiFetch(`/deliveries/${o.id}`, {
           method: 'PATCH',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
@@ -5172,9 +5134,8 @@
       cancelBtn.textContent = '접수 취소';
       cancelBtn.style.marginRight = 'auto';
       cancelBtn.onclick = async () => {
-        const res = await fetch(`${API}/deliveries/${o.id}`, {
+        const res = await apiFetch(`/deliveries/${o.id}`, {
           method: 'PATCH',
-          headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'cancelled' }),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '취소 처리 실패', 'error'); return; }
@@ -5190,9 +5151,8 @@
       delBtn.type = 'button';
       delBtn.textContent = '삭제';
       delBtn.onclick = async () => {
-        const res = await fetch(`${API}/deliveries/${o.id}`, {
+        const res = await apiFetch(`/deliveries/${o.id}`, {
           method: 'DELETE',
-          headers: getAuthHeaders(),
         });
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '삭제 실패', 'error'); return; }
         const i = DATA.orders.findIndex(x => x.id === o.id);
@@ -6014,7 +5974,7 @@
   function connectLocationWebSocket() {
     const token = getToken();
     if (!token || _locationWS) return;
-    const ws = new WebSocket(`${wsBase()}/ws/location?token=${token}`);
+    const ws = new WebSocket(`${WS_BASE}/ws/location?token=${token}`);
     _locationWS = ws;
     ws.onmessage = (e) => {
       try {
@@ -6073,7 +6033,7 @@
 
   async function loadChatConversations() {
     try {
-      const r = await fetch(`${API}/chat/conversations`, { headers: getAuthHeaders() });
+      const r = await apiFetch(`/chat/conversations`);
       if (!r.ok) return;
       const convs = await r.json();
       convs.forEach(c => {
@@ -6089,7 +6049,7 @@
   function connectChatWebSocket() {
     const token = getToken();
     if (!token || _chatWS) return;
-    const ws = new WebSocket(`${wsBase()}/ws/chat?token=${token}`);
+    const ws = new WebSocket(`${WS_BASE}/ws/chat?token=${token}`);
     _chatWS = ws;
     ws.onmessage = (e) => {
       try {
@@ -6110,7 +6070,6 @@
   // ── 배차 API 연동 ────────────────────────────────────────────
 
   async function createTripManual(vehicleId, driverId, tasks, departureName) {
-    const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
     const waypoints = [];
     tasks.forEach((t, gi) => {
       (t.loadings || []).forEach(l => { if (l?.lat) waypoints.push({ ...l, name: l.name, lat: l.lat, lon: l.lon, type: 'loading', task_group: gi }); });
@@ -6119,7 +6078,7 @@
     if (!waypoints.length) { alert('경유지를 1개 이상 입력하세요.'); return null; }
     const body = { driver_id: driverId, vehicle_id: vehicleId, waypoints, departure_time: new Date().toISOString() };
     if (departureName) body.origin_name = departureName;
-    const res = await fetch(`${API}/trips`, { method: 'POST', headers: hdrs, body: JSON.stringify(body) });
+    const res = await apiFetch(`/trips`, { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { const err = await res.json(); alert(err.detail || '운행 생성 실패'); return null; }
     return await res.json();
   }
@@ -6148,7 +6107,7 @@
     connectChatWebSocket();
     // 카카오맵 초기화
     try {
-      const cr = await fetch(`${API}/config`);
+      const cr = await apiFetch(`/config`);
       if (cr.ok) {
         const cfg = await cr.json();
         const key = cfg.kakao_js_key || cfg.kakao_key || cfg.key;
