@@ -1448,9 +1448,27 @@
   }
 
   function downloadIntakeExcelTemplate() {
-    const headers = ['화주명', '상차지', '하차지', '수취인', '연락처', '화물종류', '규격', '희망도착일시', '혼재여부'];
+    const headers = [
+      '화주명',
+      '상차지1', '상차화물1', '상차규격1',
+      '상차지2', '상차화물2', '상차규격2',
+      '상차지3', '상차화물3', '상차규격3',
+      '하차지1', '하차수취인1', '하차화물1', '하차규격1',
+      '하차지2', '하차수취인2', '하차화물2', '하차규격2',
+      '하차지3', '하차수취인3', '하차화물3', '하차규격3',
+      '연락처', '희망도착일시', '혼재여부',
+    ];
     const rows = [
-      ['예시화주', '부산광역시 해운대구 센텀중앙로 90', '부산광역시 사하구 감천로 203', '김수신', '010-1234-5678', '식품', '5톤', '2026-06-05 14:00', 'N'],
+      [
+        '예시화주',
+        '부산광역시 해운대구 센텀중앙로 90', '식품', '5톤',
+        '부산항 신항', '잡화', '3파레트',
+        '', '', '',
+        '부산광역시 사하구 감천로 203', '김수신', '식품', '2톤',
+        '감천문화마을', '박수신', '잡화', '3파레트',
+        '', '', '', '',
+        '010-1234-5678', '2026-06-05 14:00', 'N',
+      ],
     ];
 
     if (window.XLSX) {
@@ -1465,6 +1483,109 @@
     const esc = v => `"${String(v).replace(/"/g, '""')}"`;
     const csv = '\uFEFF' + [headers, ...rows].map(row => row.map(esc).join(',')).join('\n');
     downloadBlob(`routeon_order_intake_template_${todayStr()}.csv`, 'text/csv;charset=utf-8', csv);
+  }
+
+  function excelDateTimeValue(value) {
+    if (value instanceof Date) {
+      return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}T${String(value.getHours()).padStart(2,'0')}:${String(value.getMinutes()).padStart(2,'0')}`;
+    }
+    if (!value) return '';
+    const s = String(value).trim();
+    return s.length === 10 ? `${s}T00:00` : s.replace(' ', 'T').slice(0, 16);
+  }
+
+  function excelBoolValue(value) {
+    const s = String(value || '').trim().toLowerCase();
+    return ['y', 'yes', '1', 'true', '혼재', 'o'].includes(s);
+  }
+
+  function normalizedExcelRow(rawRow) {
+    const norm = s => String(s).trim().toLowerCase().replace(/[\s_\-()]/g, '');
+    const index = {};
+    for (const [k, v] of Object.entries(rawRow)) index[norm(k)] = v;
+    const pick = (...aliases) => {
+      for (const a of aliases) {
+        const key = norm(a);
+        if (index[key] != null && String(index[key]).trim() !== '') return index[key];
+      }
+      return '';
+    };
+    return { pick };
+  }
+
+  function rowsFromExcelOrder(rawRow) {
+    const { pick } = normalizedExcelRow(rawRow);
+    const base = {
+      customer: pick('화주명', '화주', 'shippername', 'shipper'),
+      contact: pick('연락처', 'contact', 'contactname'),
+      latestAt: excelDateTimeValue(pick('희망도착', '마감일', 'deadline', 'latestat', '희망도착일시')),
+      mixed_load: excelBoolValue(pick('혼재', '혼재여부', 'mixedload', '혼재화물')),
+    };
+    const legacyPickup = pick('상차지', '출발지', 'pickup', 'pickupaddress');
+    const legacyDelivery = pick('하차지', '도착지', '주소', 'delivery', 'address');
+    const legacyCargo = pick('화물종류', '화물', 'cargo', 'cargotype');
+    const legacySize = pick('규격', '화물규격', '중량', '톤', '중량톤', 'tons', 'cargosize', 'cargoweightton');
+    const legacyRecipient = pick('수취인', '수령인', 'recipientname', 'recipient');
+    const pickups = [];
+    const deliveries = [];
+    for (let i = 1; i <= 5; i++) {
+      const address = pick(`상차지${i}`, `상차${i}`, `pickup${i}`, `pickupaddress${i}`);
+      if (address) pickups.push({
+        pickup: address,
+        cargo: pick(`상차화물${i}`, `상차화물종류${i}`, `pickupcargo${i}`, `pickupcargotype${i}`),
+        tons: pick(`상차규격${i}`, `상차중량${i}`, `pickupsize${i}`, `pickupcargosize${i}`),
+      });
+      const delivery = pick(`하차지${i}`, `하차${i}`, `delivery${i}`, `address${i}`, `deliveryaddress${i}`);
+      if (delivery) deliveries.push({
+        delivery,
+        recipient: pick(`하차수취인${i}`, `수취인${i}`, `recipient${i}`, `recipientname${i}`),
+        cargo: pick(`하차화물${i}`, `하차화물종류${i}`, `deliverycargo${i}`, `deliverycargotype${i}`),
+        tons: pick(`하차규격${i}`, `하차중량${i}`, `deliverysize${i}`, `deliverycargosize${i}`),
+      });
+    }
+    if (!pickups.length && legacyPickup) pickups.push({ pickup: legacyPickup, cargo: legacyCargo, tons: legacySize });
+    if (!deliveries.length && legacyDelivery) deliveries.push({ delivery: legacyDelivery, recipient: legacyRecipient, cargo: legacyCargo, tons: legacySize });
+    if (!pickups.length && !deliveries.length) return [];
+    const count = Math.max(pickups.length, deliveries.length);
+    return Array.from({ length: count }, (_, i) => {
+      const pu = pickups[Math.min(i, Math.max(0, pickups.length - 1))] || {};
+      const dl = deliveries[Math.min(i, Math.max(0, deliveries.length - 1))] || {};
+      return {
+        ...base,
+        pickup: pu.pickup || '',
+        delivery: dl.delivery || '',
+        recipient: dl.recipient || '',
+        cargo: dl.cargo || pu.cargo || legacyCargo || '',
+        tons: dl.tons || pu.tons || legacySize || '',
+      };
+    });
+  }
+
+  async function geocodeIntakePlace(query) {
+    const q = String(query || '').trim();
+    if (!q) return null;
+    const byAddress = await fetch(`${API}/address/coord?query=${encodeURIComponent(q)}`, { headers: getAuthHeaders() })
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null);
+    if (byAddress?.lat && byAddress?.lon) return { lat: Number(byAddress.lat), lon: Number(byAddress.lon) };
+    if (!window.kakao?.maps?.services) return null;
+    return await new Promise(resolve => {
+      const ps = new kakao.maps.services.Places();
+      ps.keywordSearch(q, (data, status) => {
+        if (status !== kakao.maps.services.Status.OK || !data?.length) return resolve(null);
+        resolve({ lat: Number(data[0].y), lon: Number(data[0].x) });
+      }, { size: 1 });
+    });
+  }
+
+  async function geocodeIntakeRow(row) {
+    const [pickup, delivery] = await Promise.all([
+      row.pickup ? geocodeIntakePlace(row.pickup) : Promise.resolve(null),
+      row.delivery ? geocodeIntakePlace(row.delivery) : Promise.resolve(null),
+    ]);
+    if (pickup) { row.pickup_lat = pickup.lat; row.pickup_lon = pickup.lon; }
+    if (delivery) { row.lat = delivery.lat; row.lon = delivery.lon; }
+    return row;
   }
 
   function customerMatchesListFilter(c, filter) {
@@ -3641,6 +3762,10 @@
         name: ord.pickup || '상차지',
         lat: ord.pickup_lat,
         lon: ord.pickup_lon,
+        delivery_id: ord.id,
+        recipient_name: ord.recipient || null,
+        cargo_type: ord.cargo || null,
+        cargo_size: ord.tons || null,
         shipper_name: ord.customer || null,
         contact_phone: normalizePhone(ord.contact) || null,
         shipper_phone: normalizePhone(ord.contact) || null,
@@ -4389,15 +4514,24 @@
       const { driverId, vehicleId, order } = _lastManualAssign;
       if (!driverId || !vehicleId) { toast('차량·기사 정보가 없습니다. 다시 배차해주세요', 'error'); return; }
       const waypoints = [];
+      const orderWaypointMeta = {
+        delivery_id: order?.id || null,
+        recipient_name: order?.recipient || null,
+        cargo_type: order?.cargo || null,
+        cargo_size: order?.tons || null,
+        shipper_name: order?.customer || null,
+        contact_phone: normalizePhone(order?.contact) || null,
+        shipper_phone: normalizePhone(order?.contact) || null,
+      };
       if (order?.pickup_lat && order?.pickup_lon) {
-        waypoints.push({ name: order.pickup || '상차지', lat: order.pickup_lat, lon: order.pickup_lon, type: 'loading' });
+        waypoints.push({ name: order.pickup || '상차지', lat: order.pickup_lat, lon: order.pickup_lon, type: 'loading', ...orderWaypointMeta });
       }
       let destName = null, destLat = null, destLon = null;
       if (order?.lat && order?.lon) {
         if (waypoints.length) {
           destName = order.delivery || null; destLat = order.lat; destLon = order.lon;
         } else {
-          waypoints.push({ name: order.delivery || '하차지', lat: order.lat, lon: order.lon, type: 'unloading' });
+          waypoints.push({ name: order.delivery || '하차지', lat: order.lat, lon: order.lon, type: 'unloading', ...orderWaypointMeta });
         }
       }
       if (!waypoints.length) { toast('경유지 좌표가 없습니다. 오더에 좌표를 입력하세요', 'error'); return; }
@@ -4751,6 +4885,8 @@
     if (!window.kakao?.maps?.services) return;
     const ps = new kakao.maps.services.Places();
     root.querySelectorAll('input.place-search').forEach(inp => {
+      if (inp.dataset.placeBound === '1') return;
+      inp.dataset.placeBound = '1';
       let dropdown = null;
       let debounce = null;
 
@@ -5162,11 +5298,20 @@
       value: puMainEl ? puMainEl.value.trim() : '',
       lat:   puMainEl?.dataset.lat ? parseFloat(puMainEl.dataset.lat) : null,
       lon:   puMainEl?.dataset.lon ? parseFloat(puMainEl.dataset.lon) : null,
+      cargo: readIntakeField(form, `pickup_cargo_${taskNum}`),
+      tons:  readIntakeField(form, `pickup_tons_${taskNum}`),
     }];
     if (card) card.querySelectorAll('[data-extra-pickup]').forEach(row => {
       const el = form.querySelector(`[name="pickup_${taskNum}_extra_${row.dataset.extraPickup}"]`);
       const v = el ? el.value.trim() : '';
-      if (v) pickups.push({ value: v, lat: el?.dataset.lat ? parseFloat(el.dataset.lat) : null, lon: el?.dataset.lon ? parseFloat(el.dataset.lon) : null });
+      const s = row.dataset.extraPickup;
+      if (v) pickups.push({
+        value: v,
+        lat: el?.dataset.lat ? parseFloat(el.dataset.lat) : null,
+        lon: el?.dataset.lon ? parseFloat(el.dataset.lon) : null,
+        cargo: readIntakeField(form, `pickup_cargo_${taskNum}_extra_${s}`),
+        tons: readIntakeField(form, `pickup_tons_${taskNum}_extra_${s}`),
+      });
     });
     const delMainEl = form.querySelector(`[name="delivery_${taskNum}"]`);
     const deliveries = [{
@@ -5202,14 +5347,14 @@
         lat:        dl.lat,
         lon:        dl.lon,
         recipient:  dl.recipient,
-        cargo:      dl.cargo,
-        tons:       dl.tons,
+        cargo:      dl.cargo || pu.cargo,
+        tons:       dl.tons || pu.tons,
       };
     });
   }
 
   function clearIntakeRow(form, taskNum) {
-    [`pickup_${taskNum}`, `delivery_${taskNum}`, `recipient_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
+    [`pickup_${taskNum}`, `pickup_cargo_${taskNum}`, `pickup_tons_${taskNum}`, `delivery_${taskNum}`, `recipient_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
       const el = form.querySelector(`[name="${name}"]`);
       if (el) {
         el.value = '';
@@ -5318,9 +5463,15 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row';
     row.dataset.extraPickup = seq;
-    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="추가 상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
+    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="추가 상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
+    row.querySelector('.place-clear')?.addEventListener('click', () => {
+      const inp = row.querySelector(`[name="${name}"]`);
+      if (inp) { inp.value = ''; delete inp.dataset.lat; delete inp.dataset.lon; }
+    });
     pickupBlock.insertBefore(row, addBtn);
+    bindPlaceSearch(row);
+    bindIntakeKeyboard(root);
     row.querySelector('.intake-field').focus();
   }
 
@@ -5338,7 +5489,14 @@
     row.dataset.extraDelivery = seq;
     row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신자(고객사명)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
+    row.querySelector('.place-clear')?.addEventListener('click', () => {
+      const inp = row.querySelector(`[name="delivery_${taskNum}_extra_${seq}"]`);
+      if (inp) { inp.value = ''; delete inp.dataset.lat; delete inp.dataset.lon; }
+    });
     deliveryBlock.insertBefore(row, addBtn);
+    bindPlaceSearch(row);
+    bindIntakeKeyboard(root);
+    row.querySelector('[data-intake-field^="recipient_"]')?.addEventListener('blur', () => suggestIntakeMixedLoadFromRecipients(root));
     row.querySelector('.intake-field').focus();
   }
 
@@ -5359,6 +5517,8 @@
 
   function bindIntakeKeyboard(root) {
     root.querySelectorAll('.intake-field').forEach(field => {
+      if (field.dataset.intakeKeyBound === '1') return;
+      field.dataset.intakeKeyBound = '1';
       field.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         if (e.shiftKey) return;
@@ -5391,15 +5551,19 @@
         <div class="stop-block">
           <div class="stop-label"><span class="ico">📍</span> 상차지</div>
           ${intakePlaceInput(`pickup_${taskNum}`, pickup, taskNum === 1, t + 1)}
+          <div class="delivery-fields">
+            ${cargoTypeSelectHtml(`pickup_cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 2}" data-intake-field="pickup_cargo_${taskNum}"`)}
+            <input type="text" class="intake-field" name="pickup_tons_${taskNum}" placeholder="상차 규격 예: 5톤" tabindex="${t + 3}" data-intake-field="pickup_tons_${taskNum}">
+          </div>
           <button type="button" class="intake-aux-link" data-add-pickup="${taskNum}" tabindex="-1">+ 상차지 추가</button>
         </div>
         <div class="stop-block">
           <div class="stop-label"><span class="ico">📦</span> 하차지</div>
-          ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 2)}
+          ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 4)}
           <div class="delivery-fields">
-            <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신자(고객사명)" tabindex="${t + 3}" data-intake-field="recipient_${taskNum}">
-            ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 4}" data-intake-field="cargo_${taskNum}"`)}
-            <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="규격 예: 5톤, 3파레트" tabindex="${t + 5}" data-intake-field="tons_${taskNum}">
+            <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신자(고객사명)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
+            ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 6}" data-intake-field="cargo_${taskNum}"`)}
+            <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 7}" data-intake-field="tons_${taskNum}">
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
         </div>
@@ -5408,29 +5572,29 @@
             <div class="form-grid" style="max-width:100%;grid-template-columns:100px 1fr;gap:10px 12px">
               <label>화주(고객) *</label>
               <div class="intake-customer-control">
-                <select class="intake-field" name="customer" required tabindex="${t + 6}" data-intake-field="customer">${custOpts}</select>
+                <select class="intake-field" name="customer" required tabindex="${t + 8}" data-intake-field="customer">${custOpts}</select>
                 <button type="button" class="btn btn-sm" data-temp-customer tabindex="-1">+ 임시 화주 추가</button>
               </div>
               <label>희망 도착</label>
               <div>
                 ${desiredArrivalFieldsHtml({
                   value: sample?.window && sample.window !== '—' ? sample.window : '',
-                  tabindexDate: t + 7,
-                  tabindexHour: t + 8,
+                  tabindexDate: t + 9,
+                  tabindexHour: t + 10,
                   intakeField: true,
                   hint: true,
                 })}
               </div>
               <label>연락처</label>
-              <input class="intake-field" name="contact" placeholder="담당 연락처" tabindex="${t + 9}" data-intake-field="contact">
+              <input class="intake-field" name="contact" placeholder="담당 연락처" tabindex="${t + 11}" data-intake-field="contact">
               <label>혼적 여부</label>
-              <div>${intakeMixedLoadRadioHtml(`intake-mixed-${taskNum}`, defaultMixed, t + 10)}</div>
+              <div>${intakeMixedLoadRadioHtml(`intake-mixed-${taskNum}`, defaultMixed, t + 12)}</div>
             </div>
           </div>` : `
           <div class="stop-block task-meta-divider">
             <div class="form-grid" style="max-width:100%;grid-template-columns:100px 1fr;gap:8px 12px">
               <label>혼적 여부</label>
-              <div>${intakeMixedLoadRadioHtml(`intake-mixed-${taskNum}`, defaultMixed, t + 6)}</div>
+              <div>${intakeMixedLoadRadioHtml(`intake-mixed-${taskNum}`, defaultMixed, t + 8)}</div>
             </div>
           </div>`}
       </article>`;
@@ -5499,46 +5663,20 @@
         }
         if (!rows.length) { toast('엑셀에 데이터가 없습니다', 'error'); return; }
 
-        const norm = s => String(s).trim().toLowerCase().replace(/[\s_\-()]/g, '');
-        const FIELD_MAP = {
-          customer:   ['화주명','화주','shippername','shipper'],
-          recipient:  ['수취인','수령인','recipientname','recipient'],
-          contact:    ['연락처','contact','contactname'],
-          pickup:     ['상차지','출발지','pickup','pickupaddress'],
-          delivery:   ['하차지','도착지','주소','delivery','address'],
-          cargo:      ['화물종류','화물','cargo','cargotype'],
-          tons:       ['규격','화물규격','중량','톤','중량톤','tons','cargosize','cargoweightton'],
-          latestAt:   ['희망도착','마감일','deadline','latestat','희망도착일시'],
-          mixed_load: ['혼재','혼재여부','mixedload','혼재화물'],
-        };
-
         let added = 0;
-        rows.forEach(rawRow => {
-          const mapped = {};
-          for (const [field, aliases] of Object.entries(FIELD_MAP)) {
-            for (const [k, v] of Object.entries(rawRow)) {
-              if (aliases.includes(norm(k))) { mapped[field] = v; break; }
-            }
+        let geocoded = 0;
+        for (const rawRow of rows) {
+          const expanded = rowsFromExcelOrder(rawRow);
+          for (const row of expanded) {
+            await geocodeIntakeRow(row);
+            if ((row.pickup && row.pickup_lat && row.pickup_lon) || (row.delivery && row.lat && row.lon)) geocoded++;
+            addPendingIntake(root, row);
+            added++;
           }
-          if (!mapped.delivery && !mapped.pickup) return;
-
-          if (mapped.latestAt instanceof Date) {
-            const d = mapped.latestAt;
-            mapped.latestAt = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-          } else if (mapped.latestAt) {
-            const s = String(mapped.latestAt).trim();
-            mapped.latestAt = s.length === 10 ? `${s}T00:00` : s.replace(' ', 'T').slice(0, 16);
-          }
-
-          const ml = String(mapped.mixed_load || '').trim().toLowerCase();
-          mapped.mixed_load = ['y', 'yes', '1', 'true', '혼재', 'o'].includes(ml);
-
-          addPendingIntake(root, mapped);
-          added++;
-        });
+        }
 
         if (!added) { toast('유효한 행이 없습니다 (하차지 또는 상차지 필수)', 'error'); return; }
-        toast(`엑셀 ${added}건 대기열에 추가됐습니다`);
+        toast(`엑셀 ${added}건 대기열 추가 · 좌표 ${geocoded}건 변환`);
       };
       inp.click();
     };
@@ -5587,14 +5725,17 @@
       const form = $('#intakeForm', root);
       for (const card of root.querySelectorAll('[data-task]')) {
         const taskNum = Number(card.dataset.task);
-        const draft = collectIntakeRow(form, taskNum);
-        if (!draft.pickup && !draft.delivery) continue;
+        const draftRows = collectIntakeRows(root, form, taskNum);
+        if (!draftRows.some(r => r.pickup || r.delivery)) continue;
         if (!validateIntakeRow(form, taskNum)) {
           toast('필수 항목을 입력하세요');
           return;
         }
-        addPendingIntake(root, draft);
+        draftRows.forEach(row => addPendingIntake(root, row));
         clearIntakeRow(form, taskNum);
+        card.querySelectorAll('.extra-stop-row').forEach(el => el.remove());
+        card._pickupExtraSeq = 0;
+        card._deliveryExtraSeq = 0;
       }
       const queue = [...(root._pendingIntakes || [])];
       if (!queue.length) {
@@ -5969,11 +6110,11 @@
   // ── 배차 API 연동 ────────────────────────────────────────────
 
   async function createTripManual(vehicleId, driverId, tasks, departureName) {
-    const hdrs = getAuthHeaders();
+    const hdrs = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
     const waypoints = [];
     tasks.forEach((t, gi) => {
-      (t.loadings || []).forEach(l => { if (l?.lat) waypoints.push({ name: l.name, lat: l.lat, lon: l.lon, type: 'loading', task_group: gi }); });
-      (t.unloadings || []).forEach(u => { if (u?.lat) waypoints.push({ name: u.name, lat: u.lat, lon: u.lon, type: 'unloading', task_group: gi }); });
+      (t.loadings || []).forEach(l => { if (l?.lat) waypoints.push({ ...l, name: l.name, lat: l.lat, lon: l.lon, type: 'loading', task_group: gi }); });
+      (t.unloadings || []).forEach(u => { if (u?.lat) waypoints.push({ ...u, name: u.name, lat: u.lat, lon: u.lon, type: 'unloading', task_group: gi }); });
     });
     if (!waypoints.length) { alert('경유지를 1개 이상 입력하세요.'); return null; }
     const body = { driver_id: driverId, vehicle_id: vehicleId, waypoints, departure_time: new Date().toISOString() };
