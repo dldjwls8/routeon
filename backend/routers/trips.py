@@ -33,6 +33,7 @@ from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
 from core.utils import _haversine, _haversine_km, _coord_to_address
+from services.cargo_capacity import validate_vehicle_capacity_for_waypoints
 from services.order_events import record_order_event
 
 router = APIRouter()
@@ -297,6 +298,8 @@ async def create_trip(req: TripCreate, db: AsyncSession = Depends(get_db),
             waypoints_json.append(_dest_waypoint(req.dest_name, req.dest_lat, req.dest_lon))
     if not waypoints_json:
         raise HTTPException(400, "상차지 또는 하차지를 1개 이상 입력해주세요.")
+    if vehicle:
+        validate_vehicle_capacity_for_waypoints(vehicle, waypoints_json)
 
     delivery_ids: list[uuid_lib.UUID] = []
     for w in waypoints_json:

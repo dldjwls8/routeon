@@ -40,6 +40,7 @@
 
   let map = null;
   let _liveMapPage = null;
+  let _liveMapCenteredPage = null;
   let _driverMarkers = {};
   let _locationWS = null;
   let _chatWS = null;
@@ -51,6 +52,11 @@
   let _miniMapMarkers = [];
   let _tripRouteMapInstance = null;
   let _tripRoutePolyline = null;
+  const LIVE_MAP_FIXED_VIEW = {
+    dashboard: { level: 13, label: '64km' },
+    'control-live': { level: 12, label: '32km' },
+  };
+  const LIVE_MAP_DEFAULT_CENTER = { lat: 36.5, lon: 127.8 };
 
   function getToken() { return localStorage.getItem('token'); }
   function getAuthHeaders() {
@@ -187,6 +193,54 @@
     if (d?.cargo_size) return String(d.cargo_size);
     if (d?.cargo_weight_ton != null && d.cargo_weight_ton !== '') return `${d.cargo_weight_ton}톤`;
     return '';
+  }
+
+  function parseCargoTon(value) {
+    const m = String(value || '').match(/(\d+(?:\.\d+)?)\s*(?:톤|t\b|ton(?:ne)?s?)/i);
+    return m ? Number(m[1]) : null;
+  }
+
+  function vehicleCapacityTon(vehicle) {
+    const kg = Number(vehicle?.weight_kg || 0);
+    return kg > 0 ? kg / 1000 : null;
+  }
+
+  function formatTonValue(value) {
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  }
+
+  function capacityViolationForOrders(vehicle, orders) {
+    const cap = vehicleCapacityTon(vehicle);
+    if (!cap) return null;
+    const bad = (orders || []).find(o => {
+      const ton = parseCargoTon(o?.tons || o?.cargo_size);
+      return ton != null && ton > cap;
+    });
+    if (!bad) return null;
+    return {
+      order: bad,
+      cargoTon: parseCargoTon(bad.tons || bad.cargo_size),
+      capacityTon: cap,
+    };
+  }
+
+  function capacityViolationMessage(vehicle, orders) {
+    const v = capacityViolationForOrders(vehicle, orders);
+    if (!v) return '';
+    return `${displayOrderNo(v.order)} 규격 ${formatTonValue(v.cargoTon)}톤은 ${vehicle?.plate || '선택 차량'} 적재 가능 중량 ${formatTonValue(v.capacityTon)}톤을 초과합니다.`;
+  }
+
+  function fleetCapacityViolationMessage(vehicles, orders) {
+    const caps = (vehicles || []).map(v => ({ vehicle: v, capacity: vehicleCapacityTon(v) })).filter(v => v.capacity);
+    if (!caps.length) return '';
+    const maxCap = Math.max(...caps.map(v => v.capacity));
+    const bad = (orders || []).find(o => {
+      const ton = parseCargoTon(o?.tons || o?.cargo_size);
+      return ton != null && ton > maxCap;
+    });
+    if (!bad) return '';
+    const ton = parseCargoTon(bad.tons || bad.cargo_size);
+    return `${displayOrderNo(bad)} 규격 ${formatTonValue(ton)}톤을 적재할 수 있는 선택 차량이 없습니다.`;
   }
 
   function dispatchStopTooltip(item) {
@@ -4076,6 +4130,12 @@
         const v = vehicleById(dispatchManualVehicleId);
         const d = driverById(dispatchManualDriverId);
         const selectedIds = [...dispatchPendingSelectedIds];
+        const selectedOrders = selectedIds.map(id => DATA.orders.find(o => o.id === id)).filter(Boolean);
+        const capacityMessage = capacityViolationMessage(v, selectedOrders);
+        if (capacityMessage) {
+          toast(capacityMessage, 'error');
+          return;
+        }
         const tasks = [];
         const skipped = [];
         selectedIds.forEach(ordId => {
@@ -4202,6 +4262,10 @@
       });
       const { driver_ids, vehicle_assignments } = dispatchVehicleAssignmentsFromRows(selectedRows);
       if (!driver_ids.length) { toast('선택된 차량에 기사가 없습니다.'); return; }
+      const selectedOrdersForCapacity = checkedOrderIds.map(id => DATA.orders.find(o => o.id === id)).filter(Boolean);
+      const selectedVehiclesForCapacity = selectedRows.map(row => vehicleById(row.vehicleId)).filter(Boolean);
+      const capacityMessage = fleetCapacityViolationMessage(selectedVehiclesForCapacity, selectedOrdersForCapacity);
+      if (capacityMessage) { toast(capacityMessage, 'error'); return; }
 
       const btn = $('#runDispatch', root);
       btn.disabled = true; btn.innerHTML = '<span class="loading"></span>배차 중…';
@@ -4287,6 +4351,8 @@
         if (!vehicleId) { toast('차량을 선택하세요'); return false; }
         if (!driverId) { toast('기사를 선택하세요'); return false; }
         const ord = DATA.orders.find(o => o.id === ordId);
+        const capacityMessage = capacityViolationMessage(vehicleById(vehicleId), [ord]);
+        if (capacityMessage) { toast(capacityMessage, 'error'); return false; }
         const task = dispatchTaskFromOrder(ord);
         if (!task) { toast('상차지·하차지 좌표가 필요합니다', 'error'); return false; }
         const res = await fetch(`${API}/trips/auto-dispatch`, {
@@ -4875,7 +4941,12 @@
     const custOpts = DATA.customers.map(c =>
       `<option value="${c.name}" ${c.name === o.customer ? 'selected' : ''}>${c.name}</option>`
     ).join('');
-    const statusOpts = ['접수', '운행중', '완료', '취소'].map(s =>
+    const editableStatusByCurrent = {
+      '접수': ['접수', '운행중', '취소'],
+      '운행중': ['운행중', '완료', '취소'],
+    };
+    const statusChoices = editableStatusByCurrent[o.status] || [o.status];
+    const statusOpts = statusChoices.map(s =>
       `<option value="${s}" ${o.status === s ? 'selected' : ''}>${s}</option>`
     ).join('');
     // 완료·취소 상태는 조회 전용, 나머지는 상태 변경 가능 (접수 상태만 필드 전체 수정)
@@ -5669,11 +5740,26 @@
 
   // ── 카카오맵 ──────────────────────────────────────────────────
 
-  function initMap() {
+  function fixedLiveMapLevel(page = currentPage) {
+    return LIVE_MAP_FIXED_VIEW[page]?.level || 12;
+  }
+
+  function applyLiveMapFixedView(page = currentPage) {
+    if (!map || !window.kakao?.maps) return;
+    map.setLevel(fixedLiveMapLevel(page));
+    if (typeof map.setDraggable === 'function') map.setDraggable(false);
+    if (typeof map.setZoomable === 'function') map.setZoomable(false);
+  }
+
+  function initMap(page = currentPage) {
     const container = document.getElementById('map');
     if (!window.kakao?.maps || !container || map) return;
-    const opts = { center: new kakao.maps.LatLng(37.5665, 126.978), level: 10 };
+    const opts = {
+      center: new kakao.maps.LatLng(LIVE_MAP_DEFAULT_CENTER.lat, LIVE_MAP_DEFAULT_CENTER.lon),
+      level: fixedLiveMapLevel(page),
+    };
     map = new kakao.maps.Map(container, opts);
+    applyLiveMapFixedView(page);
   }
 
   function onKakaoReady() {
@@ -5709,6 +5795,7 @@
       if (mapEl) mapEl.innerHTML = '';
       map = null;
       _driverMarkers = {};
+      _liveMapCenteredPage = null;
       _liveMapPage = page;
     }
     if (!window.kakao?.maps) {
@@ -5722,11 +5809,13 @@
     if (!document.getElementById('map')) {
       container.innerHTML = '<div id="map" style="width:100%;height:100%;"></div>';
     }
-    if (!map) initMap();
+    if (!map) initMap(page);
     if (map) {
+      applyLiveMapFixedView(page);
       kakao.maps.event.trigger(map, 'resize');
       renderVehicleLocationMarkers();
       setTimeout(() => {
+        applyLiveMapFixedView(page);
         kakao.maps.event.trigger(map, 'resize');
         renderVehicleLocationMarkers();
       }, 120);
@@ -5759,16 +5848,24 @@
 
   function renderVehicleLocationMarkers() {
     if (!map) return;
-    const bounds = new kakao.maps.LatLngBounds();
+    let sumLat = 0;
+    let sumLon = 0;
     let count = 0;
     DATA.vehicles.forEach(v => {
       if (!v.driverId || v.start_lat == null || v.start_lon == null) return;
       const driver = DATA.drivers.find(d => d.id === v.driverId);
-      updateDriverMarker(v.driverId, Number(v.start_lat), Number(v.start_lon), driver?.name || v.driver || v.plate);
-      bounds.extend(new kakao.maps.LatLng(Number(v.start_lat), Number(v.start_lon)));
+      const lat = Number(v.start_lat);
+      const lon = Number(v.start_lon);
+      updateDriverMarker(v.driverId, lat, lon, driver?.name || v.driver || v.plate);
+      sumLat += lat;
+      sumLon += lon;
       count += 1;
     });
-    if (count > 0) map.setBounds(bounds);
+    if (count > 0 && _liveMapCenteredPage !== _liveMapPage) {
+      map.setCenter(new kakao.maps.LatLng(sumLat / count, sumLon / count));
+      _liveMapCenteredPage = _liveMapPage;
+    }
+    applyLiveMapFixedView(_liveMapPage || currentPage);
   }
 
   // ── WebSocket ──────────────────────────────────────────────────

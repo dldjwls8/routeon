@@ -33,6 +33,7 @@ from services import graphhopper as gh_svc
 from core.config import ARRIVAL_RADIUS_M, UPLOAD_DIR, ALLOWED_EXTS, MAX_FILE_SIZE, KAKAO_BASE, KAKAO_REST_KEY, KAKAO_JS_KEY
 from core.managers import manager, redis, chat_manager
 from core.utils import _haversine, _haversine_km, _coord_to_address
+from services.cargo_capacity import validate_vehicle_capacity_for_waypoints, vehicle_can_carry_waypoints
 
 router = APIRouter()
 
@@ -121,6 +122,7 @@ async def auto_dispatch_trips(
 
     # 차량 검증
     vehicle_by_driver: dict[uuid_lib.UUID, int] = {}
+    vehicles_by_id: dict[int, Vehicle] = {}
     if req.vehicle_assignments:
         try:
             vehicle_by_driver = {
@@ -142,11 +144,11 @@ async def auto_dispatch_trips(
                     Vehicle.organization_id == current_user.organization_id,
                 )
             )).scalars().all()
-            vehicles = {v.id: v for v in vehicle_rows}
-            missing = assigned_vehicle_ids - set(vehicles)
+            vehicles_by_id = {v.id: v for v in vehicle_rows}
+            missing = assigned_vehicle_ids - set(vehicles_by_id)
             if missing:
                 raise HTTPException(404, f"차량을 찾을 수 없습니다: {sorted(missing)}")
-            inactive = [v.id for v in vehicles.values() if not v.is_active]
+            inactive = [v.id for v in vehicles_by_id.values() if not v.is_active]
             if inactive:
                 raise HTTPException(400, f"비활성화된 차량입니다: {inactive}")
 
@@ -161,6 +163,7 @@ async def auto_dispatch_trips(
             raise HTTPException(404, "차량을 찾을 수 없습니다.")
         if not vehicle.is_active:
             raise HTTPException(400, "비활성화된 차량입니다.")
+        vehicles_by_id[vehicle.id] = vehicle
 
     # 기사별 마지막 위치 조회 (Redis 우선 → DB 폴백)
     driver_positions: dict = {}  # driver.id → (lat, lon) | None
@@ -192,9 +195,23 @@ async def auto_dispatch_trips(
     # 기사별 "현재 위치" — 태스크 배정 후 마지막 하차지로 갱신
     cur_pos: dict = {d.id: driver_positions[d.id] for d in located}
 
+    def _vehicle_for_driver(driver_id):
+        vehicle_id = vehicle_by_driver.get(driver_id, req.vehicle_id)
+        return vehicles_by_id.get(vehicle_id) if vehicle_id is not None else None
+
+    def _task_waypoints(task: AutoDispatchTask) -> list[dict]:
+        return [w.model_dump() for w in [*task.loadings, *task.unloadings]]
+
+    def _capacity_candidates(candidates: list[User], task: AutoDispatchTask) -> list[User]:
+        waypoints = _task_waypoints(task)
+        return [d for d in candidates if vehicle_can_carry_waypoints(_vehicle_for_driver(d.id), waypoints)]
+
     for task in req.tasks:
         # 한도 미달 기사만 후보로 유지
-        eligible_located = [d for d in located if len(driver_tasks[d.id]) < max_per_driver]
+        eligible_located = _capacity_candidates(
+            [d for d in located if len(driver_tasks[d.id]) < max_per_driver],
+            task,
+        )
         if eligible_located:
             best = min(
                 eligible_located,
@@ -208,8 +225,13 @@ async def auto_dispatch_trips(
             cur_pos[best.id] = (last.lat, last.lon)
         else:
             # 위치 미확인 기사 라운드 로빈 (한도 초과 기사 포함 폴백)
-            eligible_rr = [d for d in rr_pool if len(driver_tasks[d.id]) < max_per_driver]
-            pool = eligible_rr if eligible_rr else available
+            eligible_rr = _capacity_candidates(
+                [d for d in rr_pool if len(driver_tasks[d.id]) < max_per_driver],
+                task,
+            )
+            pool = eligible_rr if eligible_rr else _capacity_candidates(available, task)
+            if not pool:
+                raise HTTPException(400, "선택한 차량 중 화물 규격을 적재할 수 있는 차량이 없습니다.")
             driver_tasks[pool[rr_idx % len(pool)].id].append(task)
             rr_idx += 1
 
@@ -260,9 +282,13 @@ async def auto_dispatch_trips(
                     except ValueError:
                         pass
 
+        vehicle_id = vehicle_by_driver.get(driver.id, req.vehicle_id)
+        if vehicle_id is not None:
+            validate_vehicle_capacity_for_waypoints(vehicles_by_id.get(vehicle_id), waypoints)
+
         t = Trip(
             driver_id=driver.id,
-            vehicle_id=vehicle_by_driver.get(driver.id, req.vehicle_id),
+            vehicle_id=vehicle_id,
             waypoints=waypoints,
             departure_time=departure_iso,
         )

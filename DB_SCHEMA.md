@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-05 (v1.0.91 기준, 차량 위치 스냅샷 컬럼 추가)
+> 최종 검토: 2026-06-06 (v1.0.92 기준, 오더 상태 전이·적재 중량 검증 보강)
 
 ---
 
@@ -209,6 +209,7 @@
 > 대시보드 첫 화면의 오더 요약 카드는 상태 필터별 최대 5건만 표시하고, 전체 오더는 오더 목록 페이지에서 조회한다.
 > 오더 목록의 체크박스 선택은 프론트 UI 상태이며 별도 DB 컬럼을 만들지 않는다. 선택한 접수 상태 오더는 단건·수동 배차 화면으로 전달되어 기존 `deliveries.id` 기준으로 `/trips/auto-dispatch` 요청을 구성한다.
 > 오더 목록 UI 기본 표시 순서는 `상태`, `접수 시간`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `시간창`, `오더번호`다.
+> `cargo_size` 또는 `cargo_weight_ton`에서 톤 단위를 읽을 수 있으면 배차 생성 API가 `vehicles.weight_kg`와 비교한다. `3파레트`처럼 중량 환산이 불가능한 규격은 표시값으로만 저장된다.
 
 ---
 
@@ -359,18 +360,20 @@ sudo docker exec routeon-api python seeds/seed_rest_stops_xls.py
 ## Delivery status 변경 흐름
 
 ```
-pending → cancelled    : PATCH /deliveries/{id} (관리자 취소 버튼)
-pending → in_progress  : PATCH /deliveries/{id}/assign (기사 배정 시 자동)
-in_progress → done     : GPS 50m 자동 완료
+pending → cancelled       : PATCH /deliveries/{id} (관리자 취소 버튼)
+pending → in_progress     : PATCH /deliveries/{id}/assign 또는 배차 생성 시 자동
+in_progress → done        : GPS 50m 자동 완료
 in_progress → done_manual : PATCH /deliveries/{id}/complete (수동 완료)
+in_progress → cancelled   : PATCH /deliveries/{id} 또는 연결 Trip 취소
 ```
 
 수정 가능 조건:
 - `pending` 상태일 때만 **주소·화물 필드** 수정 가능 (`PATCH /deliveries/{id}`)
-- `pending` / `in_progress` 상태는 **상태(status) 변경** 가능 — 관리자 웹 오더 수정 모달의 `canSave` 로직 적용
+- `pending` 상태의 상태 변경은 `pending`, `in_progress`, `cancelled`만 허용
+- `in_progress` 상태의 상태 변경은 `in_progress`, `done`, `done_manual`, `cancelled`만 허용. `in_progress → pending` 역행은 API에서 거부
 - 연결된 Trip의 마지막 진행 배송을 `cancelled`로 변경하면 Trip도 `cancelled` 처리되고 기사 앱 WS에 `trip.cancelled` 이벤트가 전송됨
 - `done` / `done_manual` 상태는 수정·취소·삭제 불가
-- `cancelled` 상태는 삭제만 가능 (`DELETE /deliveries/{id}`)
+- `cancelled` 상태는 수정 API에서 거부되며 삭제만 가능 (`DELETE /deliveries/{id}`)
 
 ---
 
@@ -412,7 +415,7 @@ cancelled 처리 시:
 | 배정 기사 | `driver_id`, `driver_name` | `driverId`, `driver` | 같은 조직의 `users.vehicle_id == vehicles.id` 기사만 매핑 |
 | 최근 차량 위치 | `last_gps` | `last_gps` | `vehicles.last_lat/last_lon/last_gps_at` 스냅샷 기준 |
 
-> `vehicles` API는 `weight_kg`를 원본 필드로 반환하고, 프론트에서 `tonnage` 표시값을 파생한다. 과거 `max_load_kg` 접근으로 톤수가 `0.0톤`으로 보이던 문제는 v1.0.75에서 수정됨.
+> `vehicles` API는 `weight_kg`를 원본 필드로 반환하고, 프론트에서 `tonnage` 표시값을 파생한다. 배차 생성 시 톤 단위 화물 규격은 이 `weight_kg / 1000` 값과 비교된다. 과거 `max_load_kg` 접근으로 톤수가 `0.0톤`으로 보이던 문제는 v1.0.75에서 수정됨.
 > 기사 마지막 위치는 `/location-logs/{user_id}`가 Redis 실시간값 또는 `locations` 최신 행으로 반환한다. 차량 마지막 위치는 `/vehicles` 응답의 `last_gps`이며, 진행 중 운행 차량만 기사 GPS로 갱신되고 운행 완료/취소 후에는 차량 스냅샷으로 고정된다.
 
 ### deliveries status 매핑

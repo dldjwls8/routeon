@@ -286,16 +286,28 @@ async def update_delivery(
     delivery = _r.scalar_one_or_none()
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
-    if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual):
-        raise HTTPException(400, "완료된 배송은 수정할 수 없습니다.")
+    if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual, DeliveryStatus.cancelled):
+        raise HTTPException(400, "완료 또는 취소된 배송은 수정할 수 없습니다.")
     before = _delivery_snapshot(delivery)
     cancelled_now = False
     if req.status is not None:
         try:
-            delivery.status = DeliveryStatus(req.status)
-            cancelled_now = delivery.status == DeliveryStatus.cancelled
+            next_status = DeliveryStatus(req.status)
         except ValueError:
             raise HTTPException(400, f"올바르지 않은 상태: {req.status}")
+        allowed_transitions = {
+            DeliveryStatus.pending: {DeliveryStatus.pending, DeliveryStatus.in_progress, DeliveryStatus.cancelled},
+            DeliveryStatus.in_progress: {
+                DeliveryStatus.in_progress,
+                DeliveryStatus.done,
+                DeliveryStatus.done_manual,
+                DeliveryStatus.cancelled,
+            },
+        }
+        if next_status not in allowed_transitions.get(delivery.status, {delivery.status}):
+            raise HTTPException(400, f"{delivery.status.value} 상태에서 {next_status.value} 상태로 변경할 수 없습니다.")
+        delivery.status = next_status
+        cancelled_now = delivery.status == DeliveryStatus.cancelled
     if req.address is not None:
         delivery.address = req.address
     if req.lat is not None:

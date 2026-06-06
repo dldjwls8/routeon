@@ -134,6 +134,7 @@ routeon/
 - `recipient_name`: 수신자. unloading 전용. 배차 시 Delivery 원본에서 복사.
 - `cargo_type`: 화물 종류. 관리자 웹 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 드롭다운 기준.
 - `cargo_size`: 화물 규격. `5톤`, `3파레트` 같은 자유 텍스트이며 신규 오더·배차·기사 앱 표시는 이 값을 기준으로 한다.
+- 배차 생성 시 `cargo_size` 또는 `cargo_weight_ton`에서 톤 단위를 읽을 수 있으면 차량 `weight_kg`와 비교한다. `5톤`, `5t`, `5ton`은 검증 대상이고 `3파레트`처럼 중량 환산이 불가능한 규격은 표시값으로만 유지한다.
 - `cargo_weight_ton`: 과거 톤수 값 호환용. 신규 프론트 입력은 숫자 파싱 없이 `cargo_size`로 전달한다.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 - `order_no`: 표시용 오더번호. DB 컬럼이 아니라 `/deliveries`/`/trips` 응답에서 `created_at`과 Delivery UUID 기반으로 계산되는 `RO-YYMMDD-XXXXXX` 형식.
@@ -427,7 +428,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /rest-stops` | 관리자 | 휴게소 등록 |
 | `DELETE /rest-stops/{id}` | 관리자 | 휴게소 비활성화 |
 | `GET /trips?driver_id=&status=` | 로그인 | 운행 목록 (기사: 본인만, 관리자: 같은 기업) |
-| `POST /trips` | 관리자 | 운행 생성 — `vehicle_id` 지정 시 차량 제원(height/weight/length/width) 자동 복사, `departure_time` 미입력 시 생성 시각(UTC)으로 자동 설정 |
+| `POST /trips` | 관리자 | 운행 생성 — `vehicle_id` 지정 시 차량 제원(height/weight/length/width) 자동 복사, `departure_time` 미입력 시 생성 시각(UTC)으로 자동 설정. 톤 단위 화물 규격이 차량 `weight_kg`를 초과하면 거부 |
 | `GET /trips/{id}` | 로그인 | 운행 상세 |
 | `GET /trips/{id}/polyline` | 로그인 | 실제 도로 경로선 좌표 |
 | `PATCH /trips/{id}/waypoints` | 관리자 | 경유지 추가 + 앱에 재경로 알림 |
@@ -439,7 +440,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /optimize` | 로그인 | 경로 최적화. origin_lat/lon 미입력 시 Redis GPS 자동 사용. origin_name 미입력 시 역지오코딩 자동 조회. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로. current_name 미입력 시 역지오코딩 자동 조회 |
 | `GET /drivers/available` | 관리자 | 현재 운행이 없는 가용 기사 목록 (조직 내) |
-| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 위치 기반 greedy 배정 후 일괄 운행 생성. 기사 위치 미확인 시 라운드 로빈 폴백 |
+| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 위치 기반 greedy 배정 후 일괄 운행 생성. 기사 위치 미확인 시 라운드 로빈 폴백. 톤 단위 화물 규격은 선택 차량 `weight_kg` 초과 시 거부 |
 
 ### 배송/위치
 | 엔드포인트 | 권한 | 설명 |
@@ -447,7 +448,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /deliveries` | 관리자 | 같은 조직 배송지 단건 등록 (`organization_id` 자동 지정) |
 | `POST /deliveries/batch` | 관리자 | 같은 조직 배송지 일괄 등록 |
 | `PATCH /deliveries/{id}/assign` | 관리자 | 같은 조직 기사 배정 |
-| `PATCH /deliveries/{id}` | 관리자 | 배송지 수정·상태 변경. 마지막 진행 배송 취소 시 연결 Trip도 cancelled 처리 |
+| `PATCH /deliveries/{id}` | 관리자 | 배송지 수정·상태 변경. 상태 역행(`in_progress → pending`)은 거부하고, 마지막 진행 배송 취소 시 연결 Trip도 cancelled 처리 |
 | `DELETE /deliveries/{id}` | 관리자 | 같은 조직 배송 취소 |
 | `GET /deliveries` | 로그인 | 관리자: 같은 조직 배송 목록 / 기사: 본인 배정 배송 목록. 응답에 표시용 `order_no` 포함 |
 | `GET /deliveries/{id}` | 로그인 | 배송 상세. 응답에 표시용 `order_no` 포함 |
@@ -541,6 +542,7 @@ chat.html 구조:
 dashboard.html 관제 지도:
 - 대시보드 진입 시 `/vehicles` 응답의 `last_gps`가 있는 차량은 차량 위치 스냅샷 기준으로 지도 마커를 표시한다.
 - `/ws/location` 수신은 기사 실시간 위치 이벤트다. 진행 중 운행 차량만 화면 좌표와 서버 `vehicles.last_lat/last_lon`을 갱신하며, 운행 완료/취소 후 차량 스냅샷은 더 이상 기사 GPS를 따라가지 않는다.
+- 대시보드 요약 지도와 운행관제 지도는 사용자 줌/드래그를 막고 고정 배율로 표시한다. 대시보드는 Kakao level 13, 운행관제는 level 12 기준이며 마커 갱신 시 자동 `setBounds()`로 배율을 변경하지 않는다.
 - 대시보드 오더 요약 카드는 상태 필터별 최대 5건만 표시하며, 전체 목록은 `오더관리 > 오더 목록` 페이지에서 페이지네이션으로 조회한다.
 
 dashboard.html 오더·배차 UI:
@@ -549,10 +551,12 @@ dashboard.html 오더·배차 UI:
 - `오더관리 > 오더 목록`은 행 클릭을 상세 조회, 체크박스를 다중 선택으로 사용한다. 현재 페이지 선택/해제와 선택 해제 버튼을 제공하며, 선택한 접수 상태 오더는 `배차·지정 > 단건·수동 배차`로 전달할 수 있다.
 - 오더 목록 컬럼 순서는 `상태`, `접수 시간`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `시간창`, `오더번호` 순서를 기본으로 한다. 오더번호는 `RO-YYMMDD-XXXXXX` 표시 형식을 사용하고 상세 화면에서 원본 UUID도 확인할 수 있다.
 - 오더 상세의 기록 탭 명칭은 `처리 기록`이다. `GET /deliveries/{id}/events`로 서버의 `order_events`를 불러오며, 오더 접수/수정/취소와 기사 앱 운행 시작·상차·하차·취소 요청/처리 이벤트를 표시한다.
+- 오더 수정 모달은 현재 상태 기준 가능한 상태만 표시한다. `접수`는 `접수/운행중/취소`, `운행중`은 `운행중/완료/취소`만 선택 가능하며 완료·취소 오더는 조회 전용이다.
 - `배차·지정 > 일괄 자동 배차`는 미배정 오더 풀에서 오더를 고르고 가용 기사 카드를 선택한 뒤 `기사에게 배정`으로 기사별 배정 묶음을 만든다. `일괄 배차 실행`은 배정된 오더/기사 기준으로 `/trips/auto-dispatch`를 호출한다.
 - 일괄 자동 배차 화면은 좌측 `오더·기사 배정`, 우측 `결과 — 차량별 방문 순서·미배정` 2패널 구조다. 좌우 패널은 독립 스크롤이며 좁은 화면에서는 세로 배치로 전환한다.
 - `배차·지정 > 단건·수동 배차`는 미배차 건 체크박스 다중 선택을 지원한다. 선택한 여러 오더를 같은 차량·기사로 확정할 수 있으며, 좌표가 없는 건은 기존 배차 결과의 미배정 처리 흐름을 사용한다.
 - 단건·수동 배차 화면은 좌측 `미배차 건·선택 건 배정·다건 설정`, 우측 `배차 결과` 2패널 구조다. 데이터 동기화/리렌더 시 배차 패널 스크롤 위치도 보존한다.
+- 단건·수동 배차와 일괄 자동배차는 서버 검증 전 프론트에서도 선택 차량보다 큰 톤수 규격 오더를 감지해 요청을 중단한다. 최종 방어는 서버의 `/trips`, `/trips/auto-dispatch` 검증이다.
 
 dashboard.html 고객관리 UI:
 - `고객관리 > 고객 관리`의 `+ 추가`/`수정` 모달 주소칸은 `bindPlaceSearch()` 기반 카카오 장소 자동완성을 사용한다.
