@@ -6,6 +6,22 @@
 
 ---
 
+## v1.0.117 (2026-06-07)
+### 고객관리 담당자 필드 제거 후속 · 관리자 웹 Vue 3 마이그레이션 및 레이아웃 버그 수정
+- **DATA.customers 매핑에서 남아 있던 `contact` 참조 제거 (v1.0.116 후속)**: `frontend/dashboard.js`의 `DATA.customers` 초기화(`customers.map`)와 임시 화주 등록 로컬 fallback에서 `contact` 필드를 남겨 두고 있어, `contact`가 `undefined`로 노출되거나 콘솔 경고가 발생했음. `contact: c.contact || ''`, `contact: saved.contact || name`, `contact: name` 할당 전부 제거해 v1.0.116의 고객관리 담당자 필드 제거를 완전하게 마무리
+- **관리자 웹 Vue 3 + Vite SPA 마이그레이션 (`frontend-vue/` 신설)**: 기존 바닐라 JS/HTML 관리자 웹(`frontend/`)을 Vue 3 Composition API + Vue Router + Vite 기반 SPA로 마이그레이션. `frontend-vue/` 디렉토리에 Vue 컴포넌트, 라우터, 레이아웃, 뷰를 구성하고, 기존 6,989줄의 `dashboard.js`는 `public/dashboard.js`로 그대로 보존해 레거시 로직을 재사용
+  - `DashboardLayout.vue`: 대시보드 쉘(탑바, 네비게이션, 메인 콘텐츠, 푸터, 모달/토스트/맵 컨테이너)을 Vue 컴포넌트로 구성. `onMounted`에서 `theme-dashboard` body 클래스를 추가하고 `window.RouteOnInit()`를 1회 호출해 레거시 초기화가 실행되도록 연결
+  - `App.vue`: `route.meta.main`에 따라 `DashboardLayout`으로 `router-view`를 감싸 대시보드 탭과 비대시보드 페이지(랜딩, 로그인, 회원가입, 설정, 채팅)를 구분
+  - `main.js`: Vue Router와 레거시 `gotoPage()`를 양방향 동기화. `window._onRouteOnGotoPage`가 Vue Router path로 `router.push`, `router.beforeEach`가 레거시 `window.RouteOnGotoPage(main, page)`를 호출해 URL 쿼리 파라미터(`?main=&page=`)와 Vue Router path를 동시에 유지
+  - 페이지 뷰: `IndexView.vue`, `LoginView.vue`, `RegisterView.vue`, `SettingsView.vue`, `ChatView.vue`, `IntroView.vue` — 기존 HTML의 전역 `<style>` 규칙(`:root`, `html[data-theme]`, `body`)을 그대로 복제하기 위해 `<style>`(scoped 아님) 사용
+- **대시보드 및 기본정보 탭 레이아웃 버그 수정 (Vue 마이그레이션 후속)**: Vue 마이그레이션 후 `#app`의 직계 자신이 `.app-shell`이 되어 기존 CSS `#app.app-shell` 선택자가 적용되지 않아 flex container가 무너지고 footer가 중간에 뜨는 문제 수정
+  - `frontend-vue/src/assets/dashboard.css`: `#app.app-shell` → `.app-shell`로 변경해 Vue의 `DashboardLayout` 루트가 `display: flex; flex-direction: column; min-height: 100vh`를 상속받도록 수정
+  - `body.theme-dashboard .dash-layout`에 `height: 100%; align-items: stretch` 추가, `.dash-right`를 flex column으로 만들고 `.dash-orders-card`에 `flex: 1`을 적용해 대시보드가 viewport를 채우고 내부 스크롤로 동작하도록 수정
+  - 오더목록(`order-list-viewport`), 배차관리(`dispatch-viewport`), 오더접수(`order-intake-viewport`)는 기존 viewport 고정 유지. 추가로 사후통계(`trip-stats`), 캘린더(`schedule-calendar`), 마일스톤(`schedule-milestones`), 기업정보(`profile`) 페이지에 `page-scroll-body` 클래스를 부여해 이들만 body 전체 스크롤을 유지하도록 수정(오더목록·캘린더·마일스톤·사후통계·기업정보 제외 요청 반영)
+  - `frontend-vue/public/dashboard.js`: `applyPageTheme()`에 `page-scroll-body` 추가/제거 로직 삽입. `renderDashboard()`를 `page-sticky-top` + `page-body-fill` 구조로 감싸 운행관제와 동일한 viewport fill 패턴 적용
+- **DB 변경 없음**: `frontend/dashboard.js` 데이터 매핑 정리 및 `frontend-vue/` UI 마이그레이션·레이아웃 수정만 진행
+- **검증**: `npm run build`로 Vue 프로젝트 빌드 성공, `node --check`로 레거시 `dashboard.js` 구문 검사 통과
+
 ## v1.0.116 (2026-06-07)
 ### 고객관리 담당자 필드 전면 제거
 - **배경**: 고객(`customers`) 테이블의 `contact` 컬럼은 "담당자명"을 저장했으나, 실제 업무 흐름에서 고객 단위 담당자를 관리하지 않고 배송(delivery) 단위의 `contact_name`/`contact_phone`을 사용함. 고객관리 화면에서 담당자 입력란이 불필요하게 남아 있어 팀원 혼란을 야기

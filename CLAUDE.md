@@ -25,7 +25,7 @@
 | 최적화 | Google OR-Tools (TSP) |
 | 인프라 | Docker Compose, Nginx, Oracle Cloud |
 | 앱 | Android Studio (Kotlin) |
-| 관리자 웹 | HTML/JS (바닐라) |
+| 관리자 웹 | Vue 3 + Vite SPA (`frontend-vue/`) — 마이그레이션 완료. 기존 `frontend/`는 레거시로 유지 |
 
 ---
 
@@ -102,6 +102,29 @@ routeon/
     ├── privacy.html        개인정보 처리방침 안내
     ├── copyright.html      저작권 안내
     └── contact.html        프로젝트 문의 안내
+├── frontend-vue/           Vue 3 + Vite SPA 관리자 웹 (기존 frontend/ 마이그레이션)
+│   ├── index.html          SPA 진입점 (legacy scripts + Vue app mount)
+│   ├── vite.config.js      Vite 빌드 설정
+│   ├── package.json        의존성 (vue, vue-router, vite)
+│   ├── public/
+│   │   ├── dashboard.js    레거시 대시보드 로직 (6,989줄 그대로 보존, IIFE로 init() 노출)
+│   │   ├── api-client.js   API/WS 주소·토큰·인증 헤더·공용 fetch
+│   │   └── ...             정적 에셋 (logo, HTML 템플릿)
+│   └── src/
+│       ├── main.js         Vue 앱 생성·라우터 등록·레거시 양방향 동기화
+│       ├── App.vue         대시보드/비대시보드 레이아웃 분기 (DashboardLayout 조건부 wrapping)
+│       ├── router/
+│       │   └── index.js    Vue Router 경로 정의·meta.main·meta.label
+│       ├── layouts/
+│       │   └── DashboardLayout.vue  대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container)
+│       └── views/
+│           ├── IndexView.vue       랜딩 페이지
+│           ├── LoginView.vue       로그인
+│           ├── RegisterView.vue    기업/관리자 가입
+│           ├── SettingsView.vue    계정 설정
+│           ├── ChatView.vue        내부 채팅
+│           ├── IntroView.vue       서비스 소개
+│           └── ...                 기타 정적 페이지
 ```
 
 ### 컨테이너
@@ -110,7 +133,7 @@ routeon/
 | routeon-db | 5432 | PostgreSQL + TimescaleDB |
 | routeon-api | 8000 | FastAPI 백엔드 |
 | routeon-redis | 6379 | Redis (GPS TTL 5분) |
-| routeon-frontend | 80 | Nginx + 관리자 웹 |
+| routeon-frontend | 80 | Nginx + Vue 3 SPA (`frontend-vue/dist`) |
 | routeon-code-server | 8443 | 브라우저 VS Code |
 
 ---
