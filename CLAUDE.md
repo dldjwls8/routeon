@@ -25,7 +25,7 @@
 | 최적화 | Google OR-Tools (TSP) |
 | 인프라 | Docker Compose, Nginx, Oracle Cloud |
 | 앱 | Android Studio (Kotlin) |
-| 관리자 웹 | Vue 3 + Vite SPA (`frontend-vue/`) — 마이그레이션 완료. 기존 `frontend/`는 레거시로 유지 |
+| 관리자 웹 | Vue 3 + Vite SPA (`frontend-vue/`) — 마이그레이션 완료. 기존 `frontend/`는 레거시로 유지. 운행관제 탭은 실시간 GPS 기반 폴리라인(지나간 경로 흐림·남은 경로 선명) 표시 지원 |
 
 ---
 

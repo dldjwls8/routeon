@@ -6,6 +6,17 @@
 
 ---
 
+## v1.0.118 (2026-06-07)
+### 운행관제 탭 실시간 폴리라인 기능 구현
+- **배경**: 기존 지도중심 웹 관제에서 차량별 운행 경로를 폴리라인으로 표시하는 기능이 있었으나, Vue 3 마이그레이션 후 운행관제(`control-live`) 탭에서는 폴리라인이 구현되지 않아 차량 클릭 시 단순히 지도 중심만 이동했음. 실시간 GPS 수신에 따라 "지나간 길"과 "남은 길"을 구분해 시각적으로 표시할 필요가 있었음
+- **`/trips/{tripId}/polyline` API 연동**: 기존 `showTripRoutePolyline` 함수를 재사용해 운행관제 전용 폴리라인(`loadAndShowControlPolyline`)을 구현. `/trips/{tripId}/polyline` 응답의 `polyline` 좌표 배열과 `nodes`(시작/도착/경유지)를 모두 활용
+- **지나간 경로·남은 경로 투명도 구분**: 전체 경로는 `strokeOpacity: 0.25`로 흐릿하게 배경처럼 표시하고, 현재 차량 위치에서 가장 가까운 폴리라인 지점(`findClosestPolylineIndex`)부터 도착지까지의 남은 구간은 `strokeOpacity: 0.9`로 선명하게 표시. 이를 위해 `_controlRoutePolyline`(전체·흐림)과 `_controlActivePolyline`(남은 구간·선명) 두 개의 폴리라인 객체를 동시에 관리
+- **실시간 GPS 반영**: WebSocket 위치 메시지(`connectLocationWebSocket`의 `ws.onmessage`) 수신 시, 선택된 차량(`selectedControlVehicleId`)이라면 `updateControlActivePolyline(lat, lon)`을 호출해 남은 경로를 실시간으로 재계산·재표시. 차량이 이동함에 따라 선명한 폴리라인이 점점 짧아지는 효과
+- **시작·도착·경유지 핀 표시**: `nodes` 데이터의 `type`(origin, destination, waypoint, rest_stop)에 따라 이모지 아이콘(`🏁`, `🏴`, `📦`, `☕`)을 가진 `kakao.maps.CustomOverlay`를 지도에 표시
+- **페이지 전환 시 cleanup**: `control-live` 탭에서 벗어나면(`gotoPage`) `clearControlPolyline()`으로 폴리라인과 노드 오버레이를 모두 제거. 다른 차량을 선택해도 이전 폴리라인은 자동 정리
+- **DB 변경 없음**: 프론트엔드 `dashboard.js`의 지도·WebSocket 로직만 수정, 백엔드 API나 DB 스키마 변경 없음
+- **검증**: `npm run build`로 Vue 프로젝트 빌드 성공, `node --check`로 레거시 `dashboard.js` 구문 검사 통과
+
 ## v1.0.117 (2026-06-07)
 ### 고객관리 담당자 필드 제거 후속 · 관리자 웹 Vue 3 마이그레이션 및 레이아웃 버그 수정
 - **DATA.customers 매핑에서 남아 있던 `contact` 참조 제거 (v1.0.116 후속)**: `frontend/dashboard.js`의 `DATA.customers` 초기화(`customers.map`)와 임시 화주 등록 로컬 fallback에서 `contact` 필드를 남겨 두고 있어, `contact`가 `undefined`로 노출되거나 콘솔 경고가 발생했음. `contact: c.contact || ''`, `contact: saved.contact || name`, `contact: name` 할당 전부 제거해 v1.0.116의 고객관리 담당자 필드 제거를 완전하게 마무리
