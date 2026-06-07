@@ -662,6 +662,7 @@
         const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
         DATA.orders = deliveries.map(d => ({
           id: d.id,
+          tripId: d.trip_id || null,
           order_no: d.order_no || null,
           customer: d.shipper_name || '—',
           status: deliveryStatusMap[d.status] || d.status,
@@ -858,6 +859,8 @@
   let statsPeriod = '주';
   let calendarYear  = new Date().getFullYear();
   let calendarMonth = new Date().getMonth() + 1;
+  let calendarSearch = '';
+  let calendarEventPage = 1;
   let dispatchPreviewTab = 0;
   let dispatchRan = false;
   let bulkDispatchRan = false;
@@ -979,7 +982,7 @@
   }
 
   function orderIsEditable(o) {
-    return o.status === '접수';
+    return o.status !== '완료' && o.status !== '취소';
   }
 
   function orderCanCancel(o) {
@@ -2278,7 +2281,7 @@
           <label>하차</label>${detailField('orderDetailDelivery', o.delivery)}
           ${o.cancelReason ? `<label>취소 사유</label><span>${o.cancelReason}</span>` : ''}
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:12px">${editable ? '수정을 누른 뒤 접수 정보를 변경할 수 있습니다.' : '현재 상태에서는 조회만 가능합니다.'}</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:12px">${editable ? '수정을 누른 뒤 오더 정보를 변경할 수 있습니다.' : '완료·취소된 오더는 조회만 가능합니다.'}</p>
       </div>
       <div class="tab-panel ${tab === 'stops' ? 'active' : ''}" data-panel="stops">${orderStopsTableHtml(o)}</div>
       <div class="tab-panel ${tab === 'map' ? 'active' : ''}" data-panel="map">
@@ -2319,16 +2322,25 @@
     }
     const center = new kakao.maps.LatLng(points[0].lat, points[0].lon);
     const detailMap = new kakao.maps.Map(mapEl, { center, level: 8 });
+    // 탭 전환 직후에는 컨테이너 크기가 아직 확정되지 않아 지도가 흰 화면으로 보일 수 있어 relayout으로 강제 재렌더링한다.
+    detailMap.relayout();
     const bounds = new kakao.maps.LatLngBounds();
     points.forEach((point, index) => {
       const position = new kakao.maps.LatLng(point.lat, point.lon);
       bounds.extend(position);
       const marker = document.createElement('div');
-      marker.className = `order-stop-marker ${point.role === 'pickup' ? 'pickup' : 'delivery'}`;
-      marker.innerHTML = `<strong>${point.role === 'pickup' ? '상차' : '하차'} ${index + 1}</strong><span>${escapeHtml(point.label)}</span>`;
-      new kakao.maps.CustomOverlay({ map: detailMap, position, content: marker, yAnchor: 1.15 });
+      marker.className = `order-stop-pin ${point.role === 'pickup' ? 'pickup' : 'delivery'}`;
+      marker.innerHTML = `
+        <span class="pin-label">${point.role === 'pickup' ? '상차' : '하차'} ${index + 1} · ${escapeHtml(point.label)}</span>
+        <span class="pin-shape"><i>${index + 1}</i></span>`;
+      new kakao.maps.CustomOverlay({ map: detailMap, position, content: marker, yAnchor: 1, xAnchor: 0.5 });
     });
-    if (points.length > 1) detailMap.setBounds(bounds, 32, 32, 32, 32);
+    if (points.length > 1) {
+      detailMap.setBounds(bounds, 32, 32, 32, 32);
+    } else {
+      detailMap.setCenter(center);
+    }
+    detailMap.relayout();
   }
 
   function bindOrderDetail(root, o) {
@@ -2337,7 +2349,7 @@
     $('#inlineDetailSave', root).onclick = async () => {
       if (!orderEditMode) {
         if (!orderIsEditable(o)) {
-          toast('접수 상태의 오더만 수정할 수 있습니다.', 'error');
+          toast('완료·취소된 오더는 수정할 수 없습니다.', 'error');
           return;
         }
         orderEditMode = true;
@@ -2544,6 +2556,14 @@
     const monthEvents = DATA.scheduleEvents
       .filter(e => e.date.startsWith(monthPrefix))
       .sort((a, b) => String(b.datetime || b.date).localeCompare(String(a.datetime || a.date)));
+    const q = calendarSearch.trim().toLowerCase();
+    const filteredEvents = q
+      ? monthEvents.filter(e => [e.orderId, e.label, e.type === 'trip' ? '운행' : '오더']
+          .some(v => String(v || '').toLowerCase().includes(q)))
+      : monthEvents;
+    const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE));
+    if (calendarEventPage > totalPages) calendarEventPage = totalPages;
+    const pageEvents = filteredEvents.slice((calendarEventPage - 1) * PAGE_SIZE, calendarEventPage * PAGE_SIZE);
     const todayY = new Date().getFullYear(), todayM = new Date().getMonth() + 1;
     const isCurrentMonth = year === todayY && month === todayM;
     root.innerHTML = `
@@ -2570,13 +2590,16 @@
         <div class="cal-grid">${renderCalendarGridHtml(year, month)}</div>
       </div>
       <div class="card" style="margin-top:10px">
-        <div class="card-hd"><h2>${monthLabel} 일정</h2></div>
+        <div class="card-hd">
+          <h2>${monthLabel} 일정</h2>
+          <input type="search" class="search" id="calEventSearch" value="${escapeHtml(calendarSearch)}" placeholder="ID·내용·유형 검색" aria-label="일정 검색" style="max-width:220px">
+        </div>
         <div class="card-bd" style="padding:0">
-          ${monthEvents.length === 0
-            ? '<p style="padding:20px;color:var(--text-muted);text-align:center">이번 달 일정이 없습니다</p>'
+          ${filteredEvents.length === 0
+            ? `<p style="padding:20px;color:var(--text-muted);text-align:center">${q ? '검색 결과가 없습니다' : '이번 달 일정이 없습니다'}</p>`
             : tableScrollWrap(`<table>
             <thead><tr><th>날짜 및 시간</th><th>ID</th><th>유형</th><th>내용</th></tr></thead>
-            <tbody>${monthEvents.map(e => `
+            <tbody>${pageEvents.map(e => `
               <tr>
                 <td>${e.datetime ? formatDateTimeShort(e.datetime) : e.date}</td>
                 <td><code>${escapeHtml(e.orderId)}</code></td>
@@ -2585,6 +2608,7 @@
               </tr>`).join('')}
             </tbody>
           </table>`)}
+          ${filteredEvents.length ? paginationHtml(filteredEvents.length, calendarEventPage, 'calendar') : ''}
         </div>
       </div>
       </div>`;
@@ -2592,19 +2616,27 @@
     $('#calPrev', root).onclick = () => {
       if (calendarMonth === 1) { calendarYear--; calendarMonth = 12; }
       else { calendarMonth--; }
+      calendarEventPage = 1;
       renderScheduleCalendar(root);
     };
     $('#calNext', root).onclick = () => {
       if (calendarMonth === 12) { calendarYear++; calendarMonth = 1; }
       else { calendarMonth++; }
+      calendarEventPage = 1;
       renderScheduleCalendar(root);
     };
     const todayBtn = $('#calToday', root);
     if (todayBtn) todayBtn.onclick = () => {
       calendarYear = new Date().getFullYear();
       calendarMonth = new Date().getMonth() + 1;
+      calendarEventPage = 1;
       renderScheduleCalendar(root);
     };
+    bindImeSearch($('#calEventSearch', root), (value) => {
+      calendarEventPage = 1;
+      calendarSearch = value;
+    }, () => renderPage());
+    bindPagination(root);
   }
 
   function renderScheduleGantt(root) {
@@ -2878,6 +2910,7 @@
         else if (btn.dataset.list === 'customers') customerPage = pg;
         else if (btn.dataset.list === 'drivers') driverPage = pg;
         else if (btn.dataset.list === 'staff') staffPage = pg;
+        else if (btn.dataset.list === 'calendar') calendarEventPage = pg;
         renderPage();
       };
     });
@@ -4029,11 +4062,6 @@
           <div class="bulk-driver-list" id="bulkDriverList">${visibleDrivers.length
             ? bulkDriverCardsHtml(visibleDrivers)
             : '<p class="empty-hint" style="padding:12px">검색 결과가 없습니다.</p>'}</div>
-        </div>
-      </div>
-      <div class="card dispatch-action-card">
-        <div class="card-hd card-hd--dispatch"><h2><span class="section-step">3</span> 배정 및 실행</h2></div>
-        <div class="card-bd">
           <div class="bulk-assign-bar ${(canAssign || canRunBulk) ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
             <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
             <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
@@ -6812,6 +6840,17 @@
     $('#ddSettings').onclick = () => { _closeAllDropdowns(); location.href = '/settings.html'; };
     $('#ddLogout').onclick = () => logout();
     document.addEventListener('click', () => _closeAllDropdowns());
+    let _resizeRaf = null;
+    window.addEventListener('resize', () => {
+      if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
+      _resizeRaf = requestAnimationFrame(() => {
+        _resizeRaf = null;
+        if (!map || !window.kakao?.maps || !isMapPage()) return;
+        // 화면 비율이 바뀌면 .control-map-card/.dash-map-card의 실제 크기가 변하므로 지도를 컨테이너 크기에 맞게 다시 그린다.
+        kakao.maps.event.trigger(map, 'resize');
+        applyLiveMapFixedView(currentPage);
+      });
+    });
     bindIntakeStopShortcuts();
     bindDesiredArrivalAutoFormat();
     applyInitialQueryState();

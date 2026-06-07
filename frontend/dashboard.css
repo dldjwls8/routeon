@@ -2562,6 +2562,7 @@
     .gantt-picker-days button:hover { background: var(--t-row-hover); }
     .gantt-picker-days button.selected { background: var(--lime); color: #11150a; font-weight: 800; }
     .order-detail-map {
+      position: relative;
       width: 100%;
       height: 330px;
       overflow: hidden;
@@ -2569,6 +2570,7 @@
       border-radius: 9px;
       background: var(--t-deep);
     }
+    .order-detail-map > div { width: 100% !important; height: 100% !important; }
     .order-detail-map-legend {
       display: flex;
       justify-content: center;
@@ -2581,21 +2583,47 @@
     .order-detail-map-legend i { width: 8px; height: 8px; border-radius: 50%; }
     .order-detail-map-legend i.pickup { background: #60a5fa; }
     .order-detail-map-legend i.delivery { background: var(--lime); }
-    .order-stop-marker {
+    .order-stop-pin {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      max-width: 180px;
-      padding: 6px 8px;
-      border: 2px solid #60a5fa;
-      border-radius: 8px;
-      background: #111827;
-      color: #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,.35);
-      font-size: 10px;
+      align-items: center;
+      gap: 4px;
+      pointer-events: none;
     }
-    .order-stop-marker.delivery { border-color: var(--lime); }
-    .order-stop-marker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .order-stop-pin .pin-label {
+      max-width: 170px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(17,24,39,.92);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 3px 10px rgba(0,0,0,.3);
+    }
+    .order-stop-pin .pin-shape {
+      width: 26px;
+      height: 26px;
+      border: 2px solid #fff;
+      border-radius: 50% 50% 50% 0;
+      background: #60a5fa;
+      transform: rotate(-45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 3px 8px rgba(0,0,0,.35);
+    }
+    .order-stop-pin .pin-shape i {
+      transform: rotate(45deg);
+      font-style: normal;
+      font-size: 11px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .order-stop-pin.delivery .pin-shape { background: var(--lime); }
+    .order-stop-pin.delivery .pin-shape i { color: #11150a; }
     .custom-toggle-row { display: inline-flex; align-items: center; gap: 8px; }
     body.order-list-viewport .page-sticky-top,
     body.dispatch-viewport .page-sticky-top {
@@ -2844,16 +2872,10 @@
       font-weight: 700;
     }
     .dispatch-driver-body { padding: 0; }
-    .dispatch-action-card { flex: 0 0 auto; }
-    .dispatch-action-card .card-hd h2 {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .dispatch-zone-layout .dispatch-action-card .bulk-setup-footer {
-      margin-top: 0;
-      padding-top: 0;
-      border-top: 0;
+    .dispatch-driver-body .bulk-assign-bar {
+      margin: 12px 0 0;
+      padding-top: 12px;
+      border-top: 1px solid var(--dark-border);
     }
     .dispatch-zone-layout .bulk-setup-footer {
       align-items: stretch;
