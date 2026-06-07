@@ -6,6 +6,16 @@
 
 ---
 
+## v1.0.114 (2026-06-07)
+### 차량·담당자·배차관리 UI/UX 통일 및 footer·대시보드 스크롤 버그 수정
+- **차량 상세 "마지막 GPS" 필드 UI/UX 통일**: `vehicleLastGpsDetailHtml`이 배지·다단 레이아웃을 가진 별도 `<div>` 마크업을 사용해 톤급·차종 등 다른 필드와 모양이 달랐던 문제를 수정. `<label>마지막 GPS</label><span>좌표 · 갱신 시각</span>` 한 줄 구조로 바꿔 다른 `form-grid` 필드와 동일하게 표시
+- **담당자 상세 비활성 필드 시각 표시 수정**: `staffDetailBodyHtml`의 이름·아이디·관리 등급·연락처·가입일 입력란이 `readonly`라 클릭 가능한 입력처럼 보였던 문제를 수정. `disabled`로 바꿔 고객·기사·차량 상세와 동일한 `.inline-detail-bd input:disabled` 흐림 스타일(`opacity:.55; cursor:not-allowed`)로 비활성 상태를 표시
+- **차량·담당자·기업정보·고객관리·간트 등 탭의 footer 길이 불일치 버그 수정**: `theme-app` 페이지의 `.content`가 `min-height: calc(100vh - 76px - 92px)` 매직 넘버 기반 최소 높이를 사용해, 콘텐츠가 짧은 화면에서 실제 footer 높이(43px)와 맞지 않는 약 49px의 빈 공간이 footer 아래에 남는 문제가 있었음. `.content`를 표준 sticky-footer flex 패턴(`flex: 1 1 auto; min-height: 0`)으로 바꿔 모든 탭에서 footer가 화면 하단에 밀착하도록 통일
+- **대시보드 화면 비율 변경 시 콘텐츠가 잘리는 버그 수정**: `body.theme-dashboard .dash-layout`이 `overflow: hidden`이라, 좁고 긴 화면 비율(예: 1100px 미만 → 1열 레이아웃)에서 좌/우 컬럼이 세로로 쌓여 영역 전체 높이를 넘으면 하단 내용(오더 표, footer 등)이 그대로 잘려 보이지 않는 문제가 있었음. `overflow-y: auto; overflow-x: hidden`으로 바꿔 컬럼이 쌓여 넘치는 화면 비율에서도 대시보드 영역 내부가 스크롤되도록 수정
+- **배차관리 "기사·차량 선택" 카드 UI/UX 통일 및 배차 실행 바 위치 변경**: "기사·차량 선택" 카드(`bulkDriverCardsHtml`)가 카드형 그리드 레이아웃(굵은 패딩·다른 컬럼 비율)을 사용해 "미배정 오더" 카드의 `<table class="bulk-pool-table">` 구조와 크기·정렬이 달랐던 문제를 수정. `bulkDriverTableRows`로 다시 작성해 동일한 `<table class="bulk-pool-table">` 행 구조·헤더·하단 요약 문구로 통일하고, 선택한 오더·기사 건수와 `배차 실행` 버튼(`bulk-assign-bar`)을 "기사·차량 선택" 카드에서 "배차 결과"(`#bulkResultsCard`) 컨테이너 상단으로 이동
+- **DB 변경 없음**: 프론트 `dashboard.js`/`dashboard.css`만 수정 (UI 레이아웃·렌더링 로직)
+- **검증**: `node --check`로 구문 검사 통과, Playwright로 차량/담당자 상세 화면, 7개 탭 footer 위치(`getBoundingClientRect`), 대시보드 4가지 화면 비율(1600×900~900×1400) 스크롤 동작, 배차관리 표 통일·배차 실행 바 이동·배차 실행 흐름을 직접 캡처·측정해 확인
+
 ## v1.0.113 (2026-06-07)
 ### 기사 위치·차량 수정 저장 버그 수정
 - **기사 위치가 차량 위치로 잘못 표시되는 문제 수정**: 기사 상세의 `위치` 탭(`initDriverDetailMap`)이 기사 본인의 GPS가 아니라 배정 차량의 마지막 GPS(`vehicleById(d.vehicleId)`)를 표시하고 있었음. `GET /users` 응답에 기사 본인의 최근 `locations` 기록(`last_gps: {lat, lon, recorded_at}`)을 추가하고(`auth.py`), 프론트에서 `DATA.drivers`에 `last_lat`/`last_lon`/`last_gps_at`을 매핑해 기사 상세 위치 지도가 차량이 아닌 기사 본인의 마지막 GPS 좌표를 표시하도록 수정

@@ -266,8 +266,8 @@
     .topbar-dropdown-divider { border: none; border-top: 1px solid var(--dark-border); margin: 4px 0; }
     .topbar-dropdown-empty { padding: 16px 14px; text-align: center; font-size: 12px; color: var(--t-text-muted); }
     .content {
-      flex: 0 0 auto;
-      min-height: calc(100vh - var(--header-h) - 92px);
+      flex: 1 1 auto;
+      min-height: 0;
       padding: 10px 0 12px;
       overflow: visible;
       display: flex;
@@ -2782,7 +2782,7 @@
       min-height: 0;
       flex: 1;
     }
-    .dispatch-zone-layout .dispatch-resource-pane .bulk-driver-list,
+    .dispatch-zone-layout .dispatch-resource-pane .table-scroll,
     .dispatch-zone-layout .dispatch-resource-pane .driver-list {
       max-height: none;
       min-height: 90px;
@@ -2790,24 +2790,12 @@
       overflow-y: auto;
       overscroll-behavior: contain;
     }
-    .dispatch-zone-layout .bulk-driver-panel {
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-    .dispatch-zone-layout .bulk-driver-panel-hd,
-    .dispatch-zone-layout .bulk-driver-card-hd,
-    .dispatch-zone-layout .bulk-driver-pick,
     .dispatch-zone-layout .bulk-setup-footer,
     .dispatch-zone-layout .bulk-assign-bar,
     .dispatch-zone-layout .bulk-setup-exec {
       display: flex;
       align-items: center;
     }
-    .dispatch-zone-layout .bulk-driver-panel-hd,
-    .dispatch-zone-layout .bulk-driver-card-hd,
     .dispatch-zone-layout .bulk-setup-footer,
     .dispatch-zone-layout .bulk-setup-exec {
       justify-content: space-between;
@@ -2817,67 +2805,8 @@
       width: 100%;
       margin-bottom: 8px;
     }
-    .dispatch-zone-layout .bulk-driver-card {
-      display: grid;
-      grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) auto minmax(90px, 1fr);
-      align-items: center;
-      gap: 10px;
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--dark-border);
-      cursor: pointer;
-    }
-    .dispatch-zone-layout .bulk-driver-card.picked {
-      border-color: rgba(198,241,53,.45);
-      background: rgba(198,241,53,.08);
-    }
-    .dispatch-zone-layout .bulk-driver-pick {
-      gap: 8px;
-      min-width: 0;
-    }
-    .dispatch-zone-layout .bulk-driver-pick-text {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-    .dispatch-zone-layout .bulk-driver-pick-text span,
-    .dispatch-zone-layout .bulk-driver-vehicle small {
-      color: var(--t-placeholder);
-      font-size: 10px;
-    }
-    .dispatch-zone-layout .bulk-driver-vehicle,
-    .dispatch-zone-layout .bulk-driver-empty {
-      color: var(--text-muted);
-      font-size: 11px;
-    }
-    .dispatch-zone-layout .bulk-driver-vehicle {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-    .dispatch-zone-layout .bulk-driver-assigned {
-      min-width: 0;
-    }
-    .dispatch-driver-tools {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--dark-border);
-    }
-    .dispatch-driver-tools .bulk-driver-search { margin: 0; flex: 1; }
-    .dispatch-driver-list-head {
-      display: grid;
-      grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) auto minmax(90px, 1fr);
-      gap: 10px;
-      padding: 7px 12px;
-      border-bottom: 1px solid var(--dark-border);
-      color: var(--t-placeholder);
-      font-size: 10px;
-      font-weight: 700;
-    }
-    .dispatch-driver-body { padding: 0; }
-    .dispatch-driver-body .bulk-assign-bar {
-      margin: 12px 0 0;
+    .dispatch-zone-layout .dispatch-result-card .bulk-assign-bar {
+      margin: 0 16px 12px;
       padding-top: 12px;
       border-top: 1px solid var(--dark-border);
     }
@@ -3208,7 +3137,12 @@
       overflow: visible;
       padding-right: 0;
     }
-    body.theme-dashboard .dash-layout { flex: 1; min-height: 0; overflow: hidden; }
+    body.theme-dashboard .dash-layout {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
     body.theme-dashboard .dash-left,
     body.theme-dashboard .dash-right {
       min-height: 0;

@@ -1165,16 +1165,13 @@
   }
 
   function vehicleLastGpsDetailHtml(v) {
-    if (!v) return '<p class="empty-hint">차량 미선택</p>';
+    if (!v) return '<span class="empty-hint">차량 미선택</span>';
     const coord = v.start_lat != null && v.start_lon != null
       ? `${Number(v.start_lat).toFixed(6)}, ${Number(v.start_lon).toFixed(6)}`
       : 'GPS 미수신';
     return `
-      <label>마지막 GPS <span class="badge badge-muted">읽기 전용</span></label>
-      <div>
-        <p style="margin:0;font-size:13px">${coord} · 갱신 ${vehicleLastGpsAt(v)}</p>
-        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">관리자 입력 없음 · 앱 위치 로그 기준</p>
-      </div>`;
+      <label>마지막 GPS</label>
+      <span>${coord} · 갱신 ${vehicleLastGpsAt(v)}</span>`;
   }
 
   function driverById(id) {
@@ -2534,11 +2531,11 @@
       </div>
       <div class="tab-panel active" data-panel="info">
         <div class="form-grid" style="max-width:100%">
-          <label>이름</label><input readonly value="${s.name}">
-          <label>아이디</label><input readonly value="${s.username}">
-          <label>관리 등급</label><input readonly value="${s.is_org_owner ? '최상위 관리자' : '일반 관리자'}">
-          <label>연락처</label><input readonly value="${s.phone || '—'}">
-          <label>가입일</label><input readonly value="${joinDate}">
+          <label>이름</label><input disabled value="${s.name}">
+          <label>아이디</label><input disabled value="${s.username}">
+          <label>관리 등급</label><input disabled value="${s.is_org_owner ? '최상위 관리자' : '일반 관리자'}">
+          <label>연락처</label><input disabled value="${s.phone || '—'}">
+          <label>가입일</label><input disabled value="${joinDate}">
         </div>
         <div class="staff-permissions">
           <strong>화면 접근 권한</strong>
@@ -3999,30 +3996,26 @@
     return driver?.vehicleId ? vehicleById(driver.vehicleId) : DATA.vehicles.find(v => v.driverId === driverId) || null;
   }
 
-  function bulkDriverCardsHtml(drivers) {
+  function bulkDriverTableRows(drivers) {
     return drivers.map(d => {
       const vehicle = bulkDriverVehicle(d.id);
       const assigned = bulkOrderAssignments[String(d.id)] || [];
       const picked = bulkSelectedDriverIds.includes(String(d.id));
       return `
-        <div class="bulk-driver-card ${picked ? 'picked' : ''}" data-driver-id="${d.id}">
-          <label class="bulk-driver-pick">
-            <input type="checkbox" class="bulk-driver-chk" data-id="${d.id}" ${picked ? 'checked' : ''} aria-label="${d.name} 선택">
-            <span class="bulk-driver-pick-text"><strong>${d.name}</strong><span>${d.phone || '연락처 없음'}</span></span>
-          </label>
-          <span class="bulk-driver-vehicle">${vehicle ? `<strong>${vehicle.plate}</strong><small>${vehicle.tonnage || '—'} · ${vehicle.type || '—'}</small>` : '연결 차량 없음'}</span>
-          <span>${statusBadge(d.status)}</span>
-          <div class="bulk-driver-assigned">
-            ${assigned.length
-              ? `<div class="bulk-assigned-chips">${assigned.map(id => {
-                  const order = DATA.orders.find(o => o.id === id);
-                  return `<button type="button" class="bulk-assigned-chip" data-unassign-order="${id}" data-driver-id="${d.id}" title="배정 취소">
-                    ${displayOrderNo(order || { id })}<span aria-hidden="true">&times;</span>
-                  </button>`;
-                }).join('')}</div>`
-              : '<p class="bulk-driver-empty">미배정</p>'}
-          </div>
-        </div>`;
+        <tr class="bulk-pool-row driver-row-clickable ${picked ? 'selected' : ''}" data-driver-id="${d.id}">
+          <td><input type="checkbox" class="bulk-driver-chk" data-id="${d.id}" ${picked ? 'checked' : ''} aria-label="${d.name} 선택"></td>
+          <td><strong>${d.name}</strong><br><span class="text-muted-hint" style="font-size:11px">${d.phone || '연락처 없음'}</span></td>
+          <td>${vehicle ? `${vehicle.plate} · ${vehicle.tonnage || '—'} · ${vehicle.type || '—'}` : '연결 차량 없음'}</td>
+          <td>${statusBadge(d.status)}</td>
+          <td>${assigned.length
+            ? `<div class="bulk-assigned-chips">${assigned.map(id => {
+                const order = DATA.orders.find(o => o.id === id);
+                return `<button type="button" class="bulk-assigned-chip" data-unassign-order="${id}" data-driver-id="${d.id}" title="배정 취소">
+                  ${displayOrderNo(order || { id })}<span aria-hidden="true">&times;</span>
+                </button>`;
+              }).join('')}</div>`
+            : '<span class="empty-hint">미배정</span>'}</td>
+        </tr>`;
     }).join('');
   }
 
@@ -4161,23 +4154,25 @@
             </div>
           </div>
         </div>
-        <div class="card-bd dispatch-driver-body">
-          <div class="dispatch-driver-tools">
+        <div class="card-bd" style="padding:0">
+          <div class="dispatch-list-tools">
             <input type="search" class="search bulk-driver-search" placeholder="기사 또는 차량 검색" id="bulkDriverSearch" value="${escapeHtml(bulkDriverSearch)}">
-            <label class="bulk-driver-select-all">
-              <input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택">
-              <span>전체 선택</span>
-            </label>
+            ${bulkDriverSearch ? `<span class="text-muted-hint">검색 ${visibleDrivers.length}명</span>` : ''}
           </div>
-          <div class="dispatch-driver-list-head"><span>기사</span><span>연결 차량</span><span>상태</span><span>배정 오더</span></div>
-          <div class="bulk-driver-list" id="bulkDriverList">${visibleDrivers.length
-            ? bulkDriverCardsHtml(visibleDrivers)
-            : '<p class="empty-hint" style="padding:12px">검색 결과가 없습니다.</p>'}</div>
-          <div class="bulk-assign-bar ${(canAssign || canRunBulk) ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
-            <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
-            <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
-            <span class="bulk-assign-bar-label">선택 기사 <strong>${driverBarLabel}</strong></span>
-            <button type="button" class="btn btn-primary" id="runBulkDispatch" ${(canAssign || canRunBulk) ? '' : 'disabled'}>배차 실행</button>
+          <div class="dispatch-setup-main dispatch-setup-main--stack">
+            <div id="bulkDriverList">
+              ${tableScrollWrap(`<table class="bulk-pool-table">
+                <thead><tr>
+                  <th><input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택"></th>
+                  <th>기사</th><th>연결 차량</th><th>상태</th><th>배정 오더</th>
+                </tr></thead>
+                <tbody id="bulkDriverListBody">
+                  ${visibleDrivers.length ? bulkDriverTableRows(visibleDrivers) : `
+                    <tr><td colspan="5" class="empty-hint" style="padding:16px">검색 결과가 없습니다.</td></tr>`}
+                </tbody>
+              </table>`)}
+            </div>
+            <p class="empty-hint dispatch-table-foot" style="padding:0 16px 12px">전체 ${drivers.length}명${bulkDriverSearch ? ` · 검색 ${visibleDrivers.length}명` : ''} · ${bulkSelectedDriverIds.length ? `<strong>${bulkSelectedDriverIds.length}</strong>명 선택` : '선택 없음'}</p>
           </div>
         </div>
       </div>
@@ -4187,6 +4182,12 @@
       <div class="card dispatch-result-card" id="bulkResultsCard" style="${bulkDispatchRan ? '' : 'opacity:.6'}">
         <div class="card-hd">
               <h2>배차 결과 — 차량별 방문 순서·미배정</h2>
+        </div>
+        <div class="bulk-assign-bar ${(canAssign || canRunBulk) ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
+          <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
+          <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
+          <span class="bulk-assign-bar-label">선택 기사 <strong>${driverBarLabel}</strong></span>
+          <button type="button" class="btn btn-primary" id="runBulkDispatch" ${(canAssign || canRunBulk) ? '' : 'disabled'}>배차 실행</button>
         </div>
         <div class="card-bd">
           ${bulkDispatchRan ? '' : '<p class="empty-hint" style="padding:0 0 12px">「배차 실행」 후 차량별 방문 순서·미배정·지도가 표시됩니다.</p>'}
@@ -4296,7 +4297,7 @@
         renderBulkDispatch(root);
       };
     });
-    root.querySelectorAll('.bulk-driver-card').forEach(card => {
+    root.querySelectorAll('.bulk-pool-row[data-driver-id]').forEach(card => {
       card.onclick = (e) => {
         if (e.target.closest('input, button')) return;
         const id = card.dataset.driverId;

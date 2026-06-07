@@ -22,6 +22,8 @@
 
 ## 테이블 구조
 
+> v1.0.114는 DB 구조·데이터 변경이 없는 순수 프론트엔드 UI/UX 버그 수정이다. 차량 상세 `마지막 GPS` 필드와 담당자 상세 비활성 입력란의 표시 스타일 통일, `theme-app` 페이지(차량·담당자·기업정보·고객관리·간트) footer 위치 버그 수정(`.content` flex 패턴 변경), 대시보드 `.dash-layout` 화면 비율 변경 시 콘텐츠가 잘리던 문제 수정(`overflow-y: auto`), 배차관리 `기사·차량 선택` 카드를 `미배정 오더`와 동일한 표 구조로 통일하고 `bulk-assign-bar`(선택 건수·배차 실행 버튼)를 `배차 결과` 컨테이너로 이동 — 모두 `dashboard.js`/`dashboard.css`의 마크업·CSS 레이아웃 조정이며 테이블·컬럼·제약·시드 데이터 변경은 전혀 없다.
+
 > v1.0.113은 테이블·컬럼·제약 변경이 없는 버그 수정 + 1회성 데이터 보정이다. (1) 기사 상세 `위치` 탭이 기사 본인이 아닌 배정 차량의 마지막 GPS(`vehicles.last_lat`/`last_lon`)를 표시하던 문제를, `GET /users`가 `locations` 테이블에서 해당 기사의 가장 최근 기록을 조회해 `last_gps`로 함께 내려주도록 수정(`auth.py`)하고 프론트가 이를 사용하도록 변경 — `locations` 테이블 구조 자체는 그대로다. (2) 차량 상세 저장 버튼이 `vehicleDetailBodyHtml` 스코프의 `linked` 변수를 다른 함수(`bindVehicleDetail`)에서 참조하는 `ReferenceError`로 `PATCH /vehicles/{id}` 요청이 아예 발생하지 못하던 프론트 버그 수정. (3) 위 저장 버그 때문에 UI로 고치지 못하고 남아 있던 차량 ID 12(`경기 가 1010`)의 `vehicles.vehicle_type = '1'`이라는 잘못된 데이터를 `UPDATE vehicles SET vehicle_type = '카고' WHERE id = 12`로 직접 보정했다 — 이는 컬럼 추가가 아닌 데이터값 수정이다.
 
 > v1.0.112는 DB 구조 변경이 없다. 차량·기사·담당자·고객·오더 목록의 페이지네이션 위치 버그(`master-list-body`에 `flex: 1` 추가), 기사·차량 상세 `위치` 탭 신설(배정 차량/자체 마지막 GPS 좌표를 카카오맵에 표시), 운행관제 지도 크기가 화면 비율에 따라 달라지는 문제(`.control-map-card`를 `aspect-ratio` 계산 대신 부모 컨테이너를 채우도록 변경), 오더·고객·기사·차량 상세 지도의 짧은 높이(`.order-detail-map`/`.entity-detail-map` 반응형 높이로 통일), 고객 상세 위치 지도 중복 렌더링(`_kakaoMap`/`_kakaoMarker` 인스턴스 캐싱·재사용)까지 모두 `dashboard.js`/`dashboard.css`의 레이아웃·렌더링 로직 수정이며 테이블·컬럼·제약 변경은 없다.
