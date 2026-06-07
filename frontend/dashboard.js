@@ -1750,31 +1750,44 @@
   function bindImeSearch(input, onValue, rerender) {
     if (!input) return;
     const inputId = input.id;
-    const renderAndRestore = () => {
-      rerender();
-      const next = inputId ? document.getElementById(inputId) : null;
-      if (next) {
-        next.focus();
-        const end = next.value.length;
-        next.setSelectionRange?.(end, end);
+    let composing = false;
+    let renderTimer = null;
+    const cancelRender = () => {
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = null;
       }
     };
-    let composing = false;
-    let skipNextInput = false;
-    input.addEventListener('compositionstart', () => { composing = true; });
+    // 한글은 음절마다 compositionstart/compositionend가 반복 발생한다.
+    // 그때마다 즉시 rerender(전체 DOM 교체)하면 IME 조합 상태가 끊겨
+    // 자모가 분리되거나 음절이 건너뛰는 현상이 생기므로, 입력이 멈춘 뒤에만
+    // 한 번 rerender하도록 지연시키고 새 조합이 시작되면 예약을 취소한다.
+    const scheduleRender = () => {
+      cancelRender();
+      renderTimer = setTimeout(() => {
+        renderTimer = null;
+        rerender();
+        const next = inputId ? document.getElementById(inputId) : null;
+        if (next) {
+          next.focus();
+          const end = next.value.length;
+          next.setSelectionRange?.(end, end);
+        }
+      }, 220);
+    };
+    input.addEventListener('compositionstart', () => {
+      composing = true;
+      cancelRender();
+    });
     input.addEventListener('compositionend', (event) => {
       composing = false;
-      skipNextInput = true;
       onValue(event.target.value);
-      renderAndRestore();
+      scheduleRender();
     });
     input.addEventListener('input', (event) => {
-      if (skipNextInput) {
-        skipNextInput = false;
-        return;
-      }
+      if (composing || event.isComposing) return;
       onValue(event.target.value);
-      if (!composing && !event.isComposing) renderAndRestore();
+      scheduleRender();
     });
   }
 
@@ -4145,13 +4158,9 @@
       }
       renderBulkDispatch(root);
     });
-    $('#bulkOrderSearch', root)?.addEventListener('input', (e) => {
-      bulkOrderSearch = e.target.value;
-      renderBulkDispatch(root);
-      const search = $('#bulkOrderSearch', root);
-      search?.focus();
-      search?.setSelectionRange(bulkOrderSearch.length, bulkOrderSearch.length);
-    });
+    bindImeSearch($('#bulkOrderSearch', root), (value) => {
+      bulkOrderSearch = value;
+    }, () => renderBulkDispatch(root));
     $('#chkAllBulkPool', root)?.addEventListener('change', (e) => {
       const ids = new Set(bulkSelectedOrderIds);
       poolIds.forEach(id => e.target.checked ? ids.add(id) : ids.delete(id));
@@ -4209,13 +4218,9 @@
         renderBulkDispatch(root);
       };
     });
-    $('#bulkDriverSearch', root)?.addEventListener('input', (e) => {
-      bulkDriverSearch = e.target.value;
-      renderBulkDispatch(root);
-      const search = $('#bulkDriverSearch', root);
-      search?.focus();
-      search?.setSelectionRange(bulkDriverSearch.length, bulkDriverSearch.length);
-    });
+    bindImeSearch($('#bulkDriverSearch', root), (value) => {
+      bulkDriverSearch = value;
+    }, () => renderBulkDispatch(root));
     root.querySelectorAll('.bulk-vehicle-select').forEach(sel => {
       sel.onchange = () => {
         const row = bd.vehicles.find(x => x.id === Number(sel.dataset.bulkRow));
@@ -4889,13 +4894,9 @@
       dispatchPendingMixedOnly = e.target.checked;
       renderDispatchAssign(root);
     });
-    $('#dispatchOrderSearch', root)?.addEventListener('input', (e) => {
-      dispatchOrderSearch = e.target.value;
-      renderDispatchAssign(root);
-      const search = $('#dispatchOrderSearch', root);
-      search?.focus();
-      search?.setSelectionRange(dispatchOrderSearch.length, dispatchOrderSearch.length);
-    });
+    bindImeSearch($('#dispatchOrderSearch', root), (value) => {
+      dispatchOrderSearch = value;
+    }, () => renderDispatchAssign(root));
     $('#dispatchRegionFilter', root)?.addEventListener('change', e => {
       dispatchRegionSel = e.target.value;
       renderDispatchAssign(root);
