@@ -6,6 +6,15 @@
 
 ---
 
+## v1.0.108 (2026-06-07)
+### 검색창 한글 입력 자모 분리·음절 누락 버그 수정
+- **`bindImeSearch` 디바운스 방식으로 변경**: 한글은 음절마다 `compositionstart`/`compositionend`가 반복 발생하는데, 기존에는 매 `compositionend`마다 즉시 전체 `rerender()`로 검색창을 교체·재포커스해 IME 조합 상태가 끊기면서 자음/모음이 분리되거나 짝수 음절이 누락되는 문제가 있었음. `compositionstart` 시 예약된 재렌더링을 취소하고, 입력이 220ms 이상 멈췄을 때만 한 번 재렌더링·포커스 복원하도록 수정
+- **배차관리 검색창도 `bindImeSearch`로 통일**: `bulkOrderSearch`/`bulkDriverSearch`/`dispatchOrderSearch`가 매 keystroke마다 직접 재렌더링하던 구조라 동일한 증상이 있었으므로 모두 `bindImeSearch`로 교체
+- **DB 변경 없음**: 프론트 `dashboard.js`만 수정
+- **검증**: `node --check`로 구문 검사 통과, nginx를 통해 변경사항 반영 확인
+
+---
+
 ## v1.0.107 (2026-06-07)
 ### 오더목록·운행관제·배차관리·캘린더 UI 버그 수정 및 기능 보강
 - **오더 상세 지도 흰 화면 버그 수정**: 탭 전환 직후 컨테이너 크기가 확정되기 전에 카카오맵이 생성되어 흰 화면으로 보이던 문제를, 지도 생성 후 `relayout()`을 호출해 강제 재렌더링하도록 수정
