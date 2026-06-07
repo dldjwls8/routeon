@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-07 (v1.0.101 기준, 기업 설정 최상위 관리자 권한 확인)
+> 최종 검토: 2026-06-07 (v1.0.102 기준, 배차 선택 상태·엑셀 예제 DB 영향 없음 확인)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.101은 DB 구조 변경이 없다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
+> v1.0.102는 DB 구조 변경이 없다. 배차관리 기사 선택·검색·스크롤은 프론트 임시 상태이며 오더 접수 엑셀은 예제 행만 변경했다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 
@@ -494,6 +494,7 @@ footer 링크와 안내 페이지 내용은 DB에 저장하지 않으며, 약관
 `오더관리 > 접수창`의 `양식 다운로드`는 프론트엔드에서 `.xlsx`/`.csv` 템플릿을 생성하는 기능이며 별도 테이블을 추가하지 않는다.
 v1.0.93 기준 템플릿은 `상차지1~3/상차화물/상차규격`, `하차지1~3/하차수취인/하차화물/하차규격` 헤더를 사용한다. 기존 단일 `상차지`, `하차지`, `수취인`, `화물종류`, `규격` 헤더도 업로드 호환용으로 계속 읽는다.
 엑셀 업로드 행은 접수 대기열에서 여러 접수건으로 전개된 뒤 기존 `deliveries` 생성 API로 저장된다. `deliveries` 테이블은 여전히 한 행에 대표 `pickup_address` 1개와 `address` 1개를 저장하는 단건 오더 모델이며, 다중 상·하차용 별도 테이블은 없다.
+다운로드 템플릿의 기본 예시 행은 상차·하차 한 쌍만 포함해 재업로드 시 `deliveries` 1건으로 저장되는 대기열 항목 1개를 만든다. 사용자가 복수 상·하차 쌍을 입력한 경우에는 기존 호환 규칙에 따라 각 쌍이 별도 접수건으로 전개된다.
 엑셀 좌표 변환은 저장 전 프론트에서 `/address/coord`와 Kakao 장소 검색을 사용해 `pickup_lat/pickup_lon`, `lat/lon`에 채운다. 좌표 변환에 실패해도 스키마상 좌표 컬럼은 nullable이므로 저장은 가능하나, 배차 화면은 기존처럼 좌표가 있는 오더만 운행 생성에 사용할 수 있다.
 상차 블록의 화물 종류/규격은 하차 화물/규격이 비어 있을 때 `deliveries.cargo_type`/`deliveries.cargo_size`의 fallback으로 사용한다. Trip 생성 시 loading waypoint에도 같은 화물 메타데이터를 포함하지만 DB 컬럼 추가는 없다.
 `+ 임시 화주 추가`는 기존 `customers.temporary`, `customers.valid_date` 컬럼을 사용하는 흐름이며 v1.0.93에서 스키마 변경은 없다.

@@ -805,6 +805,7 @@
   let bulkDispatchTab = 0;
   let bulkAllowMixedLoad = true;
   let bulkOrderSearch = '';
+  let bulkDriverSearch = '';
   let bulkSelectedOrderIds = [];
   let bulkSelectedDriverIds = [];
   let bulkOrderAssignments = {};
@@ -1497,12 +1498,12 @@
       [
         '예시화주',
         '부산광역시 해운대구 센텀중앙로 90', '식품', '5톤',
-        '부산항 신항', '잡화', '3파레트',
+        '', '', '',
         '', '', '',
         '부산광역시 사하구 감천로 203', '김수신', '식품', '2톤',
-        '감천문화마을', '박수신', '잡화', '3파레트',
         '', '', '', '',
-        '010-1234-5678', '2026-06-05 14:00', 'N',
+        '', '', '', '',
+        '010-1234-5678', `${todayStr()} 14:00`, 'N',
       ],
     ];
 
@@ -3714,6 +3715,10 @@
   }
 
   function renderBulkDispatch(root) {
+    const scrollState = {
+      rootTop: root.scrollTop,
+      driverListTop: $('#bulkDriverList', root)?.scrollTop || 0,
+    };
     DATA.bulkDispatch.stops = unassignedForDispatch();
     DATA.bulkDispatch.vehicles = DATA.dispatchFleet.map(f => {
       const v = vehicleById(f.vehicleId);
@@ -3734,6 +3739,14 @@
     const tabIdx = Math.min(bulkDispatchTab, plans.length - 1);
     const plan = plans[tabIdx] || plans[0];
     const drivers = bulkAvailableDrivers();
+    const visibleDrivers = drivers.filter(d => {
+      const vehicle = bulkDriverVehicle(d.id);
+      return [d.name, vehicle?.plate, vehicle?.tonnage]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(bulkDriverSearch.trim().toLowerCase());
+    });
     const driverIds = new Set(drivers.map(d => String(d.id)));
     Object.keys(bulkOrderAssignments).forEach(id => {
       if (!driverIds.has(String(id))) delete bulkOrderAssignments[id];
@@ -3845,8 +3858,10 @@
                 <span>전체</span>
               </label>
             </div>
-            <input type="search" class="search bulk-driver-search" placeholder="기사 또는 차량 검색" id="bulkDriverSearch">
-            <div class="bulk-driver-list" id="bulkDriverList">${bulkDriverCardsHtml(drivers)}</div>
+            <input type="search" class="search bulk-driver-search" placeholder="기사 또는 차량 검색" id="bulkDriverSearch" value="${escapeHtml(bulkDriverSearch)}">
+            <div class="bulk-driver-list" id="bulkDriverList">${visibleDrivers.length
+              ? bulkDriverCardsHtml(visibleDrivers)
+              : '<p class="empty-hint" style="padding:12px">검색 결과가 없습니다.</p>'}</div>
           </div>
 
           <div class="bulk-setup-footer">
@@ -4007,10 +4022,11 @@
       };
     });
     $('#bulkDriverSearch', root)?.addEventListener('input', (e) => {
-      const q = e.target.value.toLowerCase();
-      root.querySelectorAll('.bulk-driver-card').forEach(card => {
-        card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
-      });
+      bulkDriverSearch = e.target.value;
+      renderBulkDispatch(root);
+      const search = $('#bulkDriverSearch', root);
+      search?.focus();
+      search?.setSelectionRange(bulkDriverSearch.length, bulkDriverSearch.length);
     });
     $('#bulkAssignToDriver', root)?.addEventListener('click', () => {
       if (!bulkSelectedOrderIds.length || !bulkSelectedDriverIds.length) return;
@@ -4187,6 +4203,11 @@
         }
       }
     }, 0);
+    requestAnimationFrame(() => {
+      root.scrollTop = scrollState.rootTop;
+      const driverList = $('#bulkDriverList', root);
+      if (driverList) driverList.scrollTop = scrollState.driverListTop;
+    });
   }
 
   function unassignedForDispatch() {
