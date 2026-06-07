@@ -479,6 +479,24 @@ async def get_users(
     stmt = stmt.order_by(User.created_at.desc())
     _r = await db.execute(stmt)
     users = _r.scalars().all()
+
+    # 기사별 마지막 GPS 위치 (차량 위치와 별개로 본인의 최근 location 기록)
+    driver_ids = [u.id for u in users if u.role == UserRole.driver]
+    last_gps_by_user = {}
+    if driver_ids:
+        _rl = await db.execute(
+            select(Location)
+            .where(Location.user_id.in_(driver_ids))
+            .order_by(Location.user_id, Location.recorded_at.desc())
+        )
+        for loc in _rl.scalars().all():
+            if loc.user_id not in last_gps_by_user:
+                last_gps_by_user[loc.user_id] = {
+                    "lat": loc.lat,
+                    "lon": loc.lon,
+                    "recorded_at": loc.recorded_at.isoformat() if loc.recorded_at else None,
+                }
+
     return [
         {
             "id":            str(u.id),
@@ -493,6 +511,7 @@ async def get_users(
             "is_org_owner":  u.is_org_owner,
             "permissions":   u.permissions or {},
             "account_status": u.account_status,
+            "last_gps":      last_gps_by_user.get(u.id),
         }
         for u in users
     ]

@@ -470,6 +470,10 @@
           vehicleId: u.vehicle_id || null,
           status: u.driver_status || '운행가능',
           phone: u.phone || '',
+          last_lat: u.last_gps?.lat ?? null,
+          last_lon: u.last_gps?.lon ?? null,
+          last_gps_label: u.last_gps ? `${Number(u.last_gps.lat).toFixed(2)}, ${Number(u.last_gps.lon).toFixed(2)}` : '',
+          last_gps_at: u.last_gps?.recorded_at ? u.last_gps.recorded_at.replace('T', ' ').slice(0, 16) : '',
           history: [],
           auditEvents: [],
         }));
@@ -1175,6 +1179,10 @@
 
   function driverById(id) {
     return DATA.drivers.find(d => d.id === id || d.id === Number(id)) || null;
+  }
+
+  function driverLastGpsAt(d) {
+    return d?.last_gps_at || '—';
   }
 
   function driverByName(name) {
@@ -1959,7 +1967,7 @@
         ${locked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 기사 정보를 변경하거나 삭제할 수 없습니다.</p>' : ''}
       </div>
       <div class="tab-panel" data-panel="location">
-        <p class="text-muted-hint" style="margin-bottom:10px">${vehicle ? `배정 차량 «${escapeHtml(vehicle.plate)}»의 마지막 GPS 위치 · 갱신 ${vehicleLastGpsAt(vehicle)}` : '배정된 차량이 없어 위치를 표시할 수 없습니다.'}</p>
+        <p class="text-muted-hint" style="margin-bottom:10px">${d.last_lat != null && d.last_lon != null ? `기사 본인의 마지막 GPS 위치 · 갱신 ${driverLastGpsAt(d)}` : '기사의 GPS 좌표가 아직 수신되지 않았습니다.'}</p>
         <div id="driverDetailMap" class="entity-detail-map"></div>
       </div>
       <div class="tab-panel" data-panel="hist">${d._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(d.auditEvents)}</div>`;
@@ -1968,14 +1976,13 @@
   function initDriverDetailMap(root, d) {
     const canvas = $('#driverDetailMap', root);
     if (!canvas || !window.kakao?.maps) return;
-    const vehicle = vehicleById(d.vehicleId);
-    if (!vehicle || vehicle.start_lat == null || vehicle.start_lon == null) {
+    if (d.last_lat == null || d.last_lon == null) {
       canvas._kakaoMap = null;
       canvas._kakaoMarker = null;
-      canvas.innerHTML = '<p class="empty-hint" style="padding:24px">배정 차량의 GPS 좌표가 아직 없습니다.</p>';
+      canvas.innerHTML = '<p class="empty-hint" style="padding:24px">기사의 GPS 좌표가 아직 없습니다.</p>';
       return;
     }
-    const position = new kakao.maps.LatLng(Number(vehicle.start_lat), Number(vehicle.start_lon));
+    const position = new kakao.maps.LatLng(Number(d.last_lat), Number(d.last_lon));
     if (canvas._kakaoMap) {
       canvas._kakaoMap.setCenter(position);
       canvas._kakaoMarker?.setPosition(position);
@@ -1984,7 +1991,7 @@
     }
     const detailMap = new kakao.maps.Map(canvas, { center: position, level: 6 });
     canvas._kakaoMap = detailMap;
-    canvas._kakaoMarker = new kakao.maps.Marker({ map: detailMap, position, title: vehicle.plate });
+    canvas._kakaoMarker = new kakao.maps.Marker({ map: detailMap, position, title: d.name });
   }
 
   function bindDriverDetail(root, d) {
@@ -2119,6 +2126,7 @@
   }
 
   function bindVehicleDetail(root, v) {
+    const linked = DATA.drivers.find(d => d.vehicleId === v.id);
     $('#inlineDetailBack', root).onclick = () => { selectedVehicleId = null; vehicleEditMode = false; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
       if (!vehicleEditMode) {

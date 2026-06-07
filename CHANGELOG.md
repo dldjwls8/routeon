@@ -6,6 +6,14 @@
 
 ---
 
+## v1.0.113 (2026-06-07)
+### 기사 위치·차량 수정 저장 버그 수정
+- **기사 위치가 차량 위치로 잘못 표시되는 문제 수정**: 기사 상세의 `위치` 탭(`initDriverDetailMap`)이 기사 본인의 GPS가 아니라 배정 차량의 마지막 GPS(`vehicleById(d.vehicleId)`)를 표시하고 있었음. `GET /users` 응답에 기사 본인의 최근 `locations` 기록(`last_gps: {lat, lon, recorded_at}`)을 추가하고(`auth.py`), 프론트에서 `DATA.drivers`에 `last_lat`/`last_lon`/`last_gps_at`을 매핑해 기사 상세 위치 지도가 차량이 아닌 기사 본인의 마지막 GPS 좌표를 표시하도록 수정
+- **차량 상세 수정 후 저장이 되지 않는 문제 수정**: `bindVehicleDetail`의 저장 클릭 핸들러가 `vehicleDetailBodyHtml` 스코프에서만 선언된 `linked` 변수를 참조해 `ReferenceError`가 발생, PATCH 요청 자체가 실행되지 못하던 버그를 수정(`bindVehicleDetail` 내부에 `const linked = DATA.drivers.find(d => d.vehicleId === v.id)`를 추가)
+- **잘못 입력된 차종 데이터 수정**: 차량 ID 12(`경기 가 1010`)의 `vehicle_type`이 `"1"`이라는 잘못된 값으로 들어가 있던 것을 `UPDATE vehicles SET vehicle_type = '카고' WHERE id = 12`로 직접 수정
+- **DB 변경**: `vehicles.vehicle_type` 데이터값 1건 수정 (테이블/컬럼 구조 변경 없음)
+- **검증**: `node --check`로 프론트 구문 검사 통과, 백엔드 컨테이너 재시작 후 정상 기동·`/users` 응답에 `last_gps` 포함 확인, DB 값 수정 결과 `psql` 조회로 확인
+
 ## v1.0.112 (2026-06-07)
 ### 목록 페이지네이션·상세 지도 UI 버그 수정
 - **목록 페이지네이션 위치 버그 수정**: 차량·기사·담당자·고객·오더 목록 카드의 `card-bd`(`master-list-body`)에 `flex: 1`이 빠져 있어, 행 수가 적으면 카드 전체 높이를 채우지 못하고 페이지네이션이 마지막 행 바로 아래에 붙어 보이는 문제가 있었음. `master-list-body { flex: 1 }`을 추가하고, 동일 레이아웃을 인라인 스타일로 중복 작성하던 차량·담당자·고객·오더 카드도 `master-list-body` 클래스로 통일해 모든 탭에서 페이지네이션이 카드 하단에 고정되도록 수정
