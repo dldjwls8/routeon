@@ -121,7 +121,7 @@ routeon/
         ├── router/
         │   └── index.js      Vue Router 경로 정의·meta.main·meta.label
         ├── layouts/
-        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container) — 메시지/알림 뱃지·드롭다운 reactive 구현
+        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container) — 메시지/알림 뱃지·드롭다운 reactive 구현, legacy dashboard.js DOM ID 유지 및 Vue→legacy 동기화
         ├── components/
         │   └── PageChrome.vue        페이지 공통 크롬 (뒤로가기·타이틀·액션바 래퍼)
         ├── assets/

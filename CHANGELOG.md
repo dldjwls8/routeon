@@ -16,6 +16,7 @@
   - `onMounted` 시 WebSocket 연결 + 대화 목록 로드, `onUnmounted` 시 연결 종료
 - **`ChatView.vue` 공유 상태 연동**: `useChatSocket`의 `setChatPageActive(true/false)` 플래그 설정. 채팅 페이지 활성 중에는 unread 뱃지가 증가하지 않도록 처리
 - **백엔드 변경 없음**: 기존 `/ws/chat`, `/chat/conversations` API 및 `ChatConnectionManager` 그대로 활용
+- **fix (4482fff)**: `DashboardLayout.vue` DOM ID 복원 — `messageBtn`, `notifBtn`, `messageBadge`, `notifBadge`, `notifDropdown` ID를 복원하여 legacy `dashboard.js`의 null 참조 에러 방지. Vue `watch`로 `chat.totalUnread`를 legacy DOM badge에 직접 동기화. 상단 탭/지Map/데이터 초기화 중단 문제 해결
 
 ---
 
