@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-07 (v1.0.104 기준, WebSocket 세션·로그인 안정화의 DB 구조 영향 없음 확인)
+> 최종 검토: 2026-06-07 (v1.0.105 기준, 차량 PATCH 잠금 범위·배차관리 UI·오더 화주 선택 변경의 DB 구조 영향 없음 확인)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.104는 DB 구조 변경이 없다. `/ws/chat`, `/ws/location`의 JWT 사용자 조회에 사용하는 `AsyncSession`을 연결 초기에만 열고 즉시 닫도록 세션 수명을 수정했으며, 테이블·컬럼·ENUM·인덱스와 저장 데이터에는 영향이 없다. v1.0.103의 `TR-YYMMDD-NNN` 운행번호와 `RO-...-화물N` 화물번호도 계속 프론트 표시값이며 저장 컬럼이 아니다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
+> v1.0.105는 DB 구조 변경이 없다. `PATCH /vehicles/{id}`의 진행 중 Trip 잠금 범위를 `vehicle_type`/`weight_kg`/`height_m`/`status`/`driver_id` 전체에서 `status`/`driver_id`만으로 좁혀, 운행 중에도 톤급·차종 같은 기본 정보는 수정할 수 있도록 했다. 컬럼·제약은 기존 `vehicles.vehicle_type`, `vehicles.weight_kg`, `vehicles.height_m`, `vehicles.status`를 그대로 사용하며 검증 로직만 변경했다. 배차관리 "배정 및 실행" 버튼 통합과 오더 화주 입력의 고객 select 전환도 기존 `/trips/auto-dispatch`, `deliveries.shipper_name`, `customers` 테이블·API를 그대로 사용하는 프론트 UI 변경이다. v1.0.104의 WebSocket 세션 수명 수정과 v1.0.103의 `TR-YYMMDD-NNN`/`RO-...-화물N` 표시값도 계속 유효하며 저장 컬럼이 아니다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 

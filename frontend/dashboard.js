@@ -2002,7 +2002,7 @@
     const linked = DATA.drivers.find(d => d.vehicleId === v.id);
     const tonOpts = ['1톤', '1.4톤', '2.5톤', '3.5톤', '5톤'];
     const typeOpts = ['윙바디', '탑차', '카고'];
-    const locked = v.status === '운행중' || vehicleHasActiveTrip(v.id);
+    const assignLocked = v.status === '운행중' || vehicleHasActiveTrip(v.id);
     return `
       <div class="tabs detail-tabs">
         <button type="button" class="tab active" data-tab="info">기본</button>
@@ -2011,18 +2011,18 @@
       <div class="tab-panel active" data-panel="info">
       <div class="form-grid" style="max-width:100%">
         <label>톤급</label>
-        <select id="vehTonnage" ${locked || !vehicleEditMode ? 'disabled' : ''}>${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehTonnage" ${!vehicleEditMode ? 'disabled' : ''}>${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <label>차종</label>
-        <select id="vehType" ${locked || !vehicleEditMode ? 'disabled' : ''}>${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehType" ${!vehicleEditMode ? 'disabled' : ''}>${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         ${vehicleLastGpsDetailHtml(v)}
         <label>상태</label>
-        <select id="vehStatus" ${locked || !vehicleEditMode ? 'disabled' : ''}>
+        <select id="vehStatus" ${assignLocked || !vehicleEditMode ? 'disabled' : ''}>
           <option ${v.status === '가용' ? 'selected' : ''}>가용</option>
-          ${locked ? '<option selected>운행중</option>' : ''}
+          ${assignLocked ? '<option selected>운행중</option>' : ''}
           <option ${v.status === '정비' ? 'selected' : ''}>정비</option>
         </select>
         <label>연결 기사</label>
-        <select id="vehDriver" ${locked || !vehicleEditMode ? 'disabled' : ''}>
+        <select id="vehDriver" ${assignLocked || !vehicleEditMode ? 'disabled' : ''}>
           <option value="">— 미연결 —</option>
           ${DATA.drivers.map(d => `<option value="${d.id}" ${linked && linked.id === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
         </select>
@@ -2031,7 +2031,7 @@
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 6px">배차 출발점 · 최근 GPS</p>
         ${vehiclePreviewHtml(v)}
       </div>
-      ${locked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 차량 정보를 변경하거나 삭제할 수 없습니다.</p>' : ''}
+      ${assignLocked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 차량 상태와 연결 기사를 변경할 수 없습니다. 톤급·차종 같은 기본 정보는 수정할 수 있습니다.</p>' : ''}
       </div>
       <div class="tab-panel" data-panel="hist">${v._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(v.auditEvents)}</div>`;
   }
@@ -2039,32 +2039,42 @@
   function bindVehicleDetail(root, v) {
     $('#inlineDetailBack', root).onclick = () => { selectedVehicleId = null; vehicleEditMode = false; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
-      if (v.status === '운행중' || vehicleHasActiveTrip(v.id)) { toast('운행 중인 차량은 수정할 수 없습니다.', 'error'); return; }
       if (!vehicleEditMode) {
         vehicleEditMode = true;
         renderPage();
         return;
       }
+      const assignLocked = v.status === '운행중' || vehicleHasActiveTrip(v.id);
       const tonnageStr = $('#vehTonnage', root).value;
       const type = $('#vehType', root).value;
-      const status = $('#vehStatus', root).value;
-      const driverId = $('#vehDriver', root).value;
 
       const tonMap = { '1톤': 1000, '1.4톤': 1400, '2.5톤': 2500, '3.5톤': 3500, '5톤': 5000 };
       const weight_kg = tonMap[tonnageStr] ?? v.weight_kg;
 
+      const body = { vehicle_type: type, weight_kg };
+      let status = v.status;
+      let driverId = linked ? linked.id : '';
+      if (!assignLocked) {
+        status = $('#vehStatus', root).value;
+        driverId = $('#vehDriver', root).value;
+        body.status = status;
+        body.driver_id = driverId || null;
+      }
+
       const res = await apiFetch(`/vehicles/${v.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ vehicle_type: type, weight_kg, status, driver_id: driverId || null }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '차량 정보 저장 실패', 'error'); return; }
 
       v.tonnage = tonnageStr;
       v.type = type;
-      v.status = status;
       v.weight_kg = weight_kg;
-      DATA.drivers.forEach(d => { if (d.vehicleId === v.id) d.vehicleId = null; });
-      if (driverId) { const d = driverById(driverId); if (d) d.vehicleId = v.id; }
+      if (!assignLocked) {
+        v.status = status;
+        DATA.drivers.forEach(d => { if (d.vehicleId === v.id) d.vehicleId = null; });
+        if (driverId) { const d = driverById(driverId); if (d) d.vehicleId = v.id; }
+      }
 
       vehicleEditMode = false;
       toast('차량 정보가 저장되었습니다');
@@ -2233,6 +2243,11 @@
     const detailField = (id, value) => orderEditMode
       ? `<input id="${id}" value="${escapeHtml(value || '')}" ${editable ? '' : 'disabled'}>`
       : `<span>${escapeHtml(value || '—')}</span>`;
+    const customerField = orderEditMode
+      ? `<select id="orderDetailCustomer" ${editable ? '' : 'disabled'}>${DATA.customers.map(c =>
+          `<option value="${escapeHtml(c.name)}" ${c.name === o.customer ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
+        ).join('')}</select>`
+      : `<span>${escapeHtml(o.customer || '—')}</span>`;
     return `
       <div class="customer-detail-summary">
         <span>상태 ${statusBadge(o.status)}${(() => { const tr = tripForOrder(o); return tr ? tripExtraBadgesHtml(tr) : ''; })()}</span>
@@ -2250,7 +2265,7 @@
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
           <label>오더번호</label><span>${orderNoHtml(o, { raw: false })}</span>
-          <label>화주</label>${detailField('orderDetailCustomer', o.customer)}
+          <label>화주</label>${customerField}
           <label>수신자</label>${detailField('orderDetailRecipient', o.recipient)}
           <label>화물</label>${detailField('orderDetailCargo', [o.cargo, o.tons].filter(Boolean).join(' · '))}
           <label>시간창</label>${detailField('orderDetailWindow', o.window)}
@@ -4015,20 +4030,11 @@
       <div class="card dispatch-action-card">
         <div class="card-hd card-hd--dispatch"><h2><span class="section-step">3</span> 배정 및 실행</h2></div>
         <div class="card-bd">
-          <div class="bulk-setup-footer">
-            <div class="bulk-assign-bar ${canAssign ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
-              <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
-              <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
-              <span class="bulk-assign-bar-label">선택 기사 <strong>${driverBarLabel}</strong></span>
-              <button type="button" class="btn btn-primary" id="bulkAssignToDriver" ${canAssign ? '' : 'disabled'}>선택 항목 배정</button>
-            </div>
-            <div class="bulk-execute-bar">
-              <div>
-                <strong>배정 검토</strong>
-                <p class="bulk-pre-kpi">오더 ${assignedCount}건 · 기사 ${assignedDriverCount}명${!bulkAllowMixedLoad ? ' · 기사당 1건' : ' · 혼적 허용'}</p>
-              </div>
-              <button type="button" class="btn btn-primary" id="runBulkDispatch" ${canRunBulk ? '' : 'disabled'}>배차 실행</button>
-            </div>
+          <div class="bulk-assign-bar ${(canAssign || canRunBulk) ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
+            <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
+            <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
+            <span class="bulk-assign-bar-label">선택 기사 <strong>${driverBarLabel}</strong></span>
+            <button type="button" class="btn btn-primary" id="runBulkDispatch" ${(canAssign || canRunBulk) ? '' : 'disabled'}>배차 실행</button>
           </div>
         </div>
       </div>
@@ -4178,34 +4184,6 @@
       search?.focus();
       search?.setSelectionRange(bulkDriverSearch.length, bulkDriverSearch.length);
     });
-    $('#bulkAssignToDriver', root)?.addEventListener('click', () => {
-      if (!bulkSelectedOrderIds.length || !bulkSelectedDriverIds.length) return;
-      const orderIds = [...bulkSelectedOrderIds];
-      const driverIds = [...bulkSelectedDriverIds];
-      if (!bulkAllowMixedLoad) {
-        const availableDriverIds = driverIds.filter(driverId => !(bulkOrderAssignments[String(driverId)] || []).length);
-        if (availableDriverIds.length < orderIds.length) {
-          toast('혼적 OFF에서는 오더 수만큼 비어 있는 기사를 선택해야 합니다');
-          return;
-        }
-        orderIds.forEach((orderId, idx) => {
-          bulkOrderAssignments[String(availableDriverIds[idx])] = [orderId];
-        });
-        bulkSelectedOrderIds = [];
-        toast(`${orderIds.length}건을 기사별 1건씩 배정했습니다`);
-        renderBulkDispatch(root);
-        return;
-      }
-      orderIds.forEach((orderId, idx) => {
-        const driverId = driverIds[idx % driverIds.length];
-        const key = String(driverId);
-        if (!bulkOrderAssignments[key]) bulkOrderAssignments[key] = [];
-        if (!bulkOrderAssignments[key].includes(orderId)) bulkOrderAssignments[key].push(orderId);
-      });
-      bulkSelectedOrderIds = [];
-      toast(`${orderIds.length}건을 기사 ${driverIds.length}명에게 배정했습니다`);
-      renderBulkDispatch(root);
-    });
     root.querySelectorAll('.bulk-vehicle-select').forEach(sel => {
       sel.onchange = () => {
         const row = bd.vehicles.find(x => x.id === Number(sel.dataset.bulkRow));
@@ -4240,7 +4218,31 @@
       };
     });
     $('#runBulkDispatch', root).onclick = async () => {
-      if (!canRunBulk) { toast('기사별로 오더를 먼저 배정하세요'); return; }
+      if (bulkSelectedOrderIds.length && bulkSelectedDriverIds.length) {
+        const orderIds = [...bulkSelectedOrderIds];
+        const driverIds = [...bulkSelectedDriverIds];
+        if (!bulkAllowMixedLoad) {
+          const availableDriverIds = driverIds.filter(driverId => !(bulkOrderAssignments[String(driverId)] || []).length);
+          if (availableDriverIds.length < orderIds.length) {
+            toast('혼적 OFF에서는 오더 수만큼 비어 있는 기사를 선택해야 합니다');
+            return;
+          }
+          orderIds.forEach((orderId, idx) => {
+            bulkOrderAssignments[String(availableDriverIds[idx])] = [orderId];
+          });
+        } else {
+          orderIds.forEach((orderId, idx) => {
+            const driverId = driverIds[idx % driverIds.length];
+            const key = String(driverId);
+            if (!bulkOrderAssignments[key]) bulkOrderAssignments[key] = [];
+            if (!bulkOrderAssignments[key].includes(orderId)) bulkOrderAssignments[key].push(orderId);
+          });
+        }
+        bulkSelectedOrderIds = [];
+      }
+      const assignedNow = Object.values(bulkOrderAssignments).reduce((sum, ids) => sum + (ids?.length || 0), 0);
+      const assignedDriverNow = Object.values(bulkOrderAssignments).filter(ids => ids?.length).length;
+      if (!assignedNow || !assignedDriverNow) { toast('기사별로 오더를 먼저 배정하세요'); return; }
       const skipped = [];
       const groups = Object.entries(bulkOrderAssignments)
         .filter(([, ids]) => ids?.length)
@@ -4959,7 +4961,9 @@
           <div class="form-grid" style="max-width:100%">
             <label>상차지 주소 *</label><input id="addOrdPickup" required placeholder="상차지 주소">
             <label>하차지 주소 *</label><input id="addOrdDelivery" required placeholder="하차지 주소">
-            <label>화주</label><input id="addOrdShipper" placeholder="화주명">
+            <label>화주</label><select id="addOrdShipper"><option value="">화주 선택</option>${DATA.customers.map(c =>
+              `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`
+            ).join('')}</select>
             <label>화물 종류</label><select id="addOrdCargo">${cargoTypeOptionsHtml()}</select>
             <label>규격</label><input id="addOrdSize" placeholder="예: 5톤, 3파레트">
             <label>희망 도착</label>
@@ -6053,7 +6057,7 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraPickup = seq;
-    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>추가 상차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="추가 상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"></div>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>상차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="${name}"]`);
@@ -6077,7 +6081,7 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraDelivery = seq;
-    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>추가 하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신처(하차 고객)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신처(하차 고객)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="delivery_${taskNum}_extra_${seq}"]`);
@@ -6087,6 +6091,19 @@
     bindPlaceSearch(row);
     bindIntakeKeyboard(root);
     row.querySelector('.intake-field').focus();
+  }
+
+  function bindDesiredArrivalAutoFormat() {
+    document.addEventListener('input', (e) => {
+      const inp = e.target;
+      if (!inp?.closest?.('.desired-arrival-row')) return;
+      const isDate = inp.name.includes('date');
+      const digits = inp.value.replace(/\D/g, '').slice(0, isDate ? 8 : 4);
+      const parts = isDate
+        ? [digits.slice(0, 4), digits.slice(4, 6), digits.slice(6, 8)]
+        : [digits.slice(0, 2), digits.slice(2, 4)];
+      inp.value = parts.filter(Boolean).join(isDate ? '-' : ':');
+    });
   }
 
   function bindIntakeStopShortcuts() {
@@ -6135,28 +6152,32 @@
         <div class="task-card-head">
           <div>
             <p class="task-card-kicker">ORDER ${String(taskNum).padStart(2, '0')}</p>
-            <h3>${taskNum === 1 ? '신규 오더 입력' : `추가 오더 ${taskNum}`}</h3>
+            <h3>신규 오더 입력</h3>
           </div>
           <button type="button" class="task-remove" data-remove-task="${taskNum}" aria-label="태스크 삭제" ${taskNum === 1 ? 'hidden' : ''} tabindex="-1">&times;</button>
         </div>
         <div class="intake-route-grid">
         <div class="stop-block stop-block--pickup">
           <div class="stop-label"><span class="stop-number">1</span><span>상차 정보</span></div>
-          ${intakePlaceInput(`pickup_${taskNum}`, pickup, taskNum === 1, t + 1)}
-          <div class="delivery-fields">
-            ${cargoTypeSelectHtml(`pickup_cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 2}" data-intake-field="pickup_cargo_${taskNum}"`)}
-            <input type="text" class="intake-field" name="pickup_tons_${taskNum}" placeholder="상차 규격 예: 5톤" tabindex="${t + 3}" data-intake-field="pickup_tons_${taskNum}">
+          <div class="stop-card">
+            ${intakePlaceInput(`pickup_${taskNum}`, pickup, taskNum === 1, t + 1)}
+            <div class="delivery-fields">
+              ${cargoTypeSelectHtml(`pickup_cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 2}" data-intake-field="pickup_cargo_${taskNum}"`)}
+              <input type="text" class="intake-field" name="pickup_tons_${taskNum}" placeholder="상차 규격 예: 5톤" tabindex="${t + 3}" data-intake-field="pickup_tons_${taskNum}">
+            </div>
           </div>
           <button type="button" class="intake-aux-link" data-add-pickup="${taskNum}" tabindex="-1">+ 상차지 추가</button>
         </div>
         <div class="route-connector" aria-hidden="true"><span>→</span></div>
         <div class="stop-block stop-block--delivery">
           <div class="stop-label"><span class="stop-number">2</span><span>하차 정보</span></div>
-          ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 4)}
-          <div class="delivery-fields">
-            <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신처(하차 고객)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
-            ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 6}" data-intake-field="cargo_${taskNum}"`)}
-            <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 7}" data-intake-field="tons_${taskNum}">
+          <div class="stop-card">
+            ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 4)}
+            <div class="delivery-fields">
+              <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신처(하차 고객)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
+              ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 6}" data-intake-field="cargo_${taskNum}"`)}
+              <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 7}" data-intake-field="tons_${taskNum}">
+            </div>
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
         </div>
@@ -6186,6 +6207,30 @@
           </div>
         </div>
       </article>`;
+  }
+
+  function bindTaskCardControls(root) {
+    root.querySelectorAll('.place-clear').forEach(btn => {
+      btn.onclick = () => {
+        const inp = root.querySelector(`[name="${btn.dataset.clear}"]`);
+        if (inp) inp.value = '';
+      };
+    });
+    root.querySelectorAll('[data-add-pickup]').forEach(btn => {
+      btn.onclick = () => addIntakePickupStop(root, Number(btn.dataset.addPickup));
+    });
+    root.querySelectorAll('[data-add-delivery]').forEach(btn => {
+      btn.onclick = () => addIntakeDeliveryStop(root, Number(btn.dataset.addDelivery));
+    });
+    root.querySelectorAll('[data-remove-task]').forEach(btn => {
+      btn.onclick = () => { btn.closest('[data-task]')?.remove(); };
+    });
+    root.querySelectorAll('select[name^="customer_"]').forEach(sel => bindIntakeCustomerSelect(root, sel));
+    root.querySelectorAll('[data-temp-customer]').forEach(btn => {
+      btn.onclick = () => openTempCustomerFromIntake(root, root.querySelector(`[name="customer_${btn.dataset.tempCustomer}"]`));
+    });
+    bindIntakeKeyboard(root);
+    bindPlaceSearch(root);
   }
 
   function renderOrderIntake(root) {
@@ -6287,33 +6332,15 @@
     };
     $('#addTaskCard', root).onclick = () => {
       root._taskCount = (root._taskCount || 1) + 1;
-      renderOrderIntake(root);
+      const taskNum = root._taskCount;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = taskCardHtml(taskNum, intakeCustomerSelectOptions(null), null, (taskNum - 1) * 12);
+      const card = wrap.firstElementChild;
+      $('#taskCardsList', root).appendChild(card);
+      bindTaskCardControls(root);
     };
-    root.querySelectorAll('[data-remove-task]').forEach(btn => {
-      btn.onclick = () => {
-        root._taskCount = Math.max(1, (root._taskCount || 1) - 1);
-        renderOrderIntake(root);
-      };
-    });
-    root.querySelectorAll('.place-clear').forEach(btn => {
-      btn.onclick = () => {
-        const inp = root.querySelector(`[name="${btn.dataset.clear}"]`);
-        if (inp) inp.value = '';
-      };
-    });
-    root.querySelectorAll('[data-add-pickup]').forEach(btn => {
-      btn.onclick = () => addIntakePickupStop(root, Number(btn.dataset.addPickup));
-    });
-    root.querySelectorAll('[data-add-delivery]').forEach(btn => {
-      btn.onclick = () => addIntakeDeliveryStop(root, Number(btn.dataset.addDelivery));
-    });
 
-    bindIntakeKeyboard(root);
-    bindPlaceSearch(root);
-    root.querySelectorAll('select[name^="customer_"]').forEach(sel => bindIntakeCustomerSelect(root, sel));
-    root.querySelectorAll('[data-temp-customer]').forEach(btn => {
-      btn.onclick = () => openTempCustomerFromIntake(root, root.querySelector(`[name="customer_${btn.dataset.tempCustomer}"]`));
-    });
+    bindTaskCardControls(root);
 
     $('#addIntakeRow', root).onclick = () => {
       const active = document.activeElement;
@@ -6782,6 +6809,7 @@
     $('#ddLogout').onclick = () => logout();
     document.addEventListener('click', () => _closeAllDropdowns());
     bindIntakeStopShortcuts();
+    bindDesiredArrivalAutoFormat();
     applyInitialQueryState();
     renderNav();
     renderPage();

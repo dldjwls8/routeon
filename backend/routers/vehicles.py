@@ -79,10 +79,8 @@ async def update_vehicle(vehicle_id: int, req: VehicleUpdate,
         Trip.vehicle_id == vehicle_id,
         Trip.status == TripStatus.in_progress,
     ).limit(1))).scalar_one_or_none()
-    if active_trip and req.model_fields_set.intersection(
-        {"vehicle_type", "weight_kg", "height_m", "status", "driver_id"}
-    ):
-        raise HTTPException(409, "운행 중인 차량 정보는 변경할 수 없습니다.")
+    if active_trip and req.model_fields_set.intersection({"status", "driver_id"}):
+        raise HTTPException(409, "운행 중인 차량의 상태와 연결 기사는 변경할 수 없습니다.")
     old_driver_id = next(iter((await db.execute(
         select(User.id).where(
             User.vehicle_id == vehicle_id,
