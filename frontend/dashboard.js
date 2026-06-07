@@ -718,7 +718,6 @@
         DATA.customers = customers.map(c => ({
           id:              c.id,
           name:            c.name,
-          contact:         c.contact || '',
           phone:           c.phone || '',
           address:         c.address || '',
           lat:             c.lat ?? null,
@@ -1460,11 +1459,11 @@
       let created;
       if (res.ok) {
         const saved = await res.json();
-        created = { ...saved, contact: saved.contact || name, totalShipments: 0, lastOrderDate: today, shipmentHistory: [] };
+        created = { ...saved, totalShipments: 0, lastOrderDate: today, shipmentHistory: [] };
         DATA.customers.push(created);
       } else {
         // API 실패 시 로컬 fallback
-        created = { id: nextCustomerId(), name, contact: name, phone, address: '', temporary: true, valid_date: today, memo, totalShipments: 0, lastOrderDate: today, shipmentHistory: [] };
+        created = { id: nextCustomerId(), name, phone, address: '', temporary: true, valid_date: today, memo, totalShipments: 0, lastOrderDate: today, shipmentHistory: [] };
         DATA.customers.push(created);
       }
       toast(`임시 화주 «${name}» 등록 (당일)`);
