@@ -28,9 +28,15 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
+import { useChatSocket } from '@/composables/useChatSocket.js'
+
+const chat = useChatSocket()
 
 onMounted(() => {
+  chat.setChatPageActive(true)
+  chat.setCurrentPartner(null)
+  chat.setCurrentConvId(null)
   // ────────────────────────────────────────────────
   // 설정
   // ────────────────────────────────────────────────
@@ -433,6 +439,10 @@ onMounted(() => {
   });
 
   init();
+});
+
+onUnmounted(() => {
+  chat.setChatPageActive(false)
 });
 </script>
 

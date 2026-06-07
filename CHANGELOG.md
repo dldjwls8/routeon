@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.121 (2026-06-07)
+### Vue 대시보드 실시간 메시지·알림 드롭다운 구현
+- **`useChatSocket.js` composable 추가**: 채팅 WebSocket 연결 + 대화 목록 + unread 카운트를 전역 reactive 상태로 관리. `DashboardLayout`과 `ChatView`가 공유
+- **`DashboardLayout.vue` 메시지/알림 UI reactive 전환**
+  - 상단 메시지 버튼(💬)과 알림 버튼(🔔)에 `totalUnread` 기반 뱃지 dot 표시
+  - 알림 버튼 클릭 시 미확인 메시지 목록 드롭다운 표시 — 파트너별 unread 수량 + 클릭 시 `/chat` 이동
+  - legacy `dashboard.js` DOM ID 충돌 방지를 위해 Vue 관련 요소에서 `id` 속성 제거/변경
+  - `onMounted` 시 WebSocket 연결 + 대화 목록 로드, `onUnmounted` 시 연결 종료
+- **`ChatView.vue` 공유 상태 연동**: `useChatSocket`의 `setChatPageActive(true/false)` 플래그 설정. 채팅 페이지 활성 중에는 unread 뱃지가 증가하지 않도록 처리
+- **백엔드 변경 없음**: 기존 `/ws/chat`, `/chat/conversations` API 및 `ChatConnectionManager` 그대로 활용
+
+---
+
 ## v1.0.120 (2026-06-07)
 ### 프론트엔드 결합도 낮추기 — bridge·services·composables 도입
 - **`main.js` 레거시 브리지 분리**: `routeMap`, `window._onRouteOnGotoPage`, `router.beforeEach` 브리지 로직을 `src/bridge/legacy-router.js`로 추출. `main.js`는 순수 앱 초기화만 담당

@@ -1,16 +1,51 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useChatSocket } from '@/composables/useChatSocket.js'
 
-onMounted(async () => {
-  document.body.classList.add('theme-dashboard')
-  if (typeof window.RouteOnInit === 'function' && !window._routeOnDashboardInitDone) {
-    window._routeOnDashboardInitDone = true
-    await window.RouteOnInit()
+const router = useRouter()
+const chat = useChatSocket()
+const dropdownOpen = ref(false)
+
+const unreadEntries = computed(() =>
+  Object.entries(chat.state.convByPartner || {})
+    .filter(([, c]) => (c?.unread_count || 0) > 0)
+    .map(([pid, c]) => [pid, c.unread_count])
+)
+
+function partnerName(pid) {
+  const p = chat.state.value?.partners?.find(x => x.id === pid)
+  return p?.name || p?.username || '사용자'
+}
+
+function goToChat(partnerId = null) {
+  dropdownOpen.value = false
+  if (partnerId) {
+    router.push(`/chat?partner_id=${partnerId}`)
+  } else {
+    router.push('/chat')
   }
+}
+
+function toggleDropdown(e) {
+  e.stopPropagation()
+  dropdownOpen.value = !dropdownOpen.value
+}
+
+function closeDropdown() {
+  dropdownOpen.value = false
+}
+
+onMounted(() => {
+  chat.connect()
+  chat.loadPartners()
+  chat.loadConversations()
+  document.addEventListener('click', closeDropdown)
 })
 
 onUnmounted(() => {
-  document.body.classList.remove('theme-dashboard')
+  chat.disconnect()
+  document.removeEventListener('click', closeDropdown)
 })
 </script>
 
@@ -24,12 +59,27 @@ onUnmounted(() => {
       <nav class="top-nav" id="navMain" aria-label="주 메뉴"></nav>
       <div class="topbar-meta">
         <span class="topbar-date">오늘 <strong id="headerDate"></strong></span>
-        <button type="button" class="topbar-icon-btn message-btn-wrap" id="messageBtn" title="메시지" aria-label="메시지">💬<span class="notif-dot" id="messageBadge" style="display:none"></span></button>
+        <button type="button" class="topbar-icon-btn message-btn-wrap" title="메시지" aria-label="메시지" @click="goToChat()">
+          💬<span v-if="chat.totalUnread.value > 0" class="notif-dot"></span>
+        </button>
         <div class="topbar-btn-wrap">
-          <button type="button" class="topbar-icon-btn notif-btn-wrap" id="notifBtn" title="알림" aria-label="알림">🔔<span class="notif-dot" id="notifBadge" style="display:none"></span></button>
-          <div class="topbar-dropdown" id="notifDropdown" style="min-width:220px">
-            <div class="topbar-dropdown-header">알림</div>
-            <div class="topbar-dropdown-empty">새 알림이 없습니다</div>
+          <button type="button" class="topbar-icon-btn notif-btn-wrap" title="알림" aria-label="알림" @click="toggleDropdown">
+            🔔<span v-if="chat.totalUnread.value > 0" class="notif-dot"></span>
+          </button>
+          <div v-show="dropdownOpen" class="topbar-dropdown open" style="min-width:220px">
+            <div class="topbar-dropdown-header">새 메시지</div>
+            <template v-if="unreadEntries.length">
+              <button
+                v-for="[pid, count] in unreadEntries"
+                :key="pid"
+                type="button"
+                class="topbar-dropdown-item"
+                @click="goToChat(pid)"
+              >
+                💬 {{ partnerName(pid) }}<span class="badge badge-info" style="margin-left:auto">{{ count > 99 ? '99+' : count }}</span>
+              </button>
+            </template>
+            <div v-else class="topbar-dropdown-empty">새 알림이 없습니다</div>
           </div>
         </div>
         <div class="topbar-btn-wrap">

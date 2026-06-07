@@ -116,11 +116,12 @@ routeon/
         │   └── staffService.js      담당자 API
         ├── composables/
         │   ├── useApi.js            API loading/error 상태 관리
-        │   └── useListPage.js       목록 페이지네이션/검색/필터 상태 관리
+        │   ├── useListPage.js       목록 페이지네이션/검색/필터 상태 관리
+        │   └── useChatSocket.js     채팅 WebSocket + unread 상태 공유 composable (DashboardLayout·ChatView 공용)
         ├── router/
         │   └── index.js      Vue Router 경로 정의·meta.main·meta.label
         ├── layouts/
-        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container)
+        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container) — 메시지/알림 뱃지·드롭다운 reactive 구현
         ├── components/
         │   └── PageChrome.vue        페이지 공통 크롬 (뒤로가기·타이틀·액션바 래퍼)
         ├── assets/
