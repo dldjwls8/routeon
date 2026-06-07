@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 
-from database import get_db
+from database import AsyncSessionLocal, get_db
 from models import User, Trip, Location, TripStatus, UserRole
 from auth import get_current_user, get_current_user_from_token, require_admin
 from core.managers import manager, redis
@@ -47,7 +47,6 @@ async def create_location_log(
 async def ws_location(
     ws: WebSocket,
     token: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
 ):
     """
     관리자 웹이 연결하는 WebSocket 엔드포인트.
@@ -60,7 +59,8 @@ async def ws_location(
     if not token:
         await _reject(); return
     try:
-        current_user = await get_current_user_from_token(token, db)
+        async with AsyncSessionLocal() as db:
+            current_user = await get_current_user_from_token(token, db)
     except HTTPException:
         await _reject(); return
     if current_user.role not in (UserRole.admin, UserRole.driver) or not current_user.organization_id:

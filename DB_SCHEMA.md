@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-07 (v1.0.103 기준, 일정·오더·배차 UI 변경의 DB 영향 없음 확인)
+> 최종 검토: 2026-06-07 (v1.0.104 기준, WebSocket 세션·로그인 안정화의 DB 구조 영향 없음 확인)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.103은 DB 구조 변경이 없다. `TR-YYMMDD-NNN` 운행번호와 `RO-...-화물N` 화물번호는 프론트 표시값이며 저장 컬럼이 아니다. 오더 상세 지도는 기존 상·하차 좌표를 사용하고, 접수 날짜 입력·페이지네이션·배차관리 레이아웃도 기존 컬럼과 API를 그대로 사용한다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
+> v1.0.104는 DB 구조 변경이 없다. `/ws/chat`, `/ws/location`의 JWT 사용자 조회에 사용하는 `AsyncSession`을 연결 초기에만 열고 즉시 닫도록 세션 수명을 수정했으며, 테이블·컬럼·ENUM·인덱스와 저장 데이터에는 영향이 없다. v1.0.103의 `TR-YYMMDD-NNN` 운행번호와 `RO-...-화물N` 화물번호도 계속 프론트 표시값이며 저장 컬럼이 아니다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 

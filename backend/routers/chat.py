@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select, or_, func
 from pydantic import BaseModel
 
-from database import get_db
+from database import AsyncSessionLocal, get_db
 from models import (
     User, Conversation, Message,
     AccountStatus, UserRole,
@@ -459,7 +459,6 @@ async def mark_chat_conversation_read(
 async def ws_chat(
     ws: WebSocket,
     token: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
 ):
     async def _chat_reject():
         await ws.accept()
@@ -468,7 +467,8 @@ async def ws_chat(
     if not token:
         await _chat_reject(); return
     try:
-        current_user = await get_current_user_from_token(token, db)
+        async with AsyncSessionLocal() as db:
+            current_user = await get_current_user_from_token(token, db)
     except HTTPException:
         await _chat_reject(); return
     if current_user.role not in (UserRole.admin, UserRole.driver):

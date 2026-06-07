@@ -157,6 +157,7 @@ routeon/
 - `frontend/api-client.js`: 관리자 대시보드의 API/WS 주소, 토큰, 인증 헤더와 JSON 요청 기본값을 담당한다. `dashboard.js`에서 직접 `fetch()`나 API 호스트를 조립하지 않는다.
 - 분리 작업 후에는 `python -m compileall -q /app`, `python -m pyflakes /app`, `node --check frontend/api-client.js`, `node --check frontend/dashboard.js`, `/openapi.json`, `/auth/login`, `/vehicles`, `/deliveries`, `/trips`, `/stats/summary` smoke를 확인한다.
 - WebSocket 라우터는 HTTP smoke만으로 충분하지 않으므로 `/ws/location`, `/ws/chat` 연결 accepted 여부도 확인한다.
+- WebSocket은 장기 연결이므로 `db: AsyncSession = Depends(get_db)`를 핸들러 인자로 두지 않는다. JWT·사용자 검증이 필요하면 `AsyncSessionLocal()` 컨텍스트를 연결 초기에만 열고 인증 직후 닫아 DB 풀을 점유하지 않도록 한다.
 - `services/kakao_mobility.py`의 `_cache_future`, `_cache_realtime`, `_cache_multi`는 모듈 상단에서 초기화되는 프로세스 메모리 캐시다. 경로행렬 계산 함수에서 직접 참조하므로 삭제하지 않는다.
 
 ### 비동기 패턴
@@ -421,6 +422,11 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /auth/approve/{id}` | 관리자 | 같은 기업 가입 신청 승인. 관리자 신청은 최상위 기업관리자만 가능 |
 | `POST /auth/reject/{id}` | 관리자 | 같은 기업 가입 신청 반려. 관리자 신청은 최상위 기업관리자만 가능 |
 
+로그인 동작:
+- `login.html`은 아이디 앞뒤 공백을 제거하고 로그인 요청 중 버튼을 비활성화해 중복 제출을 막는다.
+- API의 JSON 오류 메시지를 화면에 표시하며, Nginx 5xx HTML 응답이나 네트워크 오류도 별도 안내 문구로 처리한다.
+- 채팅·위치 WebSocket 인증은 독립적인 단기 DB 세션을 사용한다. 연결이 유지되는 동안 SQLAlchemy 세션이나 트랜잭션을 보유하면 안 된다.
+
 ### 유저/차량
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
@@ -541,6 +547,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 - 일반 관리자는 자신이 지정 관리자인 기사만 파트너 목록에서 볼 수 있으며, 다른 관리자에게 연결된 기사와 새 대화방을 만들 수 없다.
 - `superadmin`, 승인 대기·반려 계정, 자기 자신, driver↔driver 조합은 거부한다.
 - 실시간 전송 실패는 DB 저장을 롤백하지 않는다. 재접속 시 REST 히스토리로 복구한다.
+- `/ws/chat`과 `/ws/location`은 연결 초기에만 DB에서 사용자를 검증하며, 연결 유지·heartbeat·메시지 수신 구간에서는 DB 세션을 점유하지 않는다.
 
 프론트엔드 진입점:
 - 관리자: 대시보드 상단 메시지 버튼 → `/chat.html`. 직접 상대를 열 때는 `?partner_id={user_id}`를 사용하며 기존 `?driver_id=`도 호환한다.

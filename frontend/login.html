@@ -41,6 +41,8 @@
     input::placeholder { color: var(--t-text-muted); }
     .btn { width: 100%; padding: 12px; background: var(--lime); color: #111; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 4px; }
     .btn:hover { background: #a8d42e; }
+    .btn:disabled { cursor: wait; opacity: .65; }
+    .login-message { min-height: 18px; margin-top: 12px; color: #ef4444; font-size: 13px; line-height: 1.4; }
     .link { display: block; margin-top: 16px; font-size: 13px; color: var(--t-text-muted); text-decoration: none; }
     .link:hover { color: var(--t-text); text-decoration: underline; }
   </style>
@@ -54,6 +56,7 @@
       <input type="password" id="password" placeholder="비밀번호" required>
       <button type="submit" class="btn">로그인</button>
     </form>
+    <div id="loginMessage" class="login-message" role="alert" aria-live="polite"></div>
     <a href="/register.html" class="link">관리자 계정이 없으신가요? 가입하기</a>
   </div>
 
@@ -71,29 +74,48 @@
 
     document.getElementById('loginForm').addEventListener('submit', async e => {
       e.preventDefault();
-      const username = document.getElementById('username').value;
+      const form = e.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const message = document.getElementById('loginMessage');
+      const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      const res = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (res.ok && data.access_token) {
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('user_id', data.user_id);
-        localStorage.setItem('username', data.username);
-        localStorage.setItem('role', data.role);
-        if (data.role === 'driver') {
-          window.location.href = '/driver.html';
-        } else if (data.role === 'superadmin') {
-          localStorage.setItem('sa_token', data.access_token);
-          window.location.href = '/superadmin.html';
+      message.textContent = '';
+      button.disabled = true;
+      button.textContent = '로그인 중...';
+
+      try {
+        const res = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await res.json() : {};
+        if (res.ok && data.access_token) {
+          localStorage.setItem('token', data.access_token);
+          localStorage.setItem('user_id', data.user_id);
+          localStorage.setItem('username', data.username);
+          localStorage.setItem('role', data.role);
+          if (data.role === 'driver') {
+            window.location.href = '/driver.html';
+          } else if (data.role === 'superadmin') {
+            localStorage.setItem('sa_token', data.access_token);
+            window.location.href = '/superadmin.html';
+          } else {
+            window.location.href = '/dashboard.html';
+          }
         } else {
-          window.location.href = '/dashboard.html';
+          message.textContent = data.detail || (
+            res.status >= 500
+              ? '서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
+              : '로그인에 실패했습니다.'
+          );
         }
-      } else {
-        alert(data.detail || '로그인에 실패했습니다.');
+      } catch (error) {
+        message.textContent = '서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.';
+      } finally {
+        button.disabled = false;
+        button.textContent = '로그인';
       }
     });
   </script>
