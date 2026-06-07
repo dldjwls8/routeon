@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet, apiDelete, apiPatch } from '@/api/client.js'
+import { getDeliveries, deleteDelivery } from '@/services/deliveryService.js'
 import { ORDER_STATUS_MAP, statusBadgeClass, PAGE_SIZE } from '@/constants.js'
 
 const orders = ref([])
@@ -75,7 +75,7 @@ function routeCellHtml(o) {
 async function load() {
   loading.value = true
   try {
-    const data = await apiGet('/deliveries')
+    const data = await getDeliveries()
     orders.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) {
     console.error(e)
@@ -92,7 +92,7 @@ function selectOrder(id) {
 async function deleteOrder() {
   if (!selected.value || !confirm('정말 삭제하시겠습니까?')) return
   try {
-    await apiDelete(`/deliveries/${selected.value.id}`)
+    await deleteDelivery(selected.value.id)
     orders.value = orders.value.filter(o => o.id !== selected.value.id)
     selectedOrderId.value = null
   } catch (e) {

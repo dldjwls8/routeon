@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet, apiDelete, apiPatch } from '@/api/client.js'
+import { getTrips, deleteTrip as removeTrip, patchTripStatus } from '@/services/tripService.js'
 import { TRIP_STATUS_MAP, statusBadgeClass, PAGE_SIZE } from '@/constants.js'
 
 const trips = ref([])
@@ -29,7 +29,7 @@ function formatDateTimeShort(v) {
 async function load() {
   loading.value = true
   try {
-    const data = await apiGet('/trips')
+    const data = await getTrips()
     trips.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) { console.error(e) }
   finally { loading.value = false }
@@ -43,7 +43,7 @@ function selectTrip(id) {
 async function deleteTrip() {
   if (!selected.value || !confirm('정말 삭제하시겠습니까?')) return
   try {
-    await apiDelete(`/trips/${selected.value.id}`)
+    await removeTrip(selected.value.id)
     trips.value = trips.value.filter(t => t.id !== selected.value.id)
     selectedTripId.value = null
   } catch (e) { alert('삭제 실패') }
@@ -52,7 +52,7 @@ async function deleteTrip() {
 async function updateStatus(status) {
   if (!selected.value) return
   try {
-    await apiPatch(`/trips/${selected.value.id}/status?status=${status}`)
+    await patchTripStatus(selected.value.id, status)
     selected.value.status = status
   } catch (e) { alert('상태 변경 실패') }
 }

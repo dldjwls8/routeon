@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet } from '@/api/client.js'
+import { getVehicles } from '@/services/vehicleService.js'
 
 const vehicles = ref([])
 const loading = ref(true)
@@ -9,7 +9,7 @@ let ws = null
 
 async function load() {
   try {
-    const data = await apiGet('/vehicles')
+    const data = await getVehicles()
     vehicles.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) { console.error(e) }
   finally { loading.value = false }

@@ -1,14 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet } from '@/api/client.js'
+import { getTripStats } from '@/services/statisticsService.js'
 
 const stats = ref(null)
 const loading = ref(true)
 
 async function load() {
   try {
-    stats.value = await apiGet('/statistics/trips')
+    stats.value = await getTripStats()
   } catch (e) { console.error(e) }
   finally { loading.value = false }
 }

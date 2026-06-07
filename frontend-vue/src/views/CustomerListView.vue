@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet, apiDelete, apiPost, apiPatch } from '@/api/client.js'
+import { getCustomers, deleteCustomer as removeCustomer, createCustomer, patchCustomer } from '@/services/customerService.js'
 import { PAGE_SIZE } from '@/constants.js'
 
 const customers = ref([])
@@ -34,7 +34,7 @@ const selected = computed(() => customers.value.find(c => c.id === selectedCusto
 async function load() {
   loading.value = true
   try {
-    const data = await apiGet('/customers')
+    const data = await getCustomers()
     customers.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) { console.error(e) }
   finally { loading.value = false }
@@ -48,7 +48,7 @@ function selectCustomer(id) {
 async function deleteCustomer() {
   if (!selected.value || !confirm('정말 삭제하시겠습니까?')) return
   try {
-    await apiDelete(`/customers/${selected.value.id}`)
+    await removeCustomer(selected.value.id)
     customers.value = customers.value.filter(c => c.id !== selected.value.id)
     selectedCustomerId.value = null
   } catch (e) { alert('삭제 실패') }
@@ -73,11 +73,11 @@ async function saveModal() {
   try {
     let data
     if (modalEdit.value) {
-      data = await apiPatch(`/customers/${selected.value.id}`, body)
+      data = await patchCustomer(selected.value.id, body)
       const idx = customers.value.findIndex(c => c.id === selected.value.id)
       if (idx >= 0) Object.assign(customers.value[idx], data)
     } else {
-      data = await apiPost('/customers', body)
+      data = await createCustomer(body)
       customers.value.push(data)
     }
     showModal.value = false

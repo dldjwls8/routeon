@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet, apiDelete } from '@/api/client.js'
+import { getVehicles, deleteVehicle as removeVehicle } from '@/services/vehicleService.js'
 import { PAGE_SIZE } from '@/constants.js'
 
 const vehicles = ref([])
@@ -16,7 +16,7 @@ const selected = computed(() => vehicles.value.find(v => v.id === selectedVehicl
 async function load() {
   loading.value = true
   try {
-    const data = await apiGet('/vehicles')
+    const data = await getVehicles()
     vehicles.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) { console.error(e) }
   finally { loading.value = false }
@@ -25,7 +25,7 @@ async function load() {
 async function deleteVehicle() {
   if (!selected.value || !confirm('정말 삭제하시겠습니까?')) return
   try {
-    await apiDelete(`/vehicles/${selected.value.id}`)
+    await removeVehicle(selected.value.id)
     vehicles.value = vehicles.value.filter(v => v.id !== selected.value.id)
     selectedVehicleId.value = null
   } catch (e) { alert('삭제 실패') }

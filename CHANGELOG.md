@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.120 (2026-06-07)
+### 프론트엔드 결합도 낮추기 — bridge·services·composables 도입
+- **`main.js` 레거시 브리지 분리**: `routeMap`, `window._onRouteOnGotoPage`, `router.beforeEach` 브리지 로직을 `src/bridge/legacy-router.js`로 추출. `main.js`는 순수 앱 초기화만 담당
+- **도메인 서비스 레이어 도입** (`src/services/`): 8개 서비스 모듈 생성
+  - `deliveryService.js`, `driverService.js`, `vehicleService.js`, `customerService.js`, `tripService.js`, `statisticsService.js`, `userService.js`, `staffService.js`
+  - 각 뷰의 직접 `apiGet`/`apiPost`/`apiPatch`/`apiDelete` 호출을 서비스 함수로 대체
+- **composables 분리** (`src/composables/`)
+  - `useApi.js`: API 호출의 `loading`/`error` 상태를 관리하는 공통 composable
+  - `useListPage.js`: 목록 화면의 페이지네이션/검색/필터 상태 관리
+- **12개 뷰 리팩토링**: `DashboardView`, `ControlLiveView`, `OrderListView`, `OrderIntakeView`, `DispatchManageView`, `CustomerListView`, `DriversView`, `VehiclesView`, `ProfileView`, `ScheduleCalendarView`, `StaffView`, `TripStatsView`의 import와 API 호출을 서비스 레이어 기반으로 교체
+- **DB 변경 없음**: 프론트엔드 아키텍처 리팩토링만 해당
+
 ## v1.0.119 (2026-06-07)
 ### CLAUDE.md 디렉터리 구조 정확화
 - **`frontend/` 레거시 간략화**: 기존 15줄로 상세히 나열되던 `frontend/` 디렉터리 구조를 4줄로 축약하고 "레거시 관리자 웹 (Vue 마이그레이션 전 정적 HTML, 유지보수 모드)"임을 명시

@@ -1,13 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet } from '@/api/client.js'
+import { getUserProfile } from '@/services/userService.js'
 
 const profile = ref({})
 
 async function load() {
   try {
-    profile.value = await apiGet('/users/me')
+    profile.value = await getUserProfile()
   } catch (e) { console.error(e) }
 }
 

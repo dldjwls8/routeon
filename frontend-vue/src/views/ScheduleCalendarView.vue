@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet } from '@/api/client.js'
+import { getDeliveries } from '@/services/deliveryService.js'
 
 const year = ref(new Date().getFullYear())
 const month = ref(new Date().getMonth() + 1)
@@ -10,7 +10,7 @@ const trips = ref([])
 
 async function load() {
   try {
-    const d = await apiGet('/deliveries')
+    const d = await getDeliveries()
     deliveries.value = Array.isArray(d) ? d : (d.items || [])
   } catch (e) {}
 }

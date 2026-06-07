@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet, apiDelete, apiPost, apiPatch } from '@/api/client.js'
+import { getDrivers, deleteDriver as removeDriver } from '@/services/driverService.js'
 import { PAGE_SIZE } from '@/constants.js'
 
 const drivers = ref([])
@@ -16,7 +16,7 @@ const selected = computed(() => drivers.value.find(d => d.id === selectedDriverI
 async function load() {
   loading.value = true
   try {
-    const data = await apiGet('/drivers')
+    const data = await getDrivers()
     drivers.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) { console.error(e) }
   finally { loading.value = false }
@@ -25,7 +25,7 @@ async function load() {
 async function deleteDriver() {
   if (!selected.value || !confirm('정말 삭제하시겠습니까?')) return
   try {
-    await apiDelete(`/drivers/${selected.value.id}`)
+    await removeDriver(selected.value.id)
     drivers.value = drivers.value.filter(d => d.id !== selected.value.id)
     selectedDriverId.value = null
   } catch (e) { alert('삭제 실패') }

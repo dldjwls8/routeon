@@ -1,7 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet, apiPost } from '@/api/client.js'
+import { getCustomers } from '@/services/customerService.js'
+import { getVehicles } from '@/services/vehicleService.js'
+import { getDrivers } from '@/services/driverService.js'
+import { createDelivery } from '@/services/deliveryService.js'
 
 const customers = ref([])
 const vehicles = ref([])
@@ -24,9 +27,9 @@ const form = ref({
 async function load() {
   try {
     const [c, v, d] = await Promise.all([
-      apiGet('/customers').catch(()=>[]),
-      apiGet('/vehicles').catch(()=>[]),
-      apiGet('/drivers').catch(()=>[]),
+      getCustomers().catch(()=>[]),
+      getVehicles().catch(()=>[]),
+      getDrivers().catch(()=>[]),
     ])
     customers.value = Array.isArray(c) ? c : (c.items||[])
     vehicles.value = Array.isArray(v) ? v : (v.items||[])
@@ -37,7 +40,7 @@ async function load() {
 async function submit() {
   loading.value = true
   try {
-    await apiPost('/deliveries', form.value)
+    await createDelivery(form.value)
     submitted.value = true
     setTimeout(() => submitted.value = false, 2000)
     Object.keys(form.value).forEach(k => { form.value[k] = k==='mixed_load'?false:'' })

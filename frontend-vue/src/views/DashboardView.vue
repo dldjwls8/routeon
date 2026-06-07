@@ -2,7 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet } from '@/api/client.js'
+import { getTripStats } from '@/services/statisticsService.js'
+import { getDeliveries } from '@/services/deliveryService.js'
+import { getVehicles } from '@/services/vehicleService.js'
+import { getDrivers } from '@/services/driverService.js'
 import { ORDER_STATUS_MAP, statusBadgeClass, PAGE_SIZE } from '@/constants.js'
 
 const router = useRouter()
@@ -87,10 +90,10 @@ function openQuickEdit() {
 async function load() {
   try {
     const [s, o, v, d] = await Promise.all([
-      apiGet('/statistics/trips').catch(() => null),
-      apiGet('/deliveries').catch(() => []),
-      apiGet('/vehicles').catch(() => []),
-      apiGet('/drivers').catch(() => []),
+      getTripStats().catch(() => null),
+      getDeliveries().catch(() => []),
+      getVehicles().catch(() => []),
+      getDrivers().catch(() => []),
     ])
     stats.value = s
     orders.value = Array.isArray(o) ? o : (o.items || [])

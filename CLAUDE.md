@@ -98,11 +98,25 @@ routeon/
     │   ├── *.html            레거시 진입점 (login, register, settings, chat, superadmin, terms, privacy, contact, driver, drivers, vehicles, stats)
     │   └── routeon_logo.png
     └── src/
-        ├── main.js           Vue 앱 생성·라우터 등록·레거시 양방향 동기화
+        ├── main.js           Vue 앱 생성·라우터 등록
         ├── App.vue           대시보드/비대시보드 레이아웃 분기 (DashboardLayout 조건부 wrapping)
         ├── constants.js      프론트엔드 상수 (API_BASE, WS_BASE 등)
+        ├── bridge/
+        │   └── legacy-router.js   레거시 dashboard.js ↔ Vue Router 양방향 동기화 브리지
         ├── api/
-        │   └── client.js     axios 기반 API 클라이언트 (interceptors, 인증 헤더)
+        │   └── client.js     fetch 기반 API 클라이언트 (interceptors, 인증 헤더)
+        ├── services/
+        │   ├── deliveryService.js   오더/배송 API
+        │   ├── driverService.js     기사 API
+        │   ├── vehicleService.js    차량 API
+        │   ├── customerService.js   고객 API
+        │   ├── tripService.js       운행 API
+        │   ├── statisticsService.js 통계 API
+        │   ├── userService.js       사용자 API
+        │   └── staffService.js      담당자 API
+        ├── composables/
+        │   ├── useApi.js            API loading/error 상태 관리
+        │   └── useListPage.js       목록 페이지네이션/검색/필터 상태 관리
         ├── router/
         │   └── index.js      Vue Router 경로 정의·meta.main·meta.label
         ├── layouts/

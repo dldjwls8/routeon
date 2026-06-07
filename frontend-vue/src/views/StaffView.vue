@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { apiGet } from '@/api/client.js'
+import { getStaff } from '@/services/staffService.js'
 import { PAGE_SIZE } from '@/constants.js'
 
 const staff = ref([])
@@ -12,7 +12,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil(staff.value.length/PAGE_
 
 async function load() {
   try {
-    const data = await apiGet('/staff')
+    const data = await getStaff()
     staff.value = Array.isArray(data) ? data : (data.items || [])
   } catch (e) { console.error(e) }
 }
