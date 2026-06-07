@@ -1834,7 +1834,7 @@
       </div>
       <div class="tab-panel ${startTab === 'location' ? 'active' : ''}" data-panel="location">
         <p class="text-muted-hint" style="margin-bottom:10px">${escapeHtml(c.address || '등록된 주소가 없습니다.')}</p>
-        <div id="customerDetailMap" style="height:260px;border-radius:6px;overflow:hidden;background:var(--t-deep)"></div>
+        <div id="customerDetailMap" class="entity-detail-map"></div>
       </div>
       <div class="tab-panel ${startTab === 'history' ? 'active' : ''}" data-panel="history">${hist}</div>
       <div class="tab-panel ${startTab === 'audit' ? 'active' : ''}" data-panel="audit">${c._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(c.auditEvents)}</div>`;
@@ -1899,12 +1899,23 @@
     const canvas = $('#customerDetailMap', root);
     if (!canvas || !window.kakao?.maps) return;
     if (customer.lat == null || customer.lon == null) {
+      canvas._kakaoMap = null;
+      canvas._kakaoMarker = null;
       canvas.innerHTML = '<p class="empty-hint" style="padding:24px">주소 자동완성으로 좌표를 먼저 등록하세요.</p>';
       return;
     }
     const position = new kakao.maps.LatLng(Number(customer.lat), Number(customer.lon));
+    // 탭을 다시 누를 때마다 같은 캔버스에 새 Map을 생성하면 타일이 중첩 렌더링되므로
+    // 캔버스에 보관해 둔 인스턴스를 재사용한다 (위치 변경 시에는 중심만 갱신)
+    if (canvas._kakaoMap) {
+      canvas._kakaoMap.setCenter(position);
+      canvas._kakaoMarker?.setPosition(position);
+      kakao.maps.event.trigger(canvas._kakaoMap, 'resize');
+      return;
+    }
     const detailMap = new kakao.maps.Map(canvas, { center: position, level: 5 });
-    new kakao.maps.Marker({ map: detailMap, position, title: customer.name });
+    canvas._kakaoMap = detailMap;
+    canvas._kakaoMarker = new kakao.maps.Marker({ map: detailMap, position, title: customer.name });
   }
 
   function selectCustomer(id, opts = {}) {
@@ -1918,9 +1929,11 @@
 
   function driverDetailBodyHtml(d) {
     const locked = d.status === '운행중' || driverHasActiveTrip(d.id);
+    const vehicle = vehicleById(d.vehicleId);
     return `
       <div class="tabs detail-tabs">
         <button type="button" class="tab active" data-tab="info">기본</button>
+        <button type="button" class="tab" data-tab="location">위치</button>
         <button type="button" class="tab" data-tab="hist">수정 기록</button>
       </div>
       <div class="tab-panel active" data-panel="info">
@@ -1940,12 +1953,38 @@
             <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px" ${locked || !driverEditMode ? 'disabled' : ''}>
               ${vehicleSelectOptions(d.vehicleId, { allowEmpty: true })}
             </select>
-            <div class="vehicle-preview" id="driverVehiclePreview">${vehiclePreviewHtml(vehicleById(d.vehicleId))}</div>
+            <div class="vehicle-preview" id="driverVehiclePreview">${vehiclePreviewHtml(vehicle)}</div>
           </div>
         </div>
         ${locked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 기사 정보를 변경하거나 삭제할 수 없습니다.</p>' : ''}
       </div>
+      <div class="tab-panel" data-panel="location">
+        <p class="text-muted-hint" style="margin-bottom:10px">${vehicle ? `배정 차량 «${escapeHtml(vehicle.plate)}»의 마지막 GPS 위치 · 갱신 ${vehicleLastGpsAt(vehicle)}` : '배정된 차량이 없어 위치를 표시할 수 없습니다.'}</p>
+        <div id="driverDetailMap" class="entity-detail-map"></div>
+      </div>
       <div class="tab-panel" data-panel="hist">${d._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(d.auditEvents)}</div>`;
+  }
+
+  function initDriverDetailMap(root, d) {
+    const canvas = $('#driverDetailMap', root);
+    if (!canvas || !window.kakao?.maps) return;
+    const vehicle = vehicleById(d.vehicleId);
+    if (!vehicle || vehicle.start_lat == null || vehicle.start_lon == null) {
+      canvas._kakaoMap = null;
+      canvas._kakaoMarker = null;
+      canvas.innerHTML = '<p class="empty-hint" style="padding:24px">배정 차량의 GPS 좌표가 아직 없습니다.</p>';
+      return;
+    }
+    const position = new kakao.maps.LatLng(Number(vehicle.start_lat), Number(vehicle.start_lon));
+    if (canvas._kakaoMap) {
+      canvas._kakaoMap.setCenter(position);
+      canvas._kakaoMarker?.setPosition(position);
+      kakao.maps.event.trigger(canvas._kakaoMap, 'resize');
+      return;
+    }
+    const detailMap = new kakao.maps.Map(canvas, { center: position, level: 6 });
+    canvas._kakaoMap = detailMap;
+    canvas._kakaoMarker = new kakao.maps.Marker({ map: detailMap, position, title: vehicle.plate });
   }
 
   function bindDriverDetail(root, d) {
@@ -1977,6 +2016,11 @@
       await loadEntityEvents(d, 'driver', d.id);
     };
     bindDetailTabs(card);
+    card.querySelectorAll('.detail-tabs .tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.dataset.tab === 'location') setTimeout(() => initDriverDetailMap(root, d), 0);
+      });
+    });
     const vehSel = $('#driverVehicleAssign', root);
     if (vehSel) {
       vehSel.onchange = () => {
@@ -2018,6 +2062,7 @@
     return `
       <div class="tabs detail-tabs">
         <button type="button" class="tab active" data-tab="info">기본</button>
+        <button type="button" class="tab" data-tab="location">위치</button>
         <button type="button" class="tab" data-tab="hist">수정 기록</button>
       </div>
       <div class="tab-panel active" data-panel="info">
@@ -2045,7 +2090,32 @@
       </div>
       ${assignLocked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 차량 상태와 연결 기사를 변경할 수 없습니다. 톤급·차종 같은 기본 정보는 수정할 수 있습니다.</p>' : ''}
       </div>
+      <div class="tab-panel" data-panel="location">
+        <p class="text-muted-hint" style="margin-bottom:10px">${v.start_lat != null && v.start_lon != null ? `마지막 GPS 위치 · 갱신 ${vehicleLastGpsAt(v)}` : 'GPS 좌표가 아직 수신되지 않았습니다.'}</p>
+        <div id="vehicleDetailMap" class="entity-detail-map"></div>
+      </div>
       <div class="tab-panel" data-panel="hist">${v._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(v.auditEvents)}</div>`;
+  }
+
+  function initVehicleDetailMap(root, v) {
+    const canvas = $('#vehicleDetailMap', root);
+    if (!canvas || !window.kakao?.maps) return;
+    if (v.start_lat == null || v.start_lon == null) {
+      canvas._kakaoMap = null;
+      canvas._kakaoMarker = null;
+      canvas.innerHTML = '<p class="empty-hint" style="padding:24px">GPS 좌표가 아직 수신되지 않았습니다.</p>';
+      return;
+    }
+    const position = new kakao.maps.LatLng(Number(v.start_lat), Number(v.start_lon));
+    if (canvas._kakaoMap) {
+      canvas._kakaoMap.setCenter(position);
+      canvas._kakaoMarker?.setPosition(position);
+      kakao.maps.event.trigger(canvas._kakaoMap, 'resize');
+      return;
+    }
+    const detailMap = new kakao.maps.Map(canvas, { center: position, level: 6 });
+    canvas._kakaoMap = detailMap;
+    canvas._kakaoMarker = new kakao.maps.Marker({ map: detailMap, position, title: v.plate });
   }
 
   function bindVehicleDetail(root, v) {
@@ -2094,7 +2164,13 @@
       toast('차량 정보가 저장되었습니다');
       await loadEntityEvents(v, 'vehicle', v.id);
     };
-    bindDetailTabs($('#inlineDetail', root));
+    const detailCard = $('#inlineDetail', root);
+    bindDetailTabs(detailCard);
+    detailCard.querySelectorAll('.detail-tabs .tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (tab.dataset.tab === 'location') setTimeout(() => initVehicleDetailMap(root, v), 0);
+      });
+    });
     $('#deleteVehicleBtn', root).onclick = async () => {
       if (!confirm(`차량 «${v.plate}»를 삭제하시겠습니까?`)) return;
       const res = await apiFetch(`/vehicles/${v.id}`, { method: 'DELETE' });
@@ -3390,7 +3466,7 @@
             <button type="button" class="btn btn-primary" id="addVehicle">+ 차량 등록</button>
           </div>
         </div>
-        <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+        <div class="card-bd master-list-body">
           ${tableScrollWrap(`<table id="vehicleTable">
             <thead><tr><th>번호판</th><th>톤급</th><th>차종</th><th>최근 위치</th><th>상태</th><th>연결 기사</th></tr></thead>
             <tbody>${rows.length ? rows.map(v => `
@@ -3496,7 +3572,7 @@
           <h2>담당자</h2>
           <span class="text-muted-hint">관리자는 가입 페이지에서 조직코드로 신청합니다.</span>
         </div>
-        <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+        <div class="card-bd master-list-body">
           ${pendingStaffHtml}
           ${tableScrollWrap(`<table id="staffTable">
             <thead><tr><th>이름</th><th>아이디</th><th>연락처</th><th>가입일</th></tr></thead>
@@ -3693,7 +3769,7 @@
           </div>
           <p class="cust-filter-hint">임시(당일): 접수 시 등록한 당일 화주만 · 일자 종료 후 목록에서 숨김</p>
         </div>
-        <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+        <div class="card-bd master-list-body">
           ${tableScrollWrap(`<table>
             <thead><tr><th>고객명</th><th>담당자</th><th>연락처</th><th>주소</th><th>최근 배송</th></tr></thead>
             <tbody>${rows.length ? rows.map(c => `
@@ -5298,7 +5374,7 @@
     const tripListCard = `
       <div class="card card-fill">
         <div class="card-hd"><h2>Trip 목록</h2><span style="font-size:12px;color:var(--text-muted)">행 클릭 → 우측 상세</span></div>
-        <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+        <div class="card-bd master-list-body">
           ${tableScrollWrap(`<table id="tripStatsTable">
             <thead><tr><th>Trip</th><th>기사</th><th>일자</th><th>상태</th><th>안전</th></tr></thead>
             <tbody>
@@ -6461,7 +6537,7 @@
           <span class="text-muted-hint">행 클릭은 상세 보기, 체크박스는 일괄 선택</span>
           <button type="button" class="btn btn-sm" id="orderGoDispatch" ${dispatchableSelectedIds.length ? '' : 'disabled'}>접수 ${dispatchableSelectedIds.length}건 배차관리</button>
         </div>
-        <div class="card-bd" style="padding:0;display:flex;flex-direction:column;min-height:0">
+        <div class="card-bd master-list-body">
           ${tableScrollWrap(`<table>
             <thead><tr>
               <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>시간창</th><th>오더번호</th>

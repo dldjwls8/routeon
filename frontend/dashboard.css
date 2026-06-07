@@ -1456,10 +1456,10 @@
       color: var(--t-text-muted);
     }
     .control-map-card {
-      width: min(100%, calc(100vh - 278px));
-      aspect-ratio: 1;
+      width: 100%;
+      height: 100%;
+      flex: 1;
       min-height: 0;
-      margin: auto;
       overflow: hidden;
       background: var(--t-deep);
     }
@@ -2476,6 +2476,7 @@
       padding: 0;
       display: flex;
       flex-direction: column;
+      flex: 1;
       min-height: 0;
       overflow: hidden;
     }
@@ -2561,15 +2562,18 @@
     .gantt-picker-days .empty { height: 30px; }
     .gantt-picker-days button:hover { background: var(--t-row-hover); }
     .gantt-picker-days button.selected { background: var(--lime); color: #11150a; font-weight: 800; }
-    .order-detail-map {
+    .order-detail-map,
+    .entity-detail-map {
       position: relative;
       width: 100%;
-      height: 330px;
+      height: min(58vh, 520px);
+      min-height: 360px;
       overflow: hidden;
       border: 1px solid var(--dark-border);
       border-radius: 9px;
       background: var(--t-deep);
     }
+    .entity-detail-map > div { width: 100% !important; height: 100% !important; }
     .order-detail-map > div { width: 100% !important; height: 100% !important; }
     .order-detail-map-legend {
       display: flex;
