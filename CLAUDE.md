@@ -184,8 +184,10 @@ await db.refresh(obj)
            └─ auto_detect_route_mode() — 50km 기준 local/long_distance
            └─ GraphHopper N×N (시간·거리 행렬) — TTL 캐시 1시간
            └─ OR-Tools TSP 경유지 순서 최적화 (pickup_deliveries 제약 적용)
-           └─ insert_rest_stops() — 6,000초 임계값 + find_best_rest_stop() picker
-           └─ 휴식지 후보: highway_rest 전용 (75건) — 졸음쉼터·공영차고지·물류단지 제외
+           └─ insert_rest_stops() — 6,000초 임계값 + GH 실측 시간(time_fn=get_travel_time) 기반 선택
+           └─ 휴식지 후보: highway_rest 전용 (전국 75건) — 졸음쉼터·공영차고지·물류단지 제외
+           └─ get_route_geometry()로 실제 경로 폴리라인 조회 후 filter_rest_by_route()로
+              경로 15km 이내 후보만 추려 전달 (먼 휴게소 선택→우회·과다 삽입 방지, optimize/replan 공통)
            └─ total_distance_km + estimated_duration_min 포함 응답
            └─ trip.status → in_progress, current_phase → en_route_to_loading 변경
            └─ WS broadcast → 관리자에게 trip.started 이벤트 (대시보드 즉시 갱신)

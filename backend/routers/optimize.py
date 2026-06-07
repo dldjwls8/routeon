@@ -214,11 +214,21 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
     _rr = await db.execute(
         select(RestStop).where(RestStop.is_active == True, RestStop.type == "highway_rest")
     )
-    rest_candidates = preferred_rest + [
+    db_rest_candidates = [
         {"name": r.name, "latitude": r.latitude, "longitude": r.longitude, "is_active": True,
          "type": r.type}
         for r in _rr.scalars().all()
     ]
+    # 실제 경로 폴리라인 기준 15km 이내 후보로 좁혀 "경로에서 먼 휴게소"가
+    # 선택돼 우회·과다 삽입되는 문제를 방지 (preferred_rest는 기사 직접 지정이므로 필터 제외)
+    try:
+        route_polyline = await gh_svc.get_route_geometry(
+            [{"lat": n.lat, "lon": n.lon} for n in ordered]
+        )
+        db_rest_candidates = gh_svc.filter_rest_by_route(db_rest_candidates, route_polyline)
+    except Exception:
+        pass
+    rest_candidates = preferred_rest + db_rest_candidates
 
     final_route = await insert_rest_stops(
         ordered, reordered, rest_candidates,
@@ -343,6 +353,14 @@ async def replan(req: ReplanRequest, db: AsyncSession = Depends(get_db),
          "type": r.type}
         for r in _rr.scalars().all()
     ]
+    # 실제 경로 폴리라인 기준 15km 이내 후보로 좁혀 우회·과다 삽입 방지 (optimize와 동일)
+    try:
+        route_polyline = await gh_svc.get_route_geometry(
+            [{"lat": n.lat, "lon": n.lon} for n in ordered]
+        )
+        rest_candidates = gh_svc.filter_rest_by_route(rest_candidates, route_polyline)
+    except Exception:
+        pass
     final_route = await insert_rest_stops(
         ordered, reordered, rest_candidates,
         initial_drive_sec=req.current_drive_sec,
