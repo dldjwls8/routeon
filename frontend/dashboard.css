@@ -389,6 +389,12 @@
     .inline-detail-bd .form-grid input,
     .inline-detail-bd select,
     .inline-detail-bd input { width: 100%; }
+    .inline-detail-bd input:disabled,
+    .inline-detail-bd select:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+      background: var(--t-card-hover);
+    }
     .inline-detail-bd .form-grid > span:not(label) {
       font-size: 13px;
       color: var(--text);
@@ -3167,7 +3173,11 @@
     }
     body.theme-dashboard .dash-layout { flex: 1; min-height: 0; overflow: hidden; }
     body.theme-dashboard .dash-left,
-    body.theme-dashboard .dash-right { min-height: 0; overflow: hidden; }
+    body.theme-dashboard .dash-right {
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
     body.theme-dashboard .dash-orders-card { min-height: 0; }
     body.theme-dashboard .footer { flex-shrink: 0; }
 

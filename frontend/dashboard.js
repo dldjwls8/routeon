@@ -1825,6 +1825,7 @@
           <label>연락처</label><input id="custPhone" value="${c.phone}" ${customerEditMode ? '' : 'disabled'}>
           <label>주소</label><div class="place-search-wrap"><input class="place-search" id="custAddress" value="${c.address}" data-lat="${c.lat ?? ''}" data-lon="${c.lon ?? ''}" ${customerEditMode ? '' : 'disabled'}></div>
         </div>
+        ${customerEditMode ? '' : '<p class="text-muted-hint detail-lock-hint">수정 버튼을 눌러야 담당자·연락처·주소를 편집할 수 있습니다.</p>'}
       </div>
       <div class="tab-panel ${startTab === 'location' ? 'active' : ''}" data-panel="location">
         <p class="text-muted-hint" style="margin-bottom:10px">${escapeHtml(c.address || '등록된 주소가 없습니다.')}</p>
@@ -1867,9 +1868,11 @@
       await loadEntityEvents(c, 'customer', c.id);
     };
     bindDetailTabs(card);
-    card.querySelector('[data-tab="location"]')?.addEventListener('click', () => {
-      customerDetailTab = 'location';
-      setTimeout(() => initCustomerDetailMap(root, c), 0);
+    card.querySelectorAll('.detail-tabs .tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        customerDetailTab = tab.dataset.tab;
+        if (customerDetailTab === 'location') setTimeout(() => initCustomerDetailMap(root, c), 0);
+      });
     });
     if (customerEditMode) bindPlaceSearch(card);
     if (customerDetailTab === 'location') setTimeout(() => initCustomerDetailMap(root, c), 0);
@@ -2441,6 +2444,7 @@
           }).join('')}
         </div>
         ${canManage ? '<p class="text-muted-hint">최상위 관리자만 일반 관리자의 접근 권한을 수정할 수 있습니다.</p>' : ''}
+        ${canManage && !staffEditMode ? '<p class="text-muted-hint detail-lock-hint">수정 버튼을 눌러야 화면 접근 권한을 편집할 수 있습니다.</p>' : ''}
       </div>
       <div class="tab-panel" data-panel="hist">${s._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(s.auditEvents)}</div>`;
   }
