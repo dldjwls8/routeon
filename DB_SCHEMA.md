@@ -22,6 +22,8 @@
 
 ## 테이블 구조
 
+> v1.0.110/v1.0.111는 DB 구조 변경이 없다. v1.0.110은 임시 화주(`연락처 *`), 고객관리(`담당자` 필드 제거, `연락처`/`주소` 필수화), 차량 등록(`length_cm`/`width_cm` 필수화) 모달의 입력 검증만 강화한 프론트 변경으로, `customers.contact` 컬럼은 스키마에 그대로 남아 있으나 고객관리 모달에서는 더 이상 입력받지 않는다(과거 데이터 열람·API 호환을 위해 유지). v1.0.111은 세 가지 버그 수정으로 모두 검증·표시 로직 또는 1회성 데이터 보정이며 컬럼·제약 변경이 없다 — (1) 차량 상세 톤급·차종 `<select>`가 표준 옵션에 없는 기존 값을 표시하지 못해 저장 시 `vehicles.weight_kg`/`vehicles.vehicle_type`이 다른 값으로 잘못 덮어써지던 문제(엔티티 이벤트 감사 로그로 확인 후 차량 7·10의 `vehicles` 데이터를 원복), (2) `POST /trips/auto-dispatch`에 이미 `pending`이 아닌 `deliveries`가 포함된 경우 409로 거부하는 검증 추가(레이스로 동일 배송이 중복 배차되어 `trip_id`/`status`/처리 기록이 뒤섞이던 `RO-260607-91E998` 사례 방지), (3) `record_driver_location`의 도착 자동완료 판정을 활성 Trip 소속 배송 + 상차 출발 여부로 좁혀, 좌표가 우연히 겹쳐 신규 배송이 운행 시작 전에 곧바로 `done`으로 처리되던 문제 수정(`RO-260607-D49F35`/배송 `317e03de-...`의 `deliveries.status`/`completed_at`을 `in_progress`/`NULL`로 원복). 차량 목록·상세의 "운행중" 표시는 `vehicles.status` 원본이 아니라 활성 Trip 유무로 보정한 파생값을 사용하도록 변경했으나 이 또한 표시 로직이며 컬럼 추가는 아니다.
+
 > v1.0.105는 DB 구조 변경이 없다. `PATCH /vehicles/{id}`의 진행 중 Trip 잠금 범위를 `vehicle_type`/`weight_kg`/`height_m`/`status`/`driver_id` 전체에서 `status`/`driver_id`만으로 좁혀, 운행 중에도 톤급·차종 같은 기본 정보는 수정할 수 있도록 했다. 컬럼·제약은 기존 `vehicles.vehicle_type`, `vehicles.weight_kg`, `vehicles.height_m`, `vehicles.status`를 그대로 사용하며 검증 로직만 변경했다. 배차관리 "배정 및 실행" 버튼 통합과 오더 화주 입력의 고객 select 전환도 기존 `/trips/auto-dispatch`, `deliveries.shipper_name`, `customers` 테이블·API를 그대로 사용하는 프론트 UI 변경이다. v1.0.104의 WebSocket 세션 수명 수정과 v1.0.103의 `TR-YYMMDD-NNN`/`RO-...-화물N` 표시값도 계속 유효하며 저장 컬럼이 아니다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`

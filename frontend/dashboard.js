@@ -1438,7 +1438,7 @@
         <p class="cust-temp-banner" style="margin-top:0">당일 의뢰용 · 고객 마스터 미등록 · 유효일 ${todayStr()}</p>
         <div class="form-grid" style="max-width:100%">
           <label>화주명 *</label><input name="name" required placeholder="업체명">
-          <label>연락처</label><input name="phone" placeholder="010-0000-0000">
+          <label>연락처 *</label><input name="phone" required placeholder="010-0000-0000">
           <label>메모</label><input name="memo" value="당일 의뢰" placeholder="당일 의뢰">
         </div>
       </form>`, async () => {
@@ -2010,6 +2010,10 @@
     const linked = DATA.drivers.find(d => d.vehicleId === v.id);
     const tonOpts = ['1톤', '1.4톤', '2.5톤', '3.5톤', '5톤'];
     const typeOpts = ['윙바디', '탑차', '카고'];
+    // 표준 목록에 없는 값(과거 데이터 등)도 그대로 표시되도록 현재 값을 옵션에 포함
+    // — 그렇지 않으면 select가 첫 옵션으로 기본 선택되어, 저장 시 실제 값이 다른 값으로 덮어써짐
+    const tonChoices = tonOpts.includes(v.tonnage) ? tonOpts : [v.tonnage, ...tonOpts];
+    const typeChoices = typeOpts.includes(v.type) ? typeOpts : [v.type, ...typeOpts];
     const assignLocked = v.status === '운행중' || vehicleHasActiveTrip(v.id);
     return `
       <div class="tabs detail-tabs">
@@ -2019,9 +2023,9 @@
       <div class="tab-panel active" data-panel="info">
       <div class="form-grid" style="max-width:100%">
         <label>톤급</label>
-        <select id="vehTonnage" ${!vehicleEditMode ? 'disabled' : ''}>${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehTonnage" ${!vehicleEditMode ? 'disabled' : ''}>${tonChoices.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <label>차종</label>
-        <select id="vehType" ${!vehicleEditMode ? 'disabled' : ''}>${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehType" ${!vehicleEditMode ? 'disabled' : ''}>${typeChoices.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         ${vehicleLastGpsDetailHtml(v)}
         <label>상태</label>
         <select id="vehStatus" ${assignLocked || !vehicleEditMode ? 'disabled' : ''}>
@@ -2057,7 +2061,9 @@
       const type = $('#vehType', root).value;
 
       const tonMap = { '1톤': 1000, '1.4톤': 1400, '2.5톤': 2500, '3.5톤': 3500, '5톤': 5000 };
-      const weight_kg = tonMap[tonnageStr] ?? v.weight_kg;
+      // 표준 목록에 없는 톤급 표기(예: "5.0톤")는 숫자만 추출해 환산 — 매핑 누락으로 weight_kg가 엉뚱한 값으로 덮어써지는 것을 방지
+      const tonnageNumMatch = tonnageStr.match(/^([\d.]+)\s*톤/);
+      const weight_kg = tonMap[tonnageStr] ?? (tonnageNumMatch ? Math.round(parseFloat(tonnageNumMatch[1]) * 1000) : v.weight_kg);
 
       const body = { vehicle_type: type, weight_kg };
       let status = v.status;
@@ -3370,7 +3376,7 @@
     const q = vehicleSearch.trim().toLowerCase();
     const allRows = DATA.vehicles.filter(v => {
       if (!q) return true;
-      const hay = `${v.plate} ${v.tonnage} ${v.type} ${vehicleLastGpsLabel(v)} ${v.status} ${vehicleDriverLabel(v)}`.toLowerCase();
+      const hay = `${v.plate} ${v.tonnage} ${v.type} ${vehicleLastGpsLabel(v)} ${vehicleEffectiveStatus(v)} ${vehicleDriverLabel(v)}`.toLowerCase();
       return hay.includes(q);
     });
     const rows = allRows.slice((vehiclePage - 1) * PAGE_SIZE, vehiclePage * PAGE_SIZE);
@@ -3393,7 +3399,7 @@
                 <td>${v.tonnage}</td>
                 <td>${v.type}</td>
                 <td>${vehicleLastGpsTableCell(v)}</td>
-                <td>${statusBadge(v.status)}</td>
+                <td>${statusBadge(vehicleEffectiveStatus(v))}</td>
                 <td>${vehicleDriverLabel(v)}</td>
               </tr>`).join('') : `
               <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">검색 결과가 없습니다</td></tr>`}
@@ -3424,20 +3430,20 @@
             <select name="vehicle_type"><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="카고">카고</option></select>
             <label>총중량(kg) *</label><input name="weight_kg" type="number" min="0" required placeholder="예: 5000">
             <label>높이(m) *</label><input name="height_m" type="number" step="0.01" min="0" required placeholder="예: 2.5">
-            <label>길이(cm)</label><input name="length_cm" type="number" min="0" placeholder="예: 650">
-            <label>폭(cm)</label><input name="width_cm" type="number" min="0" placeholder="예: 220">
+            <label>길이(cm) *</label><input name="length_cm" type="number" min="0" required placeholder="예: 650">
+            <label>폭(cm) *</label><input name="width_cm" type="number" min="0" required placeholder="예: 220">
           </div>
         </form>`, async () => {
         const form = document.getElementById('vehicleForm');
         const fd = Object.fromEntries(new FormData(form));
-        if (!fd.plate_number || !fd.vehicle_type || !fd.weight_kg || !fd.height_m) { toast('필수 항목을 입력하세요'); return; }
+        if (!fd.plate_number || !fd.vehicle_type || !fd.weight_kg || !fd.height_m || !fd.length_cm || !fd.width_cm) { toast('필수 항목을 입력하세요'); return; }
         const body = {
           plate_number: fd.plate_number.trim(),
           vehicle_type: fd.vehicle_type,
           weight_kg: parseFloat(fd.weight_kg),
           height_m: parseFloat(fd.height_m),
-          length_cm: fd.length_cm ? parseFloat(fd.length_cm) : null,
-          width_cm: fd.width_cm ? parseFloat(fd.width_cm) : null,
+          length_cm: parseFloat(fd.length_cm),
+          width_cm: parseFloat(fd.width_cm),
         };
         const res = await apiFetch(`/vehicles`, {
           method: 'POST',
@@ -3741,25 +3747,25 @@
       <form id="custModalForm">
         <div class="form-grid" style="max-width:100%">
           <label>고객명 *</label><input name="name" required value="${c?.name || ''}">
-          <label>담당자</label><input name="contact" value="${c?.contact || ''}">
-          <label>연락처</label><input name="phone" value="${c?.phone || ''}">
-          <label>주소</label>
+          <label>연락처 *</label><input name="phone" required value="${c?.phone || ''}">
+          <label>주소 *</label>
           <div class="place-search-wrap">
-            <input type="text" class="place-search" name="address" value="${c?.address || ''}" placeholder="주소 또는 장소 검색…" data-place-value="address" data-lat="${c?.lat ?? ''}" data-lon="${c?.lon ?? ''}">
+            <input type="text" class="place-search" name="address" required value="${c?.address || ''}" placeholder="주소 또는 장소 검색…" data-place-value="address" data-lat="${c?.lat ?? ''}" data-lon="${c?.lon ?? ''}">
           </div>
         </div>
       </form>`, async () => {
       const form = $('#custModalForm');
       if (!form) return;
       const name    = form.querySelector('[name="name"]').value.trim();
-      const contact = form.querySelector('[name="contact"]').value.trim();
       const phone   = normalizePhone(form.querySelector('[name="phone"]').value);
       const addressEl = form.querySelector('[name="address"]');
       const address = addressEl.value.trim();
       const lat = address ? (addressEl.dataset.lat ? Number(addressEl.dataset.lat) : null) : null;
       const lon = address ? (addressEl.dataset.lon ? Number(addressEl.dataset.lon) : null) : null;
       if (!name) { toast('고객명을 입력하세요'); return; }
-      const body = { name, contact: contact || null, phone: phone || null, address: address || null, lat, lon };
+      if (!phone) { toast('연락처를 입력하세요'); return; }
+      if (!address) { toast('주소를 입력하세요'); return; }
+      const body = { name, phone, address, lat, lon };
       let res;
       if (isEdit) {
         res = await apiFetch(`/customers/${c.id}`, {
@@ -6673,6 +6679,12 @@
   function vehicleHasActiveTrip(vehicleId) {
     const trips = Array.isArray(DATA.statsTrips) ? DATA.statsTrips : [];
     return trips.some(t => Number(t.vehicleId) === Number(vehicleId) && t.status === '운행중');
+  }
+
+  // 차량 status 컬럼은 운행 시작/종료 시 서버에서 자동으로 갱신되지 않으므로,
+  // 진행 중인 Trip 유무로 "운행중" 여부를 보정해 표시한다 (목록 배지가 '가용'으로 잘못 보이는 문제 방지)
+  function vehicleEffectiveStatus(v) {
+    return (v.status === '운행중' || vehicleHasActiveTrip(v.id)) ? '운행중' : v.status;
   }
 
   function renderVehicleLocationMarkers() {

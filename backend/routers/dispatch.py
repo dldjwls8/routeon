@@ -73,6 +73,31 @@ async def auto_dispatch_trips(
     if not req.tasks:
         raise HTTPException(400, "태스크를 1개 이상 입력하세요.")
 
+    # 이미 배차/진행/완료/취소된 배송이 재배차 요청에 포함되어 있는지 검증.
+    # (검증 없이는 동일 배송이 다른 기사에게 중복 배차되어, 기존 운행과 새 운행의
+    #  처리 기록이 뒤섞이고 완료 시각이 초기화되는 문제가 발생한다 — RO-260607-91E998 사례)
+    req_delivery_ids: set[uuid_lib.UUID] = set()
+    for task in req.tasks:
+        for wp in [*task.loadings, *task.unloadings]:
+            if wp.delivery_id:
+                try:
+                    req_delivery_ids.add(uuid_lib.UUID(wp.delivery_id))
+                except ValueError:
+                    pass
+    if req_delivery_ids:
+        conflicts = (await db.execute(
+            select(Delivery.id, Delivery.status).where(
+                Delivery.id.in_(req_delivery_ids),
+                Delivery.status != DeliveryStatus.pending,
+            )
+        )).all()
+        if conflicts:
+            raise HTTPException(
+                409,
+                f"이미 배차되었거나 완료/취소된 배송이 포함되어 있어 재배차할 수 없습니다: "
+                f"{[str(r.id) for r in conflicts]}",
+            )
+
     # 가용 기사 조회
     busy_stmt = select(Trip.driver_id).where(
         Trip.status.in_([TripStatus.scheduled, TripStatus.in_progress])

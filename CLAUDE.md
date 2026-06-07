@@ -151,7 +151,7 @@ routeon/
 ### 계층·결합도 원칙
 - `backend/routers/`: 요청 DTO 수신, 인증·권한, 엔티티 조회, 서비스 호출, 응답 반환을 담당한다. 여러 테이블 상태 변경·Redis·이벤트·WebSocket 알림이 결합된 유스케이스는 `services/`에 둔다.
 - `backend/services/trip_service.py`: 운행 생성, 완료·취소, 재배정, waypoint 진행 기록, 차량 마지막 위치 고정을 담당한다.
-- `backend/services/location_service.py`: 기사 GPS 저장, 운행 차량 위치 갱신, 배송 도착 판정, ETA 계산, 관리자 위치 알림을 담당한다.
+- `backend/services/location_service.py`: 기사 GPS 저장, 운행 차량 위치 갱신, 배송 도착 판정, ETA 계산, 관리자 위치 알림을 담당한다. 도착 자동 완료 판정은 **기사의 현재 활성 운행(`active_vehicle_trip`)에 속한 배송만** 대상으로 하며, 해당 배송의 상차 경유지가 출발(`departed_at`) 처리된 이후에만 하차지 도착으로 인정한다 — 그렇지 않으면 직전 운행을 마친 좌표와 새로 배차된 배송의 하차지 좌표가 겹칠 때, 운행 시작·상차 전부터 배송이 곧바로 '완료' 처리되는 오류가 발생한다.
 - `backend/services/entity_events.py`: 관리 마스터의 생성·수정 변경 필드 계산과 `entity_events` 감사 기록 생성을 담당한다.
 - `backend/serializers/`: ORM 엔티티의 API 응답 변환을 담당한다. `schemas.py` 입력 DTO에 ORM 모델 의존을 추가하지 않는다.
 - `frontend/api-client.js`: 관리자 대시보드의 API/WS 주소, 토큰, 인증 헤더와 JSON 요청 기본값을 담당한다. `dashboard.js`에서 직접 `fetch()`나 API 호스트를 조립하지 않는다.
@@ -477,7 +477,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /optimize` | 로그인 | 경로 최적화. origin_lat/lon 미입력 시 Redis GPS 자동 사용. origin_name 미입력 시 역지오코딩 자동 조회. dest_* 미입력 시 마지막 하차지 자동 지정 |
 | `POST /optimize/replan` | 로그인 | 운행 중 재경로. current_name 미입력 시 역지오코딩 자동 조회 |
 | `GET /drivers/available` | 관리자 | 현재 운행이 없는 가용 기사 목록 (조직 내) |
-| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 위치 기반 greedy 배정 후 일괄 운행 생성. 기사 위치 미확인 시 라운드 로빈 폴백. 톤 단위 화물 규격은 선택 차량 `weight_kg` 초과 시 거부 |
+| `POST /trips/auto-dispatch` | 관리자 | 배송 태스크를 가용 기사에게 위치 기반 greedy 배정 후 일괄 운행 생성. 기사 위치 미확인 시 라운드 로빈 폴백. 톤 단위 화물 규격은 선택 차량 `weight_kg` 초과 시 거부. 요청에 포함된 `delivery_id`가 이미 `pending`이 아닌(배차/진행/완료/취소) 배송이면 409로 거부 — 동일 배송이 다른 기사에게 중복 배차되어 처리 기록이 섞이는 것을 방지 |
 
 ### 배송/위치
 | 엔드포인트 | 권한 | 설명 |
@@ -580,6 +580,8 @@ settings.html 구조:
 - 관리자 신청은 `auto_approve_admins=true`이면 즉시 승인되고, 아니면 최상위 기업관리자 승인 대기다. 승인된 일반 관리자는 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 권한이 기본 활성화된다.
 - 기사·차량 목록 행에는 삭제 버튼을 두지 않고 선택 후 우측 상세 최하단에서 삭제/비활성화한다. 상세 닫기는 우측 상단, 저장은 우측 하단에 배치한다. 기사 계정은 관리자 화면에서 직접 추가하지 않고 공개 가입·승인 흐름으로만 생성한다.
 - 기사 수동 상태는 `운행가능/휴무`, 차량 수동 상태는 `가용/정비`만 제공한다. 진행 중 Trip이 연결된 기사·차량은 삭제 작업을 잠그며, 차량은 상태·연결 기사 변경만 잠그고 톤급·차종 같은 기본 정보는 운행 중에도 수정할 수 있다. 서버도 같은 규칙을 검증한다.
+- 차량 상세의 톤급·차종 `<select>`는 표준 옵션 목록(`tonOpts`/`typeOpts`)에 없는 기존 값(과거 자유 입력 데이터 등)도 `tonChoices`/`typeChoices`로 옵션에 포함해 그대로 표시한다 — 그렇지 않으면 일치하는 옵션이 없어 브라우저가 첫 옵션을 기본 선택하고, 좌측 목록과 우측 상세 표시값이 달라 보이며 저장 시 실제 값이 다른 값으로 조용히 덮어써진다(엔티티 이벤트 감사 로그에서 실제 발생 사례 확인·복구함). 톤급 저장 시 `tonMap`에 없는 표기는 숫자를 직접 파싱해 `weight_kg`로 환산한다.
+- 차량 목록·상세의 "운행중" 상태 표시는 DB의 `Vehicle.status` 원본이 아니라 `vehicleEffectiveStatus()`(진행 중 Trip 존재 여부로 보정)를 사용한다. `Vehicle.status`는 운행 시작·종료 시 서버에서 자동 갱신되지 않으므로, 활성 운행이 있어도 DB값은 `가용`으로 남아있을 수 있다.
 - 기사·차량·고객·오더·캘린더·배차관리 검색은 모두 `bindImeSearch` 헬퍼를 통해 바인딩한다. 한글은 음절마다 `compositionstart/compositionend`가 반복되므로 매번 즉시 재렌더링하면 IME 조합이 끊겨 자모가 분리되거나 음절이 누락된다. 이를 막기 위해 `compositionstart` 시 예약된 재렌더링을 취소하고, 입력이 220ms 이상 멈췄을 때만 한 번 재렌더링하면서 검색창 포커스와 커서 위치를 복원한다.
 - 담당자 화면 권한과 기업 자동승인 설정은 공통 슬라이드 토글 UI를 사용한다. 최상위 관리자가 일반 관리자의 화면 접근 권한을 보는 화면에서, 수정 모드가 아닐 때는 기사·차량·고객 상세와 동일하게 토글을 비활성화하고 `detail-lock-hint` 안내 문구로 잠금 상태를 시각적으로 표시한다.
 - 일정 캘린더는 7개 열을 고정 비율로 유지하고 긴 일정 텍스트는 셀 안에서 말줄임 처리한다.

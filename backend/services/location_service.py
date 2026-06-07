@@ -60,19 +60,34 @@ async def record_driver_location(
             vehicle.last_lon = lon
             vehicle.last_gps_at = location.recorded_at
 
-    pending_deliveries = (await db.execute(
-        select(Delivery).where(
-            Delivery.assigned_to == driver_uuid,
-            Delivery.status == DeliveryStatus.in_progress,
-        ).order_by(Delivery.sequence)
-    )).scalars().all()
-
     arrived_delivery_ids = []
-    for delivery in pending_deliveries:
-        if delivery.lat is None or delivery.lon is None:
-            continue
-        distance_m = _haversine_km(lat, lon, delivery.lat, delivery.lon) * 1000
-        if distance_m <= ARRIVAL_RADIUS_M:
+    if active_vehicle_trip:
+        # 도착(하차) 자동 처리는 "현재 진행 중인 운행"에 속한 배송만 대상으로 한다.
+        # (전체 in_progress 배송을 대상으로 하면, 직전 운행을 마친 좌표 부근에서 새로 배차된
+        #  배송이 운행 시작 전부터 곧바로 '완료'로 잘못 처리되는 문제가 생긴다 — RO-260607-D49F35 사례)
+        pending_deliveries = (await db.execute(
+            select(Delivery).where(
+                Delivery.trip_id == active_vehicle_trip.id,
+                Delivery.assigned_to == driver_uuid,
+                Delivery.status == DeliveryStatus.in_progress,
+            ).order_by(Delivery.sequence)
+        )).scalars().all()
+        waypoints = active_vehicle_trip.waypoints or []
+
+        def _loading_departed(delivery_id) -> bool:
+            wp = next((w for w in waypoints
+                       if w.get('type') == 'loading' and w.get('delivery_id') == str(delivery_id)), None)
+            return bool(wp.get('departed_at')) if wp else True
+
+        for delivery in pending_deliveries:
+            if delivery.lat is None or delivery.lon is None:
+                continue
+            distance_m = _haversine_km(lat, lon, delivery.lat, delivery.lon) * 1000
+            if distance_m > ARRIVAL_RADIUS_M:
+                continue
+            # 상차 경유지를 아직 출발하지 않았다면 하차지 도착으로 보지 않는다 (적재 전 조기 완료 방지)
+            if not _loading_departed(delivery.id):
+                continue
             delivery.status = DeliveryStatus.done
             delivery.completed_at = datetime.utcnow()
             arrived_delivery_ids.append(str(delivery.id))
