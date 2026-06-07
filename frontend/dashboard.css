@@ -1691,12 +1691,12 @@
       align-items: center;
       flex-wrap: wrap;
     }
-    .desired-arrival-row input[type="date"] {
+    .desired-arrival-row input {
       flex: 1 1 140px;
       min-width: 0;
       max-width: 100%;
     }
-    .desired-arrival-row select {
+    .desired-arrival-row input:last-child {
       flex: 0 0 96px;
       min-width: 88px;
     }
@@ -1927,23 +1927,30 @@
     }
     .intake-aux-link:hover { color: var(--lime); }
     .extra-stop-row {
-      position: relative;
-      padding-left: 14px;
-      margin-bottom: 6px;
+      margin: 8px 0;
+      padding: 9px;
+      border: 1px solid var(--dark-border);
+      border-radius: 8px;
+      background: var(--t-deep);
     }
-    .extra-stop-row::before {
-      content: '';
-      position: absolute;
-      left: 4px; top: 0; bottom: 0;
-      width: 2px;
-      background: rgba(198,241,53,.25);
-      border-radius: 2px;
-    }
-    .extra-stop-row .remove-extra-stop {
-      color: var(--t-placeholder);
+    .extra-stop-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 7px;
+      color: var(--t-text);
       font-size: 11px;
     }
+    .extra-stop-head .remove-extra-stop {
+      margin-left: auto;
+      border: 0;
+      background: none;
+      color: var(--t-placeholder);
+      font: inherit;
+      cursor: pointer;
+    }
     .extra-stop-row .remove-extra-stop:hover { color: #f87171; }
+    .extra-stop-row[data-extra-pickup] .delivery-fields { grid-template-columns: 1fr 1fr; }
     .pending-intake-wrap {
       margin-bottom: 0;
     }
@@ -2134,11 +2141,11 @@
     }
     .gantt-scale {
       display: grid;
-      grid-template-columns: 140px 1fr;
+      grid-template-columns: repeat(6, 1fr);
       font-size: 10px;
       color: var(--t-placeholder);
       margin-bottom: 8px;
-      padding-left: 140px;
+      margin-left: 152px;
     }
     .gantt-scale span { text-align: center; }
     .gantt-row {
@@ -2477,6 +2484,112 @@
       gap: 12px;
     }
     .gantt-date-tools { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .gantt-nav-btn {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--dark-border);
+      border-radius: 9px;
+      background: var(--dark-card);
+      color: var(--t-text);
+      font-size: 22px;
+      cursor: pointer;
+    }
+    .gantt-date-picker { position: relative; }
+    .gantt-date-display {
+      min-width: 210px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 7px 11px;
+      border: 1px solid var(--dark-border);
+      border-radius: 9px;
+      background: var(--dark-card);
+      color: var(--t-text);
+      font: inherit;
+      cursor: pointer;
+    }
+    .gantt-date-display span { color: var(--lime); font-size: 10px; }
+    .gantt-date-popover {
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 6px);
+      left: 50%;
+      width: 286px;
+      transform: translateX(-50%);
+      padding: 12px;
+      border: 1px solid var(--dark-border);
+      border-radius: 10px;
+      background: var(--dark-card);
+      box-shadow: 0 14px 30px rgba(0,0,0,.35);
+    }
+    .gantt-picker-head,
+    .gantt-picker-dows,
+    .gantt-picker-days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .gantt-picker-head {
+      grid-template-columns: 32px 1fr 32px;
+      align-items: center;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .gantt-picker-head button,
+    .gantt-picker-days button {
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--t-text);
+      cursor: pointer;
+    }
+    .gantt-picker-head button { height: 28px; font-size: 18px; }
+    .gantt-picker-dows span {
+      padding: 4px 0;
+      color: var(--t-placeholder);
+      font-size: 10px;
+      text-align: center;
+    }
+    .gantt-picker-days button,
+    .gantt-picker-days .empty { height: 30px; }
+    .gantt-picker-days button:hover { background: var(--t-row-hover); }
+    .gantt-picker-days button.selected { background: var(--lime); color: #11150a; font-weight: 800; }
+    .order-detail-map {
+      width: 100%;
+      height: 330px;
+      overflow: hidden;
+      border: 1px solid var(--dark-border);
+      border-radius: 9px;
+      background: var(--t-deep);
+    }
+    .order-detail-map-legend {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 8px;
+      color: var(--t-text-muted);
+      font-size: 11px;
+    }
+    .order-detail-map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .order-detail-map-legend i { width: 8px; height: 8px; border-radius: 50%; }
+    .order-detail-map-legend i.pickup { background: #60a5fa; }
+    .order-detail-map-legend i.delivery { background: var(--lime); }
+    .order-stop-marker {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 180px;
+      padding: 6px 8px;
+      border: 2px solid #60a5fa;
+      border-radius: 8px;
+      background: #111827;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,.35);
+      font-size: 10px;
+    }
+    .order-stop-marker.delivery { border-color: var(--lime); }
+    .order-stop-marker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .custom-toggle-row { display: inline-flex; align-items: center; gap: 8px; }
     body.order-list-viewport .page-sticky-top,
     body.dispatch-viewport .page-sticky-top {
@@ -2667,10 +2780,12 @@
       margin-bottom: 8px;
     }
     .dispatch-zone-layout .bulk-driver-card {
-      padding: 9px 10px;
-      border: 1px solid var(--dark-border);
-      border-radius: 6px;
-      margin-bottom: 6px;
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) auto minmax(90px, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--dark-border);
       cursor: pointer;
     }
     .dispatch-zone-layout .bulk-driver-card.picked {
@@ -2686,13 +2801,53 @@
       flex-direction: column;
       min-width: 0;
     }
+    .dispatch-zone-layout .bulk-driver-pick-text span,
+    .dispatch-zone-layout .bulk-driver-vehicle small {
+      color: var(--t-placeholder);
+      font-size: 10px;
+    }
     .dispatch-zone-layout .bulk-driver-vehicle,
     .dispatch-zone-layout .bulk-driver-empty {
       color: var(--text-muted);
       font-size: 11px;
     }
+    .dispatch-zone-layout .bulk-driver-vehicle {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
     .dispatch-zone-layout .bulk-driver-assigned {
-      margin-top: 6px;
+      min-width: 0;
+    }
+    .dispatch-driver-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--dark-border);
+    }
+    .dispatch-driver-tools .bulk-driver-search { margin: 0; flex: 1; }
+    .dispatch-driver-list-head {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(130px, 1fr) auto minmax(90px, 1fr);
+      gap: 10px;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--dark-border);
+      color: var(--t-placeholder);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .dispatch-driver-body { padding: 0; }
+    .dispatch-action-card { flex: 0 0 auto; }
+    .dispatch-action-card .card-hd h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dispatch-zone-layout .dispatch-action-card .bulk-setup-footer {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
     }
     .dispatch-zone-layout .bulk-setup-footer {
       align-items: stretch;
@@ -2769,6 +2924,10 @@
       .dispatch-zone-layout .dispatch-result-pane .split,
       .manual-route-result {
         grid-template-columns: 1fr;
+      }
+      .dispatch-driver-list-head { display: none; }
+      .dispatch-zone-layout .bulk-driver-card {
+        grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr);
       }
     }
 

@@ -301,10 +301,65 @@
   function orderNoHtml(o, opts = {}) {
     const shown = displayOrderNo(o);
     const raw = String(o?.id ?? o?.order_id ?? '');
-    const sub = opts.raw !== false && raw && raw !== shown
+    const sub = opts.raw === true && raw && raw !== shown
       ? `<small class="order-no-raw">ID ${raw.length > 12 ? `${raw.slice(0, 8)}…` : raw}</small>`
       : '';
     return `<span class="order-no" title="${raw || shown}"><strong>${shown}</strong>${sub}</span>`;
+  }
+
+  function tripDateStamp(value) {
+    const date = value ? new Date(value) : null;
+    const base = date && !Number.isNaN(date.getTime()) ? date : new Date();
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul',
+      year: '2-digit',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(base);
+    const part = type => parts.find(item => item.type === type)?.value || '';
+    return `${part('year')}${part('month')}${part('day')}`;
+  }
+
+  function displayTripNo(trip, index = 0, dayIndex = null) {
+    if (trip?.trip_no) return String(trip.trip_no);
+    const stamp = tripDateStamp(trip?.started_at || trip?.created_at || trip?.date);
+    const seq = dayIndex ?? index + 1;
+    return `TR-${stamp}-${String(seq).padStart(3, '0')}`;
+  }
+
+  function tripNoMap(trips) {
+    const dayCounts = {};
+    const result = new Map();
+    [...(trips || [])]
+      .sort((a, b) => String(a.created_at || a.started_at || '').localeCompare(String(b.created_at || b.started_at || '')))
+      .forEach((trip, index) => {
+        const dateKey = seoulDateTimeParts(trip.started_at || trip.departure_time || trip.created_at)?.date || '';
+        dayCounts[dateKey] = (dayCounts[dateKey] || 0) + 1;
+        result.set(String(trip.id), displayTripNo(trip, index, dayCounts[dateKey]));
+      });
+    return result;
+  }
+
+  function seoulDateTimeParts(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const part = type => parts.find(item => item.type === type)?.value || '';
+    return {
+      date: `${part('year')}-${part('month')}-${part('day')}`,
+      hour: Number(part('hour')),
+      minute: Number(part('minute')),
+      time: `${part('hour')}:${part('minute')}`,
+    };
   }
 
   function dispatchListTableRows(rows, opts = {}) {
@@ -447,17 +502,22 @@
       if (tr.ok) {
         const trips = await tr.json();
         const statusMap = { in_progress: '운행중', completed: '완료', cancelled: '취소', scheduled: '배차' };
-        DATA.statsTrips = trips.map(t => {
+        const readableTripNos = tripNoMap(trips);
+        DATA.statsTrips = trips.map((t, index) => {
           const d = DATA.drivers.find(x => x.id === t.driver_id);
           const v = DATA.vehicles.find(x => x.id === t.vehicle_id);
+          const dateParts = seoulDateTimeParts(t.started_at || t.created_at);
+          const dateKey = dateParts?.date || '';
+          const tripNo = readableTripNos.get(String(t.id)) || displayTripNo(t, index);
           if (d && t.status === 'in_progress') d.status = '운행중';
           return {
             id: t.id,
+            tripNo,
             driver: d?.name || '',
             driverId: t.driver_id,
             vehicleId: t.vehicle_id,
             plate: v?.plate || '',
-            date: (t.started_at || t.created_at || '').split('T')[0],
+            date: dateKey,
             status: statusMap[t.status] || t.status,
             safety: '적합',
             dwellPickup: '—',
@@ -475,41 +535,39 @@
         const _GANTT_RANGE_MIN = (21 - 6) * 60; // 900분 (06:00–21:00)
         const _tripColor = { in_progress: '#3b82f6', completed: '#22c55e', cancelled: '#ef4444', scheduled: '#f59e0b' };
         const _tripLabel = { in_progress: '운행중', completed: '완료', cancelled: '취소', scheduled: '배차' };
-        trips.forEach(t => {
+        trips.forEach((t, index) => {
           const d = DATA.drivers.find(x => x.id === t.driver_id);
           const v = DATA.vehicles.find(x => x.id === t.vehicle_id);
-          const eventDate = (t.started_at || t.created_at || '').split('T')[0];
+          const startValue = t.started_at || t.departure_time || t.created_at || '';
+          const startParts = seoulDateTimeParts(startValue);
+          const eventDate = startParts?.date || '';
+          const tripNo = readableTripNos.get(String(t.id)) || displayTripNo(t, index);
           if (eventDate) {
             DATA.scheduleEvents.push({
-              date: eventDate, datetime: t.started_at || t.created_at || '', type: 'trip',
+              date: eventDate, datetime: startValue, type: 'trip',
               label: `${d?.name || '기사'} · ${_tripLabel[t.status] || t.status}`,
-              orderId: t.id.slice(0, 8),
+              orderId: tripNo,
             });
           }
-          const tripDate = (t.started_at || t.created_at || '').split('T')[0];
+          const tripDate = eventDate;
           if (tripDate) {
-            let startMin = 0;
-            if (t.started_at) {
-              const dt = new Date(t.started_at);
-              startMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
-            } else if (t.departure_time) {
-              const dt = new Date(t.departure_time);
-              if (!Number.isNaN(dt.getTime())) startMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
-            }
+            let startMin = startParts ? startParts.hour * 60 + startParts.minute - 6 * 60 : 0;
             let endMin = startMin + 120;
             if (t.completed_at) {
-              const dt = new Date(t.completed_at);
-              endMin = dt.getHours() * 60 + dt.getMinutes() - 6 * 60;
+              const completedParts = seoulDateTimeParts(t.completed_at);
+              if (completedParts) endMin = completedParts.hour * 60 + completedParts.minute - 6 * 60;
             } else if (t.status === 'in_progress') {
-              const now = new Date();
-              endMin = now.getHours() * 60 + now.getMinutes() - 6 * 60;
+              const nowParts = seoulDateTimeParts(new Date().toISOString());
+              if (nowParts?.date === tripDate) endMin = nowParts.hour * 60 + nowParts.minute - 6 * 60;
             }
             startMin = Math.max(0, Math.min(startMin, _GANTT_RANGE_MIN - 30));
             endMin = Math.max(startMin + 30, Math.min(endMin, _GANTT_RANGE_MIN));
             DATA.ganttRows.push({
               date: tripDate,
               label: d?.name || '—', sub: v?.plate || '—',
-              orderId: t.id.slice(0, 8),
+              orderId: tripNo,
+              startTime: startParts?.time || '—',
+              endTime: t.completed_at ? (seoulDateTimeParts(t.completed_at)?.time || '—') : '',
               startPct: (startMin / _GANTT_RANGE_MIN) * 100,
               widthPct: Math.max(3, ((endMin - startMin) / _GANTT_RANGE_MIN) * 100),
               color: _tripColor[t.status] || '#64748b',
@@ -518,10 +576,10 @@
           }
           if (t.status !== 'cancelled') {
             DATA.milestones.push({
-              date: (t.completed_at || t.started_at || t.created_at || '').split('T')[0],
+              date: seoulDateTimeParts(t.completed_at || t.started_at || t.created_at)?.date || '',
               title: `${d?.name || '기사'} 운행`,
               note: t.dest_name || '—',
-              orderId: t.id.slice(0, 8),
+              orderId: tripNo,
               status: { in_progress: '진행중', completed: '완료', scheduled: '예정' }[t.status] || '예정',
             });
           }
@@ -785,6 +843,7 @@
   let vehiclePage = 1;
   let customerPage = 1;
   let driverPage = 1;
+  let staffPage = 1;
   let driverSearch = '';
   let vehicleSearch = '';
   let customerSearch = '';
@@ -951,53 +1010,29 @@
     return d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  const LOGISTICS_HOUR_START = 6;
-  const LOGISTICS_HOUR_END = 22;
-
-  function normalizeDesiredArrivalHour(h) {
-    if (h == null || h === '') return '';
-    const m = String(h).match(/^(\d{1,2})/);
-    return m ? String(parseInt(m[1], 10)).padStart(2, '0') : '';
-  }
-
-  function hourOptionsHtml(selectedHour, opts = {}) {
-    const start = opts.startHour ?? LOGISTICS_HOUR_START;
-    const end = opts.endHour ?? LOGISTICS_HOUR_END;
-    const sel = normalizeDesiredArrivalHour(selectedHour);
-    let html = opts.allowEmpty !== false ? '<option value="">—</option>' : '';
-    for (let h = start; h <= end; h++) {
-      const val = String(h).padStart(2, '0');
-      const picked = sel === val ? ' selected' : '';
-      html += `<option value="${val}"${picked}>${val}:00</option>`;
-    }
-    return html;
-  }
-
   function parseDesiredArrival(value) {
     if (!value || value === '—') return { date: '', hour: '' };
     const iso = String(value).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2})(?::(\d{2}))?/);
     if (iso) {
-      let h = parseInt(iso[2], 10);
-      const m = iso[3] != null ? parseInt(iso[3], 10) : 0;
-      if (m >= 30) h = Math.min(h + 1, 23);
-      return { date: iso[1], hour: String(h).padStart(2, '0') };
+      return {
+        date: iso[1],
+        hour: `${String(parseInt(iso[2], 10)).padStart(2, '0')}:${iso[3] || '00'}`,
+      };
     }
     const times = [...String(value).matchAll(/\b(\d{1,2}):(\d{2})\b/g)];
     if (times.length) {
-      let h = parseInt(times[0][1], 10);
-      const m = parseInt(times[0][2], 10);
-      if (m >= 30) h = Math.min(h + 1, 23);
       const today = new Date().toISOString().slice(0, 10);
-      return { date: today, hour: String(h).padStart(2, '0') };
+      return { date: today, hour: `${String(parseInt(times[0][1], 10)).padStart(2, '0')}:${times[0][2]}` };
     }
     return { date: '', hour: '' };
   }
 
   function readDesiredArrival(form, dateName = 'latest_at_date', hourName = 'latest_at_hour') {
     const date = form.querySelector(`[name="${dateName}"]`)?.value?.trim() || '';
-    const hour = form.querySelector(`[name="${hourName}"]`)?.value?.trim() || '';
-    if (!date || !hour) return '';
-    return `${date}T${hour}:00`;
+    const time = form.querySelector(`[name="${hourName}"]`)?.value?.trim() || '';
+    if (!date && !time) return '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return '';
+    return `${date}T${time}:00`;
   }
 
   function desiredArrivalFieldsHtml(opts = {}) {
@@ -1010,9 +1045,6 @@
       intakeField = false,
       disabled = false,
       hint = false,
-      allowEmpty = true,
-      startHour,
-      endHour,
     } = opts;
     const parsed = parseDesiredArrival(value);
     const ic = intakeField ? ' intake-field' : '';
@@ -1021,15 +1053,12 @@
     const tabH = tabindexHour != null ? ` tabindex="${tabindexHour}"` : '';
     const df = intakeField ? ` data-intake-field="${dateName}"` : '';
     const hf = intakeField ? ` data-intake-field="${hourName}"` : '';
-    const hourOpts = { allowEmpty, startHour, endHour };
     return `
       <div class="desired-arrival-row">
-        <input type="date" class="${ic.trim() || 'input'}" name="${dateName}" value="${parsed.date}" aria-label="희망 도착 날짜"${tabD}${df}${dis}>
-        <select class="${ic.trim() || 'input'}" name="${hourName}" aria-label="희망 도착 시각"${tabH}${hf}${dis}>
-          ${hourOptionsHtml(parsed.hour, hourOpts)}
-        </select>
+        <input type="text" inputmode="numeric" class="${ic.trim() || 'input'}" name="${dateName}" value="${parsed.date}" placeholder="YYYY-MM-DD" aria-label="희망 도착 날짜"${tabD}${df}${dis}>
+        <input type="text" inputmode="numeric" class="${ic.trim() || 'input'}" name="${hourName}" value="${parsed.hour}" placeholder="HH:MM" aria-label="희망 도착 시각"${tabH}${hf}${dis}>
       </div>
-      ${hint ? '<span class="text-muted-hint desired-arrival-hint">1시간 단위</span>' : ''}`;
+      ${hint ? '<span class="text-muted-hint desired-arrival-hint">예: 2026-06-07 · 14:30</span>' : ''}`;
   }
 
   function nextOrderId() {
@@ -1433,22 +1462,30 @@
     if (!selectEl || selectEl.dataset.tempBound) return;
     selectEl.dataset.tempBound = '1';
     const isIntakePage = container._pendingIntakes != null;
+    const taskNum = selectEl.name?.match(/_(\d+)$/)?.[1] || '';
+    const contactName = taskNum ? `contact_${taskNum}` : 'contact';
     selectEl.addEventListener('change', () => {
       if (selectEl.value !== '__add_temp__') {
         const c = customerById(selectEl.value);
-        const contactInp = container.querySelector('[name="contact"]');
+        const contactInp = container.querySelector(`[name="${contactName}"]`);
         if (c && contactInp && !contactInp.value.trim()) {
           contactInp.value = c.phone || c.contact || '';
         }
-        if (isIntakePage) container._intakeCustomerId = Number(selectEl.value) || null;
+        if (isIntakePage) {
+          container._intakeCustomerIds = container._intakeCustomerIds || {};
+          container._intakeCustomerIds[taskNum || 1] = Number(selectEl.value) || null;
+        }
         return;
       }
-      const prev = isIntakePage ? container._intakeCustomerId : selectEl.value;
+      const prev = isIntakePage ? container._intakeCustomerIds?.[taskNum || 1] : selectEl.value;
       openTempCustomerModal((created) => {
-        if (isIntakePage) container._intakeCustomerId = created.id;
+        if (isIntakePage) {
+          container._intakeCustomerIds = container._intakeCustomerIds || {};
+          container._intakeCustomerIds[taskNum || 1] = created.id;
+        }
         selectEl.innerHTML = intakeCustomerSelectOptions(created.id);
         selectEl.value = String(created.id);
-        const contactInp = container.querySelector('[name="contact"]');
+        const contactInp = container.querySelector(`[name="${contactName}"]`);
         if (contactInp) contactInp.value = created.phone || '';
         selectEl.focus();
       });
@@ -1460,11 +1497,15 @@
 
   function openTempCustomerFromIntake(container, selectEl) {
     openTempCustomerModal((created) => {
-      if (container?._pendingIntakes != null) container._intakeCustomerId = created.id;
+      const taskNum = selectEl?.name?.match(/_(\d+)$/)?.[1] || 1;
+      if (container?._pendingIntakes != null) {
+        container._intakeCustomerIds = container._intakeCustomerIds || {};
+        container._intakeCustomerIds[taskNum] = created.id;
+      }
       if (selectEl) {
         selectEl.innerHTML = intakeCustomerSelectOptions(created.id);
         selectEl.value = String(created.id);
-        const contactInp = container.querySelector('[name="contact"]');
+        const contactInp = container.querySelector(`[name="contact_${taskNum}"]`);
         if (contactInp) contactInp.value = created.phone || '';
         selectEl.focus();
       }
@@ -2108,13 +2149,20 @@
       { cargo_id: `${o.id}-C1`, cargo_role: 'delivery', place: o.delivery, address: '—', tw: o.window?.split('–')[1] || '—' },
     ];
     const roleLabel = { pickup: '상차', delivery: '하차' };
+    const cargoNos = new Map();
+    let cargoSeq = 0;
+    const displayCargoNo = stop => {
+      const key = stop.cargo_id || `${stop.cargo_role}-${cargoSeq}`;
+      if (!cargoNos.has(key)) cargoNos.set(key, `${displayOrderNo(o)}-화물${++cargoSeq}`);
+      return cargoNos.get(key);
+    };
     return `<div class="data-table order-stops-table">
       <table>
-        <thead><tr><th>구분</th><th>cargo_id</th><th>지점</th><th>주소</th><th>시간</th></tr></thead>
+        <thead><tr><th>구분</th><th>화물 ID</th><th>지점</th><th>주소</th><th>시간</th></tr></thead>
         <tbody>${stops.map(s => `
           <tr>
             <td><span class="badge ${s.cargo_role === 'pickup' ? 'badge-info' : 'badge-ok'}">${roleLabel[s.cargo_role] || s.cargo_role}</span></td>
-            <td><code style="font-size:11px">${s.cargo_id}</code></td>
+            <td><code style="font-size:11px" title="${escapeHtml(s.cargo_id || '')}">${displayCargoNo(s)}</code></td>
             <td>${s.place}</td>
             <td>${s.address || '—'}</td>
             <td>${s.tw || '—'}</td>
@@ -2196,6 +2244,7 @@
       <div class="tabs detail-tabs">
         <button type="button" class="tab ${tab === 'info' ? 'active' : ''}" data-tab="info">기본</button>
         <button type="button" class="tab ${tab === 'stops' ? 'active' : ''}" data-tab="stops">상·하차</button>
+        <button type="button" class="tab ${tab === 'map' ? 'active' : ''}" data-tab="map">지도</button>
         <button type="button" class="tab ${tab === 'hist' ? 'active' : ''}" data-tab="hist">처리 기록</button>
       </div>
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
@@ -2214,7 +2263,54 @@
         <p style="font-size:11px;color:var(--text-muted);margin-top:12px">${editable ? '수정을 누른 뒤 접수 정보를 변경할 수 있습니다.' : '현재 상태에서는 조회만 가능합니다.'}</p>
       </div>
       <div class="tab-panel ${tab === 'stops' ? 'active' : ''}" data-panel="stops">${orderStopsTableHtml(o)}</div>
+      <div class="tab-panel ${tab === 'map' ? 'active' : ''}" data-panel="map">
+        <div class="order-detail-map-legend"><span><i class="pickup"></i>상차지</span><span><i class="delivery"></i>하차지</span></div>
+        <div id="orderDetailMap" class="order-detail-map"></div>
+      </div>
       <div class="tab-panel ${tab === 'hist' ? 'active' : ''}" data-panel="hist">${orderHistoryTableHtml(o)}</div>`;
+  }
+
+  function renderOrderDetailMap(root, o) {
+    const mapEl = $('#orderDetailMap', root);
+    if (!mapEl) return;
+    if (!window.kakao?.maps) {
+      mapEl.innerHTML = '<p class="empty-hint">지도를 불러오는 중입니다.</p>';
+      return;
+    }
+    const points = [];
+    const addPoint = (lat, lon, label, role) => {
+      const nLat = Number(lat);
+      const nLon = Number(lon);
+      if (!Number.isFinite(nLat) || !Number.isFinite(nLon)) return;
+      points.push({ lat: nLat, lon: nLon, label, role });
+    };
+    if (o.stops?.length) {
+      o.stops.forEach(stop => addPoint(
+        stop.lat,
+        stop.lon,
+        stop.place || stop.address || (stop.cargo_role === 'pickup' ? '상차지' : '하차지'),
+        stop.cargo_role,
+      ));
+    } else {
+      addPoint(o.pickup_lat, o.pickup_lon, o.pickup || '상차지', 'pickup');
+      addPoint(o.lat, o.lon, o.delivery || '하차지', 'delivery');
+    }
+    if (!points.length) {
+      mapEl.innerHTML = '<p class="empty-hint">표시할 상·하차지 좌표가 없습니다.</p>';
+      return;
+    }
+    const center = new kakao.maps.LatLng(points[0].lat, points[0].lon);
+    const detailMap = new kakao.maps.Map(mapEl, { center, level: 8 });
+    const bounds = new kakao.maps.LatLngBounds();
+    points.forEach((point, index) => {
+      const position = new kakao.maps.LatLng(point.lat, point.lon);
+      bounds.extend(position);
+      const marker = document.createElement('div');
+      marker.className = `order-stop-marker ${point.role === 'pickup' ? 'pickup' : 'delivery'}`;
+      marker.innerHTML = `<strong>${point.role === 'pickup' ? '상차' : '하차'} ${index + 1}</strong><span>${escapeHtml(point.label)}</span>`;
+      new kakao.maps.CustomOverlay({ map: detailMap, position, content: marker, yAnchor: 1.15 });
+    });
+    if (points.length > 1) detailMap.setBounds(bounds, 32, 32, 32, 32);
   }
 
   function bindOrderDetail(root, o) {
@@ -2260,6 +2356,13 @@
       renderOrderList(root);
     };
     bindDetailTabs(card);
+    card.querySelectorAll('.detail-tabs .tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        orderDetailTab = tab.dataset.tab;
+        if (orderDetailTab === 'map') setTimeout(() => renderOrderDetailMap(root, o), 0);
+      });
+    });
+    if (orderDetailTab === 'map') setTimeout(() => renderOrderDetailMap(root, o), 0);
     if (orderCanDelete(o)) {
       $('#deleteOrderBtn', root).onclick = async () => {
         if (!confirm(`오더 ${displayOrderNo(o)}를 삭제하시겠습니까?`)) return;
@@ -2453,11 +2556,11 @@
           ${monthEvents.length === 0
             ? '<p style="padding:20px;color:var(--text-muted);text-align:center">이번 달 일정이 없습니다</p>'
             : tableScrollWrap(`<table>
-            <thead><tr><th>날짜 및 시간</th><th>일정</th><th>유형</th><th>내용</th></tr></thead>
+            <thead><tr><th>날짜 및 시간</th><th>ID</th><th>유형</th><th>내용</th></tr></thead>
             <tbody>${monthEvents.map(e => `
               <tr>
                 <td>${e.datetime ? formatDateTimeShort(e.datetime) : e.date}</td>
-                <td>${e.type === 'trip' ? `운행 ${escapeHtml(e.orderId)}` : `오더 ${escapeHtml(e.orderId)}`}</td>
+                <td><code>${escapeHtml(e.orderId)}</code></td>
                 <td>${e.type === 'trip' ? '<span class="badge badge-run">운행</span>' : '<span class="badge badge-info">오더</span>'}</td>
                 <td>${e.label}</td>
               </tr>`).join('')}
@@ -2496,9 +2599,9 @@
           <div class="gantt-scale">${hours.map(h => `<span>${h}:00</span>`).join('')}</div>
           ${rows.map(row => `
             <div class="gantt-row">
-              <div class="gantt-label">${row.label}<code>${row.sub} · 운행 ${row.orderId}</code></div>
+              <div class="gantt-label">${row.label}<code>${row.sub} · ${row.orderId}</code></div>
               <div class="gantt-track">
-                <div class="gantt-bar" style="left:${row.startPct}%;width:${row.widthPct}%;background:${row.color}" title="${row.orderId}">${row.text}</div>
+                <div class="gantt-bar" style="left:${row.startPct}%;width:${row.widthPct}%;background:${row.color}" title="${row.orderId} · ${row.startTime}${row.endTime ? `–${row.endTime}` : ''}">${row.text} · ${row.startTime}${row.endTime ? `–${row.endTime}` : ''}</div>
               </div>
             </div>`).join('')}
         </div></div>`;
@@ -2506,10 +2609,15 @@
       <div class="page-sticky-top">
       ${pageChromeHtml('schedule-gantt', { title: '간트 · 차량·기사', desc: `${dateLabel} 06–21시 타임라인` })}
       <div class="gantt-date-tools">
-        <button type="button" class="btn btn-sm" id="ganttPrev">이전 날</button>
-        <input type="date" id="ganttDate" value="${ganttDate}">
-        <button type="button" class="btn btn-sm" id="ganttNext">다음 날</button>
-        <button type="button" class="btn btn-sm" id="ganttToday">오늘</button>
+        <button type="button" class="gantt-nav-btn" id="ganttPrev" aria-label="이전 날">‹</button>
+        <div class="gantt-date-picker">
+          <button type="button" class="gantt-date-display" id="ganttDateDisplay" aria-expanded="false">
+            <strong>${dateLabel}</strong><span>날짜 선택</span>
+          </button>
+          <div class="gantt-date-popover" id="ganttDatePopover" hidden></div>
+        </div>
+        <button type="button" class="gantt-nav-btn" id="ganttNext" aria-label="다음 날">›</button>
+        <button type="button" class="btn btn-sm gantt-today-btn" id="ganttToday">오늘</button>
       </div>
       </div>
       ${ganttBody}`;
@@ -2522,7 +2630,50 @@
     $('#ganttPrev', root).onclick = () => moveDate(-1);
     $('#ganttNext', root).onclick = () => moveDate(1);
     $('#ganttToday', root).onclick = () => { ganttDate = localDateValue(); renderScheduleGantt(root); };
-    $('#ganttDate', root).onchange = (event) => { ganttDate = event.target.value; renderScheduleGantt(root); };
+    const display = $('#ganttDateDisplay', root);
+    const popover = $('#ganttDatePopover', root);
+    let pickerYear = selectedDate.getFullYear();
+    let pickerMonth = selectedDate.getMonth() + 1;
+    const renderPicker = () => {
+      const firstDow = new Date(pickerYear, pickerMonth - 1, 1).getDay();
+      const days = new Date(pickerYear, pickerMonth, 0).getDate();
+      const cells = [
+        ...Array.from({ length: firstDow }, () => '<span class="empty"></span>'),
+        ...Array.from({ length: days }, (_, index) => {
+          const day = index + 1;
+          const value = `${pickerYear}-${String(pickerMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          return `<button type="button" class="${value === ganttDate ? 'selected' : ''}" data-gantt-day="${value}">${day}</button>`;
+        }),
+      ].join('');
+      popover.innerHTML = `
+        <div class="gantt-picker-head">
+          <button type="button" data-gantt-month="-1" aria-label="이전 달">‹</button>
+          <strong>${pickerYear}년 ${pickerMonth}월</strong>
+          <button type="button" data-gantt-month="1" aria-label="다음 달">›</button>
+        </div>
+        <div class="gantt-picker-dows">${['일', '월', '화', '수', '목', '금', '토'].map(day => `<span>${day}</span>`).join('')}</div>
+        <div class="gantt-picker-days">${cells}</div>`;
+      popover.querySelectorAll('[data-gantt-month]').forEach(button => {
+        button.onclick = () => {
+          pickerMonth += Number(button.dataset.ganttMonth);
+          if (pickerMonth < 1) { pickerYear--; pickerMonth = 12; }
+          if (pickerMonth > 12) { pickerYear++; pickerMonth = 1; }
+          renderPicker();
+        };
+      });
+      popover.querySelectorAll('[data-gantt-day]').forEach(button => {
+        button.onclick = () => {
+          ganttDate = button.dataset.ganttDay;
+          renderScheduleGantt(root);
+        };
+      });
+    };
+    display.onclick = () => {
+      const opening = popover.hidden;
+      popover.hidden = !opening;
+      display.setAttribute('aria-expanded', String(opening));
+      if (opening) renderPicker();
+    };
   }
 
   function renderScheduleMilestones(root) {
@@ -2533,7 +2684,7 @@
             <div class="milestone-date">${m.date}</div>
             <div>
               <div class="milestone-title">${m.title}</div>
-              <div class="milestone-meta">${m.note}${m.orderId ? ` · <code>운행 ${m.orderId}</code>` : ''}</div>
+              <div class="milestone-meta">${m.note}${m.orderId ? ` · <code>${m.orderId}</code>` : ''}</div>
             </div>
             ${milestoneStatusBadge(m.status)}
           </article>`).join('');
@@ -2691,7 +2842,6 @@
 
   function paginationHtml(totalItems, currentPage, listKey) {
     const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-    if (totalPages <= 1) return '';
     let btns = `<button type="button"${currentPage <= 1 ? ' disabled' : ''} data-page="${Math.max(1, currentPage - 1)}" data-list="${listKey}">‹</button>`;
     for (let i = 1; i <= totalPages; i++) {
       btns += `<button type="button" class="${i === currentPage ? 'active' : ''}" data-page="${i}" data-list="${listKey}">${i}</button>`;
@@ -2708,6 +2858,7 @@
         else if (btn.dataset.list === 'vehicles') vehiclePage = pg;
         else if (btn.dataset.list === 'customers') customerPage = pg;
         else if (btn.dataset.list === 'drivers') driverPage = pg;
+        else if (btn.dataset.list === 'staff') staffPage = pg;
         renderPage();
       };
     });
@@ -3236,6 +3387,7 @@
 
   function renderStaff(root) {
     const selected = selectedStaffId ? staffById(selectedStaffId) : null;
+    const staffRows = DATA.staff.slice((staffPage - 1) * PAGE_SIZE, staffPage * PAGE_SIZE);
     const pendingStaffHtml = DATA.me?.is_org_owner && DATA.pendingStaff.length ? `
       <div class="staff-requests">
         <div class="card-hd">
@@ -3269,7 +3421,7 @@
           ${pendingStaffHtml}
           ${tableScrollWrap(`<table id="staffTable">
             <thead><tr><th>이름</th><th>아이디</th><th>연락처</th><th>가입일</th></tr></thead>
-            <tbody>${DATA.staff.map(s => `
+            <tbody>${staffRows.map(s => `
               <tr data-id="${s.id}" class="${selectedStaffId === s.id ? 'selected' : ''}">
                 <td>${s.name}${s.id === _currentUserId ? ' <span class="badge badge-ok" style="font-size:10px">나</span>' : ''}</td>
                 <td>${s.username}</td>
@@ -3278,6 +3430,7 @@
               </tr>`).join('')}
             </tbody>
           </table>`)}
+          ${paginationHtml(DATA.staff.length, staffPage, 'staff')}
         </div>
       </div>`;
     root.innerHTML = masterDetailShell(
@@ -3294,6 +3447,7 @@
       tr.onclick = () => selectStaff(tr.dataset.id);
     });
     if (selected) bindStaffDetail(root, selected);
+    bindPagination(root);
     root.querySelectorAll('.btn-approve-staff').forEach(button => {
       button.onclick = async () => {
         const res = await apiFetch(`/auth/approve/${button.dataset.id}`, { method: 'POST' });
@@ -3689,18 +3843,13 @@
       const picked = bulkSelectedDriverIds.includes(String(d.id));
       return `
         <div class="bulk-driver-card ${picked ? 'picked' : ''}" data-driver-id="${d.id}">
-          <div class="bulk-driver-card-hd">
-            <label class="bulk-driver-pick">
-              <input type="checkbox" class="bulk-driver-chk" data-id="${d.id}" ${picked ? 'checked' : ''} aria-label="${d.name} 선택">
-              <span class="bulk-driver-pick-text">
-                <strong>${d.name}</strong>
-                <span class="bulk-driver-vehicle">${vehicle ? `${vehicle.plate} · ${vehicle.tonnage || '—'}` : '연결 차량 없음'}</span>
-              </span>
-            </label>
-            ${statusBadge(d.status)}
-          </div>
+          <label class="bulk-driver-pick">
+            <input type="checkbox" class="bulk-driver-chk" data-id="${d.id}" ${picked ? 'checked' : ''} aria-label="${d.name} 선택">
+            <span class="bulk-driver-pick-text"><strong>${d.name}</strong><span>${d.phone || '연락처 없음'}</span></span>
+          </label>
+          <span class="bulk-driver-vehicle">${vehicle ? `<strong>${vehicle.plate}</strong><small>${vehicle.tonnage || '—'} · ${vehicle.type || '—'}</small>` : '연결 차량 없음'}</span>
+          <span>${statusBadge(d.status)}</span>
           <div class="bulk-driver-assigned">
-            <p class="field-label">배정 오더 ${assigned.length}건</p>
             ${assigned.length
               ? `<div class="bulk-assigned-chips">${assigned.map(id => {
                   const order = DATA.orders.find(o => o.id === id);
@@ -3708,7 +3857,7 @@
                     ${displayOrderNo(order || { id })}<span aria-hidden="true">&times;</span>
                   </button>`;
                 }).join('')}</div>`
-              : '<p class="bulk-driver-empty">오더를 선택해 배정하세요</p>'}
+              : '<p class="bulk-driver-empty">미배정</p>'}
           </div>
         </div>`;
     }).join('');
@@ -3849,24 +3998,25 @@
             </div>
           </div>
         </div>
-        <div class="card-bd">
-          <div class="driver-panel bulk-driver-panel">
-            <div class="bulk-driver-panel-hd">
-              <h3>가용 기사·연결 차량 <span class="text-muted-hint" style="font-weight:400;font-size:12px">· 체크로 다중 선택</span></h3>
-              <label class="bulk-driver-select-all">
-                <input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택">
-                <span>전체</span>
-              </label>
-            </div>
+        <div class="card-bd dispatch-driver-body">
+          <div class="dispatch-driver-tools">
             <input type="search" class="search bulk-driver-search" placeholder="기사 또는 차량 검색" id="bulkDriverSearch" value="${escapeHtml(bulkDriverSearch)}">
-            <div class="bulk-driver-list" id="bulkDriverList">${visibleDrivers.length
-              ? bulkDriverCardsHtml(visibleDrivers)
-              : '<p class="empty-hint" style="padding:12px">검색 결과가 없습니다.</p>'}</div>
+            <label class="bulk-driver-select-all">
+              <input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택">
+              <span>전체 선택</span>
+            </label>
           </div>
-
+          <div class="dispatch-driver-list-head"><span>기사</span><span>연결 차량</span><span>상태</span><span>배정 오더</span></div>
+          <div class="bulk-driver-list" id="bulkDriverList">${visibleDrivers.length
+            ? bulkDriverCardsHtml(visibleDrivers)
+            : '<p class="empty-hint" style="padding:12px">검색 결과가 없습니다.</p>'}</div>
+        </div>
+      </div>
+      <div class="card dispatch-action-card">
+        <div class="card-hd card-hd--dispatch"><h2><span class="section-step">3</span> 배정 및 실행</h2></div>
+        <div class="card-bd">
           <div class="bulk-setup-footer">
             <div class="bulk-assign-bar ${canAssign ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
-              <span class="section-step section-step--small">3</span>
               <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
               <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
               <span class="bulk-assign-bar-label">선택 기사 <strong>${driverBarLabel}</strong></span>
@@ -5103,7 +5253,7 @@
             <tbody>
               ${DATA.statsTrips.map(t => `
                 <tr class="trip-row${selectedTripId === t.id ? ' selected' : ''}" data-trip="${t.id}">
-                  <td>운행 ${String(t.id).slice(0, 8)}</td><td>${t.driver}</td><td>${t.date}</td>
+                  <td>${t.tripNo || displayTripNo(t)}</td><td>${t.driver}</td><td>${t.date}</td>
                   <td>${statusBadge(t.status)}${tripExtraBadgesHtml(t)}</td>
                   <td>${t.safety === '주의' ? '<span class="badge badge-warn">주의</span>' : t.safety === '적합' ? '<span class="badge badge-ok">적합</span>' : '—'}</td>
                 </tr>`).join('')}
@@ -5513,8 +5663,6 @@
           <label>연락처</label><input name="contact" value="${row.contact || ''}">
           <label>희망 도착</label>
           <div>${desiredArrivalFieldsHtml({ value: row.latestAt || '', dateName: 'pending_latest_at_date', hourName: 'pending_latest_at_hour', hint: true })}</div>
-          <label>혼적 여부</label>
-          <div>${intakeMixedLoadRadioHtml('intake-mixed-edit', isMixedLoad(row))}</div>
         </div>
       </form>`, () => {
       const form = $('#pendingEditForm');
@@ -5527,8 +5675,7 @@
       row.tons = form.querySelector('[name="tons"]').value.trim();
       row.contact = normalizePhone(form.querySelector('[name="contact"]').value);
       row.latestAt = readDesiredArrival(form, 'pending_latest_at_date', 'pending_latest_at_hour');
-      const mixedChecked = form.querySelector('input[name="intake-mixed-edit"]:checked');
-      row.mixed_load = mixedChecked ? mixedChecked.value === '1' : false;
+      row.mixed_load = false;
       renderPendingIntakePanel(root);
       bindPendingIntakeActions(root);
       toast('대기 접수가 수정되었습니다');
@@ -5706,52 +5853,8 @@
     return el ? el.value.trim() : '';
   }
 
-  function readIntakeMixedLoad(form, taskNum) {
-    const checked = form.querySelector(`input[name="intake-mixed-${taskNum}"]:checked`);
-    return checked ? checked.value === '1' : false;
-  }
-
-  function intakeMixedLoadRadioHtml(groupName, mixed, tabindex) {
-    const isMixed = !!mixed;
-    const tab = tabindex != null ? ` tabindex="${tabindex}"` : '';
-    return `
-      <div class="radio-group" role="radiogroup" aria-label="혼적 여부">
-        <label class="radio-label">
-          <input type="radio" class="intake-field" name="${groupName}" value="0"${!isMixed ? ' checked' : ''}${tab} data-intake-field="${groupName}">
-          <span>단독</span>
-        </label>
-        <label class="radio-label">
-          <input type="radio" class="intake-field" name="${groupName}" value="1"${isMixed ? ' checked' : ''} data-intake-field="${groupName}">
-          <span>혼적</span>
-        </label>
-      </div>
-      <span class="text-muted-hint intake-mixed-hint">복수 화주·화물 동일 차량 적재</span>`;
-  }
-
-  function suggestIntakeMixedLoadFromRecipients(root) {
-    const form = $('#intakeForm', root);
-    if (!form) return;
-    const byTask = [];
-    root.querySelectorAll('[data-task]').forEach(card => {
-      const tn = Number(card.dataset.task);
-      const r = readIntakeField(form, `recipient_${tn}`);
-      if (r) byTask.push({ tn, r });
-    });
-    if (byTask.length < 2 || new Set(byTask.map(x => x.r)).size < 2) return;
-    let changed = false;
-    byTask.forEach(({ tn }) => {
-      const solo = form.querySelector(`input[name="intake-mixed-${tn}"][value="0"]`);
-      const mixedRadio = form.querySelector(`input[name="intake-mixed-${tn}"][value="1"]`);
-      if (solo?.checked && mixedRadio) {
-        mixedRadio.checked = true;
-        changed = true;
-      }
-    });
-    if (changed) toast('복수 수신자 감지 · 혼적 제안');
-  }
-
   function collectIntakeRow(form, taskNum) {
-    const custVal = taskNum === 1 ? readIntakeField(form, 'customer') : '';
+    const custVal = readIntakeField(form, `customer_${taskNum}`);
     const puEl  = form.querySelector(`[name="pickup_${taskNum}"]`);
     const delEl = form.querySelector(`[name="delivery_${taskNum}"]`);
     return {
@@ -5764,19 +5867,19 @@
       recipient:   readIntakeField(form, `recipient_${taskNum}`),
       cargo:       readIntakeField(form, `cargo_${taskNum}`),
       tons:        readIntakeField(form, `tons_${taskNum}`),
-      customer:    taskNum === 1 ? customerNameFromIntakeValue(custVal) : '',
-      latestAt:    taskNum === 1 ? readDesiredArrival(form) : '',
-      contact:     taskNum === 1 ? readIntakeField(form, 'contact') : '',
-      mixed_load:  readIntakeMixedLoad(form, taskNum),
+      customer:    customerNameFromIntakeValue(custVal),
+      latestAt:    readDesiredArrival(form, `latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`),
+      contact:     readIntakeField(form, `contact_${taskNum}`),
+      mixed_load:  false,
     };
   }
 
   function collectIntakeRows(root, form, taskNum) {
     const base = {
-      customer: taskNum === 1 ? customerNameFromIntakeValue(readIntakeField(form, 'customer')) : '',
-      latestAt: taskNum === 1 ? readDesiredArrival(form) : '',
-      contact: taskNum === 1 ? readIntakeField(form, 'contact') : '',
-      mixed_load: readIntakeMixedLoad(form, taskNum),
+      customer: customerNameFromIntakeValue(readIntakeField(form, `customer_${taskNum}`)),
+      latestAt: readDesiredArrival(form, `latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`),
+      contact: readIntakeField(form, `contact_${taskNum}`),
+      mixed_load: false,
     };
     const card = root.querySelector(`[data-task="${taskNum}"]`);
     const puMainEl = form.querySelector(`[name="pickup_${taskNum}"]`);
@@ -5848,14 +5951,10 @@
         delete el.dataset.lon;
       }
     });
-    if (taskNum === 1) {
-      ['latest_at_date', 'latest_at_hour'].forEach(name => {
-        const el = form.querySelector(`[name="${name}"]`);
-        if (el) el.value = '';
-      });
-    }
-    const solo = form.querySelector(`input[name="intake-mixed-${taskNum}"][value="0"]`);
-    if (solo) solo.checked = true;
+    [`latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`, `contact_${taskNum}`].forEach(name => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el) el.value = '';
+    });
   }
 
   function renderPendingIntakePanel(root) {
@@ -5886,15 +5985,13 @@
         el.classList.remove('invalid');
       }
     });
-    if (taskNum === 1) {
-      const cust = form.querySelector('[name="customer"]');
-      const bad = !cust?.value?.trim() || cust.value === '__add_temp__';
-      if (cust && bad) {
-        cust.classList.add('invalid');
-        ok = false;
-      } else if (cust) {
-        cust.classList.remove('invalid');
-      }
+    const cust = form.querySelector(`[name="customer_${taskNum}"]`);
+    const bad = !cust?.value?.trim() || cust.value === '__add_temp__';
+    if (cust && bad) {
+      cust.classList.add('invalid');
+      ok = false;
+    } else if (cust) {
+      cust.classList.remove('invalid');
     }
     return ok;
   }
@@ -5954,9 +6051,9 @@
     const seq = card._pickupExtraSeq;
     const name = `pickup_${taskNum}_extra_${seq}`;
     const row = document.createElement('div');
-    row.className = 'extra-stop-row';
+    row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraPickup = seq;
-    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="추가 상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>추가 상차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="추가 상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="${name}"]`);
@@ -5978,9 +6075,9 @@
     card._deliveryExtraSeq = (card._deliveryExtraSeq || 0) + 1;
     const seq = card._deliveryExtraSeq;
     const row = document.createElement('div');
-    row.className = 'extra-stop-row';
+    row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraDelivery = seq;
-    row.innerHTML = `<div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신자(고객사명)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div><button type="button" class="intake-aux-link remove-extra-stop" tabindex="-1">✕ 제거</button>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>추가 하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="추가 하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신처(하차 고객)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="delivery_${taskNum}_extra_${seq}"]`);
@@ -5989,7 +6086,6 @@
     deliveryBlock.insertBefore(row, addBtn);
     bindPlaceSearch(row);
     bindIntakeKeyboard(root);
-    row.querySelector('[data-intake-field^="recipient_"]')?.addEventListener('blur', () => suggestIntakeMixedLoadFromRecipients(root));
     row.querySelector('.intake-field').focus();
   }
 
@@ -6033,7 +6129,6 @@
   function taskCardHtml(taskNum, custOpts, sample, tabBase) {
     const pickup = '';
     const delivery = '';
-    const defaultMixed = taskNum === 1 ? isMixedLoad(sample) : false;
     const t = tabBase || (taskNum - 1) * 10;
     return `
       <article class="task-card" data-task="${taskNum}">
@@ -6059,50 +6154,41 @@
           <div class="stop-label"><span class="stop-number">2</span><span>하차 정보</span></div>
           ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 4)}
           <div class="delivery-fields">
-            <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신자(고객사명)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
+            <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신처(하차 고객)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
             ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 6}" data-intake-field="cargo_${taskNum}"`)}
             <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 7}" data-intake-field="tons_${taskNum}">
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
         </div>
         </div>
-        ${taskNum === 1 ? `
-          <div class="stop-block task-meta-divider order-meta-block">
-            <h4>오더 정보</h4>
-            <div class="form-grid intake-order-meta-grid">
-              <label>화주(고객) *</label>
-              <div class="intake-customer-control">
-                <select class="intake-field" name="customer" required tabindex="${t + 8}" data-intake-field="customer">${custOpts}</select>
-                <button type="button" class="btn btn-sm" data-temp-customer tabindex="-1">+ 임시 화주 추가</button>
-              </div>
-              <label>희망 도착</label>
-              <div>
-                ${desiredArrivalFieldsHtml({
-                  value: sample?.window && sample.window !== '—' ? sample.window : '',
-                  tabindexDate: t + 9,
-                  tabindexHour: t + 10,
-                  intakeField: true,
-                  hint: true,
-                })}
-              </div>
-              <label>연락처</label>
-              <input class="intake-field" name="contact" placeholder="담당 연락처" tabindex="${t + 11}" data-intake-field="contact">
-              <label>혼적 여부</label>
-              <div>${intakeMixedLoadRadioHtml(`intake-mixed-${taskNum}`, defaultMixed, t + 12)}</div>
+        <div class="stop-block task-meta-divider order-meta-block">
+          <h4>오더 정보</h4>
+          <div class="form-grid intake-order-meta-grid">
+            <label>화주(계약 고객) *</label>
+            <div class="intake-customer-control">
+              <select class="intake-field" name="customer_${taskNum}" required tabindex="${t + 8}" data-intake-field="customer_${taskNum}">${custOpts}</select>
+              <button type="button" class="btn btn-sm" data-temp-customer="${taskNum}" tabindex="-1">+ 임시 화주 추가</button>
             </div>
-          </div>` : `
-          <div class="stop-block task-meta-divider">
-            <div class="form-grid" style="max-width:100%;grid-template-columns:100px 1fr;gap:8px 12px">
-              <label>혼적 여부</label>
-              <div>${intakeMixedLoadRadioHtml(`intake-mixed-${taskNum}`, defaultMixed, t + 8)}</div>
+            <label>희망 도착</label>
+            <div>
+              ${desiredArrivalFieldsHtml({
+                value: sample?.window && sample.window !== '—' ? sample.window : '',
+                dateName: `latest_at_date_${taskNum}`,
+                hourName: `latest_at_hour_${taskNum}`,
+                tabindexDate: t + 9,
+                tabindexHour: t + 10,
+                intakeField: true,
+                hint: true,
+              })}
             </div>
-          </div>`}
+            <label>연락처</label>
+            <input class="intake-field" name="contact_${taskNum}" placeholder="화주 담당 연락처" tabindex="${t + 11}" data-intake-field="contact_${taskNum}">
+          </div>
+        </div>
       </article>`;
   }
 
   function renderOrderIntake(root) {
-    const selectedCustId = root._intakeCustomerId ?? null;
-    const custOpts = intakeCustomerSelectOptions(selectedCustId);
     const taskCount = root._taskCount || 1;
     root._pendingIntakes = root._pendingIntakes || [];
     root.innerHTML = `
@@ -6130,7 +6216,12 @@
               <div class="intake-layout-wrap">
                 <div class="intake-main">
                   <div id="taskCardsList">
-                    ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(i + 1, custOpts, null, i * 10)).join('')}
+                    ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(
+                      i + 1,
+                      intakeCustomerSelectOptions(root._intakeCustomerIds?.[i + 1] ?? null),
+                      null,
+                      i * 12,
+                    )).join('')}
                   </div>
                   <button type="button" class="btn-add-task" id="addTaskCard">+ 오더 입력 폼 추가</button>
                   <div class="intake-actions">
@@ -6219,13 +6310,9 @@
 
     bindIntakeKeyboard(root);
     bindPlaceSearch(root);
-    root.querySelectorAll('[data-intake-field^="recipient_"]').forEach(inp => {
-      inp.addEventListener('blur', () => suggestIntakeMixedLoadFromRecipients(root));
-    });
-    const custSel = root.querySelector('[name="customer"]');
-    if (custSel) bindIntakeCustomerSelect(root, custSel);
+    root.querySelectorAll('select[name^="customer_"]').forEach(sel => bindIntakeCustomerSelect(root, sel));
     root.querySelectorAll('[data-temp-customer]').forEach(btn => {
-      btn.onclick = () => openTempCustomerFromIntake(root, root.querySelector('[name="customer"]'));
+      btn.onclick = () => openTempCustomerFromIntake(root, root.querySelector(`[name="customer_${btn.dataset.tempCustomer}"]`));
     });
 
     $('#addIntakeRow', root).onclick = () => {
@@ -6297,10 +6384,6 @@
           <div class="chips" id="orderChips">
             ${statuses.map(s => `<button type="button" class="chip ${orderFilter === s ? 'active' : ''}" data-f="${s}">${s}</button>`).join('')}
           </div>
-          <div class="order-list-selection-actions" aria-label="오더 선택 작업">
-            <button type="button" class="btn btn-sm" id="orderSelectVisible">${allPageSelected ? '현재 페이지 해제' : '현재 페이지 선택'}</button>
-            <button type="button" class="btn btn-sm" id="orderClearSelection" ${selectedOrderIds.length ? '' : 'disabled'}>선택 해제</button>
-          </div>
           <input type="search" class="search" id="orderSearch" value="${escapeHtml(orderSearch)}" placeholder="오더번호·화주·상하차지·화물 검색">
         </div>
         <div class="order-bulk-bar ${selectedOrderIds.length ? '' : 'is-idle'}">
@@ -6364,17 +6447,6 @@
       const ids = new Set(selectedOrderIds);
       rowIds.forEach(id => e.target.checked ? ids.add(id) : ids.delete(id));
       selectedOrderIds = [...ids];
-      syncOrderSelection();
-    });
-    $('#orderSelectVisible', root)?.addEventListener('click', () => {
-      const ids = new Set(selectedOrderIds);
-      const select = !allPageSelected;
-      rowIds.forEach(id => select ? ids.add(id) : ids.delete(id));
-      selectedOrderIds = [...ids];
-      syncOrderSelection();
-    });
-    $('#orderClearSelection', root)?.addEventListener('click', () => {
-      selectedOrderIds = [];
       syncOrderSelection();
     });
     $('#orderGoDispatch', root)?.addEventListener('click', () => {

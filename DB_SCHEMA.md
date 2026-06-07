@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-07 (v1.0.102 기준, 배차 선택 상태·엑셀 예제 DB 영향 없음 확인)
+> 최종 검토: 2026-06-07 (v1.0.103 기준, 일정·오더·배차 UI 변경의 DB 영향 없음 확인)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.102는 DB 구조 변경이 없다. 배차관리 기사 선택·검색·스크롤은 프론트 임시 상태이며 오더 접수 엑셀은 예제 행만 변경했다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
+> v1.0.103은 DB 구조 변경이 없다. `TR-YYMMDD-NNN` 운행번호와 `RO-...-화물N` 화물번호는 프론트 표시값이며 저장 컬럼이 아니다. 오더 상세 지도는 기존 상·하차 좌표를 사용하고, 접수 날짜 입력·페이지네이션·배차관리 레이아웃도 기존 컬럼과 API를 그대로 사용한다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 
@@ -484,7 +484,12 @@ cancelled 처리 시:
 | `done` / `done_manual` | `'완료'` | 미표시 |
 | `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
 
-> v1.0.97 기준 `오더관리 > 배차관리`의 오더·기사 선택과 기사별 배정 묶음은 모두 프론트 임시 상태다. 최종 실행 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, 기사별 `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 하단 결과 컨테이너는 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
+> v1.0.103 기준 `오더관리 > 배차관리`의 오더·기사 선택과 기사별 배정 묶음은 모두 프론트 임시 상태다. 기사·차량 선택과 배정·실행 영역을 별도 카드로 분리했지만 저장 구조는 바뀌지 않았다. 최종 실행 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, 기사별 `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 하단 결과 컨테이너는 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
+
+### 일정·오더 표시 번호와 지도
+일정 캘린더·간트·사후통계의 `TR-YYMMDD-NNN`은 기존 `trips.id`, `created_at`, `started_at`을 기반으로 프론트에서 만드는 읽기용 번호다. `trips` 테이블에 `trip_no` 컬럼을 추가하지 않는다.
+오더 상세의 `RO-...-화물N`도 기존 `deliveries.id`와 화면 내 화물 순서를 기반으로 한 표시값이며 `cargo_id` 컬럼이나 별도 화물 테이블을 추가하지 않는다.
+오더 상세 지도는 기존 `deliveries.pickup_lat/pickup_lon`, `lat/lon` 또는 API가 제공하는 stop 좌표를 사용한다. 지도 핀을 위한 별도 위치 테이블은 없다.
 
 ### 법적 안내 페이지와 DB
 `terms.html`, `privacy.html`, `copyright.html`, `contact.html`은 정적 프론트 페이지다.
