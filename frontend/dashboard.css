@@ -3011,9 +3011,16 @@
       flex-direction: column;
     }
     .intake-viewport .intake-main {
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
       flex: 1;
       min-height: 0;
+    }
+    .intake-viewport .intake-main-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
       padding-right: 4px;
     }
     .intake-viewport .pending-intake-wrap.compact {
@@ -3021,6 +3028,10 @@
       height: 100%;
       min-height: 0;
       flex: 1;
+    }
+    .intake-viewport .intake-main > .intake-actions {
+      position: static;
+      flex: 0 0 auto;
     }
     body.page-compact .intake-compact .task-card { padding: 8px 10px; margin-bottom: 6px; }
     body.page-compact .intake-compact .card-bd { padding: 10px 12px; }

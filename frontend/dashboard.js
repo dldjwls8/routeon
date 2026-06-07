@@ -1426,6 +1426,12 @@
     return c ? c.name : String(value);
   }
 
+  function customerContactFromIntakeValue(value) {
+    if (!value || value === '__add_temp__') return '';
+    const c = customerById(value);
+    return c ? (c.phone || c.contact || '') : '';
+  }
+
   function openTempCustomerModal(onSaved) {
     openModal('임시 화주 추가', `
       <form id="tempCustForm">
@@ -1495,23 +1501,6 @@
       if (prev != null && prev !== '__add_temp__') selectEl.value = String(prev);
       else if (selectEl.options.length > 1) selectEl.selectedIndex = 0;
       else selectEl.value = '';
-    });
-  }
-
-  function openTempCustomerFromIntake(container, selectEl) {
-    openTempCustomerModal((created) => {
-      const taskNum = selectEl?.name?.match(/_(\d+)$/)?.[1] || 1;
-      if (container?._pendingIntakes != null) {
-        container._intakeCustomerIds = container._intakeCustomerIds || {};
-        container._intakeCustomerIds[taskNum] = created.id;
-      }
-      if (selectEl) {
-        selectEl.innerHTML = intakeCustomerSelectOptions(created.id);
-        selectEl.value = String(created.id);
-        const contactInp = container.querySelector(`[name="contact_${taskNum}"]`);
-        if (contactInp) contactInp.value = created.phone || '';
-        selectEl.focus();
-      }
     });
   }
 
@@ -2856,6 +2845,24 @@
     return raw;
   }
 
+  function bindPhoneAutoFormat(input) {
+    if (!input || input.dataset.phoneFmtBound) return;
+    input.dataset.phoneFmtBound = '1';
+    input.addEventListener('input', () => {
+      const digits = input.value.replace(/\D/g, '').slice(0, 11);
+      let formatted = digits;
+      if (digits.startsWith('02')) {
+        if (digits.length > 9) formatted = `${digits.slice(0,2)}-${digits.slice(2,6)}-${digits.slice(6,10)}`;
+        else if (digits.length > 5) formatted = `${digits.slice(0,2)}-${digits.slice(2,5)}-${digits.slice(5,9)}`;
+        else if (digits.length > 2) formatted = `${digits.slice(0,2)}-${digits.slice(2)}`;
+      } else {
+        if (digits.length > 7) formatted = `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7,11)}`;
+        else if (digits.length > 3) formatted = `${digits.slice(0,3)}-${digits.slice(3)}`;
+      }
+      input.value = formatted;
+    });
+  }
+
   function toast(msg, type) {
     const t = $('#toast');
     t.textContent = msg || '저장되었습니다';
@@ -2875,6 +2882,7 @@
         <button type="button" class="btn btn-primary" id="modalSave">${saveLabel}</button>
       </div>`;
     $('#modalOverlay').classList.add('open');
+    box.querySelectorAll('input[name="phone"], #custPhone').forEach(bindPhoneAutoFormat);
     box.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
     $('#modalSave').onclick = () => {
       const form = box.querySelector('form');
@@ -5906,16 +5914,17 @@
       tons:        readIntakeField(form, `tons_${taskNum}`),
       customer:    customerNameFromIntakeValue(custVal),
       latestAt:    readDesiredArrival(form, `latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`),
-      contact:     readIntakeField(form, `contact_${taskNum}`),
+      contact:     customerContactFromIntakeValue(custVal),
       mixed_load:  false,
     };
   }
 
   function collectIntakeRows(root, form, taskNum) {
+    const custVal = readIntakeField(form, `customer_${taskNum}`);
     const base = {
-      customer: customerNameFromIntakeValue(readIntakeField(form, `customer_${taskNum}`)),
+      customer: customerNameFromIntakeValue(custVal),
       latestAt: readDesiredArrival(form, `latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`),
-      contact: readIntakeField(form, `contact_${taskNum}`),
+      contact: customerContactFromIntakeValue(custVal),
       mixed_load: false,
     };
     const card = root.querySelector(`[data-task="${taskNum}"]`);
@@ -5988,7 +5997,7 @@
         delete el.dataset.lon;
       }
     });
-    [`latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`, `contact_${taskNum}`].forEach(name => {
+    [`latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`].forEach(name => {
       const el = form.querySelector(`[name="${name}"]`);
       if (el) el.value = '';
     });
@@ -6114,7 +6123,7 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraDelivery = seq;
-    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields"><input type="text" class="intake-field" name="recipient_${taskNum}_extra_${seq}" placeholder="수신처(하차 고객)" data-intake-field="recipient_${taskNum}_extra_${seq}">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="delivery_${taskNum}_extra_${seq}"]`);
@@ -6207,9 +6216,8 @@
           <div class="stop-card">
             ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 4)}
             <div class="delivery-fields">
-              <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신처(하차 고객)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
-              ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 6}" data-intake-field="cargo_${taskNum}"`)}
-              <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 7}" data-intake-field="tons_${taskNum}">
+              ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 5}" data-intake-field="cargo_${taskNum}"`)}
+              <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 6}" data-intake-field="tons_${taskNum}">
             </div>
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
@@ -6220,8 +6228,7 @@
           <div class="form-grid intake-order-meta-grid">
             <label>화주(계약 고객) *</label>
             <div class="intake-customer-control">
-              <select class="intake-field" name="customer_${taskNum}" required tabindex="${t + 8}" data-intake-field="customer_${taskNum}">${custOpts}</select>
-              <button type="button" class="btn btn-sm" data-temp-customer="${taskNum}" tabindex="-1">+ 임시 화주 추가</button>
+              <select class="intake-field" name="customer_${taskNum}" required tabindex="${t + 7}" data-intake-field="customer_${taskNum}">${custOpts}</select>
             </div>
             <label>희망 도착</label>
             <div>
@@ -6229,14 +6236,12 @@
                 value: sample?.window && sample.window !== '—' ? sample.window : '',
                 dateName: `latest_at_date_${taskNum}`,
                 hourName: `latest_at_hour_${taskNum}`,
-                tabindexDate: t + 9,
-                tabindexHour: t + 10,
+                tabindexDate: t + 8,
+                tabindexHour: t + 9,
                 intakeField: true,
                 hint: true,
               })}
             </div>
-            <label>연락처</label>
-            <input class="intake-field" name="contact_${taskNum}" placeholder="화주 담당 연락처" tabindex="${t + 11}" data-intake-field="contact_${taskNum}">
           </div>
         </div>
       </article>`;
@@ -6259,9 +6264,6 @@
       btn.onclick = () => { btn.closest('[data-task]')?.remove(); };
     });
     root.querySelectorAll('select[name^="customer_"]').forEach(sel => bindIntakeCustomerSelect(root, sel));
-    root.querySelectorAll('[data-temp-customer]').forEach(btn => {
-      btn.onclick = () => openTempCustomerFromIntake(root, root.querySelector(`[name="customer_${btn.dataset.tempCustomer}"]`));
-    });
     bindIntakeKeyboard(root);
     bindPlaceSearch(root);
   }
@@ -6286,22 +6288,24 @@
                 <div><h2>오더 정보 입력</h2><span class="text-muted-hint">필수 항목을 입력한 뒤 대기열에 추가하세요</span></div>
               </div>
               <div class="intake-hd-meta">
-                <button type="button" class="btn btn-sm" id="excelTemplate">양식 다운로드</button>
+                <button type="button" class="btn" id="excelTemplate">양식 다운로드</button>
                 <button type="button" class="btn-excel btn-excel-sm" id="excelImport">엑셀 불러오기</button>
               </div>
             </div>
             <div class="card-bd">
               <div class="intake-layout-wrap">
                 <div class="intake-main">
-                  <div id="taskCardsList">
-                    ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(
-                      i + 1,
-                      intakeCustomerSelectOptions(root._intakeCustomerIds?.[i + 1] ?? null),
-                      null,
-                      i * 12,
-                    )).join('')}
+                  <div class="intake-main-scroll">
+                    <div id="taskCardsList">
+                      ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(
+                        i + 1,
+                        intakeCustomerSelectOptions(root._intakeCustomerIds?.[i + 1] ?? null),
+                        null,
+                        i * 12,
+                      )).join('')}
+                    </div>
+                    <button type="button" class="btn-add-task" id="addTaskCard">+ 오더 입력 폼 추가</button>
                   </div>
-                  <button type="button" class="btn-add-task" id="addTaskCard">+ 오더 입력 폼 추가</button>
                   <div class="intake-actions">
                     <span class="intake-kbd-hint inline"><kbd>Enter</kbd> 다음 항목 · 마지막 항목에서 대기열 추가</span>
                     <button type="button" class="btn-add-intake" id="addIntakeRow">대기열에 추가</button>
