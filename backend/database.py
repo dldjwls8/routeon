@@ -243,3 +243,8 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE customers ADD COLUMN IF NOT EXISTS lon FLOAT;"
         ))
+
+        # customers.contact(담당자명) 컬럼 제거
+        await conn.execute(text(
+            "ALTER TABLE customers DROP COLUMN IF EXISTS contact;"
+        ))

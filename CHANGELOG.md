@@ -6,6 +6,14 @@
 
 ---
 
+## v1.0.116 (2026-06-07)
+### 고객관리 담당자 필드 전면 제거
+- **배경**: 고객(`customers`) 테이블의 `contact` 컬럼은 "담당자명"을 저장했으나, 실제 업무 흐름에서 고객 단위 담당자를 관리하지 않고 배송(delivery) 단위의 `contact_name`/`contact_phone`을 사용함. 고객관리 화면에서 담당자 입력란이 불필요하게 남아 있어 팀원 혼란을 야기
+- **DB**: `backend/database.py` `init_db()`에 `ALTER TABLE customers DROP COLUMN IF EXISTS contact;` 추가. 기존 데이터는 삭제되며 `contact_name`/`contact_phone`은 배송 테이블에 그대로 유지
+- **백엔드 API**: `backend/models.py` `Customer.contact` 제거. `backend/routers/customers.py`에서 `CustomerCreate`·`CustomerUpdate`·`_schema()`·`create_customer()`·`update_customer()`의 `contact` 필드·할당·응답 전부 제거
+- **프론트엔드**: `frontend/dashboard.js`에서 고객 상세 "담당자" 입력란/안내 문구 제거, 고객 목록 테이블 "담당자" 컬럼 제거(colspan 5→4), 검색 placeholder "고객명·담당자" → "고객명·연락처·주소", 검색 필터에서 `c.contact` 제거, 고객 선택 시 자동 채우기 로직(`customerContactFromIntakeValue`, change 이벤트)에서 `c.contact` 참조 제거
+- **검증**: `node --check` 구문 검사, 백엔드 AST 문법 검사 통과
+
 ## v1.0.115 (2026-06-07)
 ### 경로 최적화 휴게소 삽입 알고리즘 — 경로에서 먼 휴게소가 선택돼 우회·과다 삽입되는 버그 수정
 - **원인**: `/optimize`·`/optimize/replan`이 `insert_rest_stops`에 넘기는 휴게소 후보를 DB의 활성 `highway_rest` 전체(전국 약 75곳)로 그대로 사용하고 있었음. 후보 선택(`_pick_by_type`)은 "마지막 지점→후보" GH 실측 이동 시간이 약 70~120분 범위인지, 그리고 후보가 속한 고속도로의 전체 진행 방향(`"OO기점+OO종점"` 파싱 또는 이름의 괄호 도시명)이 진행 방위각과 ±90° 이내인지만 검사해 — "후보가 실제 경로 선상에 있는지"는 전혀 검증하지 않았음. 그 결과 평행한 다른 고속도로 위의 휴게소도 시간·방향 조건을 우연히 만족하면 선택되어 차량이 본 경로에서 한참 벗어나는 우회가 발생했고("빙 돌아가서"), 우회 지점에서 다음 지점까지 다시 측정한 `remaining_after`가 기대만큼 줄지 않아 `while` 루프가 계속 반복 — 같은 전국 후보 풀에서 휴게소를 계속 추가로 삽입(수십 개)하는 문제로 이어졌음

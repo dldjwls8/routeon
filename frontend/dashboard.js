@@ -1434,7 +1434,7 @@
   function customerContactFromIntakeValue(value) {
     if (!value || value === '__add_temp__') return '';
     const c = customerById(value);
-    return c ? (c.phone || c.contact || '') : '';
+    return c ? (c.phone || '') : '';
   }
 
   function openTempCustomerModal(onSaved) {
@@ -1483,7 +1483,7 @@
         const c = customerById(selectEl.value);
         const contactInp = container.querySelector(`[name="${contactName}"]`);
         if (c && contactInp && !contactInp.value.trim()) {
-          contactInp.value = c.phone || c.contact || '';
+          contactInp.value = c.phone || '';
         }
         if (isIntakePage) {
           container._intakeCustomerIds = container._intakeCustomerIds || {};
@@ -1831,11 +1831,10 @@
       </div>
       <div class="tab-panel ${startTab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
-          <label>담당자</label><input id="custContact" value="${c.contact}" ${customerEditMode ? '' : 'disabled'}>
           <label>연락처</label><input id="custPhone" value="${c.phone}" ${customerEditMode ? '' : 'disabled'}>
           <label>주소</label><div class="place-search-wrap"><input class="place-search" id="custAddress" value="${c.address}" data-lat="${c.lat ?? ''}" data-lon="${c.lon ?? ''}" ${customerEditMode ? '' : 'disabled'}></div>
         </div>
-        ${customerEditMode ? '' : '<p class="text-muted-hint detail-lock-hint">수정 버튼을 눌러야 담당자·연락처·주소를 편집할 수 있습니다.</p>'}
+        ${customerEditMode ? '' : '<p class="text-muted-hint detail-lock-hint">수정 버튼을 눌러야 연락처·주소를 편집할 수 있습니다.</p>'}
       </div>
       <div class="tab-panel ${startTab === 'location' ? 'active' : ''}" data-panel="location">
         <p class="text-muted-hint" style="margin-bottom:10px">${escapeHtml(c.address || '등록된 주소가 없습니다.')}</p>
@@ -1854,14 +1853,12 @@
         renderPage();
         return;
       }
-      const contact = $('#custContact', root).value.trim();
       const phone   = normalizePhone($('#custPhone', root).value);
       const addressEl = $('#custAddress', root);
       const address = addressEl.value.trim();
       const res = await apiFetch(`/customers/${c.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          contact: contact || null,
           phone: phone || null,
           address: address || null,
           lat: addressEl.dataset.lat ? Number(addressEl.dataset.lat) : null,
@@ -3756,7 +3753,7 @@
     const filterChips = ['전체', '정규', '임시(당일)'];
     const allRows = DATA.customers.filter(c =>
       customerMatchesListFilter(c, customerListFilter) &&
-      (!q || c.name.includes(q) || (c.contact || '').includes(q) || (c.phone || '').includes(q))
+      (!q || c.name.includes(q) || (c.phone || '').includes(q) || (c.address || '').includes(q))
     );
     const rows = allRows.slice((customerPage - 1) * PAGE_SIZE, customerPage * PAGE_SIZE);
     const selected = selectedCustomerId ? customerById(selectedCustomerId) : null;
@@ -3769,21 +3766,21 @@
             <div class="chips" id="custFilterChips">
               ${filterChips.map(f => `<button type="button" class="chip ${customerListFilter === f ? 'active' : ''}" data-cf="${f}">${f}</button>`).join('')}
             </div>
-            <input type="search" class="search" id="custSearch" placeholder="고객명·담당자" value="${q}">
+            <input type="search" class="search" id="custSearch" placeholder="고객명·연락처·주소" value="${q}">
             <button type="button" class="btn btn-primary" id="addCust">+ 추가</button>
           </div>
           <p class="cust-filter-hint">임시(당일): 접수 시 등록한 당일 화주만 · 일자 종료 후 목록에서 숨김</p>
         </div>
         <div class="card-bd master-list-body">
           ${tableScrollWrap(`<table>
-            <thead><tr><th>고객명</th><th>담당자</th><th>연락처</th><th>주소</th><th>최근 배송</th></tr></thead>
+            <thead><tr><th>고객명</th><th>연락처</th><th>주소</th><th>최근 배송</th></tr></thead>
             <tbody>${rows.length ? rows.map(c => `
               <tr data-id="${c.id}" class="${selectedCustomerId === c.id ? 'selected' : ''}">
                 <td><strong>${c.name}</strong> ${customerTempBadgeHtml(c)}</td>
-                <td>${c.contact || '—'}</td><td>${c.phone || '—'}</td><td>${c.address || '—'}</td>
+                <td>${c.phone || '—'}</td><td>${c.address || '—'}</td>
                 <td class="recent-ship">${c.lastOrderDate || '—'}</td>
               </tr>`).join('') : `
-              <tr><td colspan="5" class="empty-hint" style="padding:16px">표시할 고객이 없습니다.</td></tr>`}
+              <tr><td colspan="4" class="empty-hint" style="padding:16px">표시할 고객이 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
           ${paginationHtml(allRows.length, customerPage, 'customers')}

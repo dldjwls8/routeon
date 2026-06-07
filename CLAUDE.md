@@ -503,7 +503,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /presets` | 관리자 | 프리셋 저장 `{name, waypoints}` |
 | `DELETE /presets/{id}` | 관리자 | 프리셋 삭제 (같은 조직만) |
 | `GET /customers` | 관리자 | 같은 조직 거래처 목록 |
-| `POST /customers` | 관리자 | 거래처 등록 `{name, contact?, phone?, address?, lat?, lon?, memo?, temporary, valid_date?}` |
+| `POST /customers` | 관리자 | 거래처 등록 `{name, phone?, address?, lat?, lon?, memo?, temporary, valid_date?}` |
 | `PATCH /customers/{id}` | 관리자 | 거래처 수정. `lat`/`lon` 명시 전달 시 `null`도 반영 |
 | `DELETE /customers/{id}` | 관리자 | 거래처 삭제 |
 | `GET /entity-events?entity_type=&entity_id=` | 관리자 | 같은 조직의 고객·기사·차량·담당자·기업 수정 기록 최신순 조회 |
@@ -656,7 +656,7 @@ dashboard.html 기업 정보 권한:
 - 프론트는 일반 관리자에게 기업 설정 입력과 수정 버튼을 잠그고, 백엔드 `PATCH /organizations/me/settings`도 `is_org_owner`가 아니면 HTTP 403을 반환한다.
 
 dashboard.html 고객관리 UI:
-- 고객 목록 행에는 별도 수정 버튼을 두지 않는다. 행 선택 시 우측 상세는 조회 전용으로 열리고 상단 `수정` 버튼을 누른 뒤에만 담당자·연락처·주소 편집과 `bindPlaceSearch()` 주소 자동완성이 활성화된다. 수정 모드가 아닐 때는 기사·차량 상세와 동일하게 `disabled` 입력란을 흐리게 표시(`.inline-detail-bd input:disabled`)하고 `detail-lock-hint` 안내 문구로 잠금 상태를 시각적으로 알린다. 정보/위치 등 어떤 상세 탭에 있어도 `수정` 버튼을 눌렀을 때 현재 탭이 유지된다(모든 탭에 동일한 클릭 리스너를 건다).
+- 고객 목록 행에는 별도 수정 버튼을 두지 않는다. 행 선택 시 우측 상세는 조회 전용으로 열리고 상단 `수정` 버튼을 누른 뒤에만 연락처·주소 편집과 `bindPlaceSearch()` 주소 자동완성이 활성화된다. 수정 모드가 아닐 때는 기사·차량 상세와 동일하게 `disabled` 입력란을 흐리게 표시(`.inline-detail-bd input:disabled`)하고 `detail-lock-hint` 안내 문구로 잠금 상태를 시각적으로 알린다. 정보/위치 등 어떤 상세 탭에 있어도 `수정` 버튼을 눌렀을 때 현재 탭이 유지된다(모든 탭에 동일한 클릭 리스너를 건다).
 - 고객 주소칸은 `data-place-value="address"` 분기를 사용해 자동완성 선택 시 장소명 대신 도로명주소/지번주소를 우선 입력하고, `customers.lat`/`customers.lon`에 좌표를 함께 저장한다.
 - 별도 `고객 위치` 하위 탭은 두지 않는다. 고객 행을 선택한 뒤 우측 상세의 `위치` 탭에서 고객 마스터 `lat`/`lon` 기준 지도 마커를 표시하며, 좌표가 없으면 주소 자동완성으로 먼저 등록하도록 안내한다.
 - 고객·기사·차량 상세의 위치 지도는 캔버스 DOM 요소에 `_kakaoMap`/`_kakaoMarker` 인스턴스를 보관해 재사용한다(`initCustomerDetailMap`/`initDriverDetailMap`/`initVehicleDetailMap`). `위치` 탭을 다시 누를 때마다 같은 캔버스에 `new kakao.maps.Map`을 생성하면 지도 타일이 중첩 렌더링되므로, 이미 인스턴스가 있으면 중심·마커 좌표만 갱신하고 `resize` 이벤트만 트리거한다. 기사 상세는 기사 본인의 마지막 GPS(`DATA.drivers[].last_lat`/`last_lon`, `GET /users` 응답의 `last_gps` — `locations` 테이블에서 해당 기사의 최신 기록을 조회), 차량 상세는 차량 자체 `last_gps`(`vehicles.last_lat`/`last_lon`) 좌표를 표시하며 좌표가 없으면 안내 문구를 보여준다. 기사와 차량의 위치는 서로 다른 주체이므로 기사 위치 지도에 배정 차량의 GPS를 사용하지 않는다.

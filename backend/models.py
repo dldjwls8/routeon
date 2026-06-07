@@ -403,7 +403,6 @@ class Customer(Base):
     id              = Column(Integer, primary_key=True, autoincrement=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     name            = Column(String(100), nullable=False)
-    contact         = Column(String(100))      # 담당자명
     phone           = Column(String(20))
     address         = Column(String(255))
     lat             = Column(Float)

@@ -22,6 +22,8 @@
 
 ## 테이블 구조
 
+> v1.0.116는 `customers.contact`(담당자명) 컬럼을 제거한다. 고객관리 화면과 API에서 담당자 입력·응답·검색을 완전히 제거하며, 배송(delivery) 단위의 `contact_name`/`contact_phone`은 그대로 유지된다. `backend/database.py` `init_db()`에 `ALTER TABLE customers DROP COLUMN IF EXISTS contact;`를 추가해 앱 시작 시 컬럼이 자동 제거되도록 한다.
+
 > v1.0.115는 DB 구조·데이터 변경이 없는 백엔드 알고리즘 버그 수정이다. `/optimize`·`/optimize/replan`이 휴게소 자동 삽입 시 `rest_stops`의 활성 `highway_rest`(전국 75건)를 거리 필터 없이 통째로 후보로 사용해, 실제 경로와 무관한 먼 지역 휴게소가 선택되어 우회·과다 삽입되는 문제가 있었다. GraphHopper 전환 때 추가됐지만 연결되지 않았던 `filter_rest_by_route()`(경로 폴리라인 15km 이내로 후보 제한)를 `optimize`/`replan`에 연결해 수정했으며, `rest_stops` 테이블·시드 데이터·쿼리 조건(활성 `highway_rest`)은 그대로다 — 휴게소 *후보 선택 로직*만 경로 인접성 기준으로 좁혔다.
 
 > v1.0.114는 DB 구조·데이터 변경이 없는 순수 프론트엔드 UI/UX 버그 수정이다. 차량 상세 `마지막 GPS` 필드와 담당자 상세 비활성 입력란의 표시 스타일 통일, `theme-app` 페이지(차량·담당자·기업정보·고객관리·간트) footer 위치 버그 수정(`.content` flex 패턴 변경), 대시보드 `.dash-layout` 화면 비율 변경 시 콘텐츠가 잘리던 문제 수정(`overflow-y: auto`), 배차관리 `기사·차량 선택` 카드를 `미배정 오더`와 동일한 표 구조로 통일하고 `bulk-assign-bar`(선택 건수·배차 실행 버튼)를 `배차 결과` 컨테이너로 이동 — 모두 `dashboard.js`/`dashboard.css`의 마크업·CSS 레이아웃 조정이며 테이블·컬럼·제약·시드 데이터 변경은 전혀 없다.
@@ -312,8 +314,8 @@
 | `id` | INTEGER | PK AUTOINCREMENT | |
 | `organization_id` | INTEGER | FK → organizations.id | 소속 조직 |
 | `name` | VARCHAR(100) | NOT NULL | 거래처명 |
-| `contact` | VARCHAR(100) | NULLABLE | 담당자명 |
 | `phone` | VARCHAR(20) | NULLABLE | 연락처 |
+| `address` | VARCHAR(255) | NULLABLE | 주소 |
 | `address` | VARCHAR(255) | NULLABLE | 주소 |
 | `lat` | FLOAT | NULLABLE | 고객 주소 위도. 고객관리 주소 자동완성 선택 시 저장 |
 | `lon` | FLOAT | NULLABLE | 고객 주소 경도. 고객관리 주소 자동완성 선택 시 저장 |

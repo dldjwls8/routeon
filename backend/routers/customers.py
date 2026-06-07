@@ -17,7 +17,6 @@ router = APIRouter()
 
 class CustomerCreate(BaseModel):
     name:       str
-    contact:    Optional[str]  = None
     phone:      Optional[str]  = None
     address:    Optional[str]  = None
     lat:        Optional[float] = None
@@ -29,7 +28,6 @@ class CustomerCreate(BaseModel):
 
 class CustomerUpdate(BaseModel):
     name:       Optional[str]  = None
-    contact:    Optional[str]  = None
     phone:      Optional[str]  = None
     address:    Optional[str]  = None
     lat:        Optional[float] = None
@@ -43,7 +41,6 @@ def _schema(c: Customer) -> dict:
     return {
         "id":         c.id,
         "name":       c.name,
-        "contact":    c.contact,
         "phone":      c.phone,
         "address":    c.address,
         "lat":        c.lat,
@@ -86,7 +83,6 @@ async def create_customer(
     c = Customer(
         organization_id = current_user.organization_id,
         name            = req.name.strip(),
-        contact         = req.contact,
         phone           = normalize_phone(req.phone),
         address         = req.address,
         lat             = req.lat,
@@ -130,7 +126,6 @@ async def update_customer(
 
     before = _schema(c)
     if req.name     is not None: c.name     = req.name.strip()
-    if req.contact  is not None: c.contact  = req.contact
     sent_fields = getattr(req, "model_fields_set", getattr(req, "__fields_set__", set()))
     if req.phone    is not None: c.phone    = normalize_phone(req.phone)
     if req.address  is not None: c.address  = req.address
