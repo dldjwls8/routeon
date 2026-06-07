@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RouteOn 개인정보 처리방침</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#0c0e12; --surface:#171b23; --card:#1c2029; --border:rgba(255,255,255,.1); --text:#e8eaef; --muted:#8b93a7; --lime:#c6f135; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { min-height: 100vh; background: var(--bg); color: var(--text); font-family: 'Noto Sans KR', sans-serif; line-height: 1.7; }
+    header { border-bottom: 1px solid var(--border); background: rgba(12,14,18,.92); position: sticky; top: 0; backdrop-filter: blur(12px); }
+    nav { max-width: 980px; margin: 0 auto; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { color: var(--text); text-decoration: none; font-weight: 800; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .nav-links a, .back-link { color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 7px 11px; font-size: 13px; font-weight: 600; }
+    .nav-links a:hover, .back-link:hover { color: var(--text); border-color: rgba(198,241,53,.35); }
+    main { max-width: 980px; margin: 0 auto; padding: 52px 24px 64px; }
+    .eyebrow { color: var(--lime); font-size: 12px; font-weight: 800; letter-spacing: .08em; margin-bottom: 10px; }
+    h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.15; margin-bottom: 14px; }
+    .lead { color: var(--muted); max-width: 720px; margin-bottom: 28px; }
+    section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-top: 14px; }
+    h2 { font-size: 18px; margin-bottom: 10px; }
+    p, li { color: var(--muted); font-size: 14px; }
+    ul { padding-left: 18px; }
+    strong { color: var(--text); }
+    footer { border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; padding: 24px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <a class="brand" href="/index.html">RouteOn</a>
+      <div class="nav-links">
+        <a href="/terms.html">이용약관</a>
+        <a href="/copyright.html">저작권 안내</a>
+        <a href="/contact.html">문의</a>
+      </div>
+    </nav>
+  </header>
+  <main>
+    <div class="eyebrow">PRIVACY</div>
+    <h1>개인정보 처리방침</h1>
+    <p class="lead">RouteOn은 졸업작품 시연 및 기능 검증에 필요한 범위에서만 개인정보와 운행 관련 데이터를 다룹니다. 실제 운영 전까지 테스트 데이터 사용을 원칙으로 합니다.</p>
+
+    <section>
+      <h2>1. 처리하는 정보</h2>
+      <ul>
+        <li>계정 정보: 로그인 ID, 이름, 이메일, 전화번호, 역할, 소속 기업</li>
+        <li>기사 정보: 면허번호, 차량 연결 정보, 기사 상태, 위치 로그</li>
+        <li>운영 정보: 오더 주소, 담당자 연락처, 화물 정보, 배차·운행 이력</li>
+        <li>시스템 정보: 로그인 토큰, 채팅 메시지, 오류 재현에 필요한 요청 기록</li>
+      </ul>
+    </section>
+    <section>
+      <h2>2. 이용 목적</h2>
+      <ul>
+        <li>계정 인증 및 권한 확인</li>
+        <li>기업·기사 승인, 차량·오더 관리, 배차 생성</li>
+        <li>기사 앱 운행 목록, 위치 표시, 취소 요청 처리</li>
+        <li>오류 분석, 기능 개선, 발표 시연 준비</li>
+      </ul>
+    </section>
+    <section>
+      <h2>3. 보관 및 삭제</h2>
+      <p>프로젝트 운영, 발표, 검증 기간 동안 데이터를 보관할 수 있습니다. 불필요하거나 잘못 입력된 테스트 데이터는 관리자 요청에 따라 삭제 또는 정리할 수 있습니다.</p>
+    </section>
+    <section>
+      <h2>4. 위치 정보</h2>
+      <p>기사 앱에서 전송되는 위치 정보는 운행 상태 확인, 차량 위치 표시, GPS 기반 완료 검증을 위해 사용됩니다. 시연 환경에서는 실제 운행자의 지속 위치 추적 용도로 사용하지 않습니다.</p>
+    </section>
+    <section>
+      <h2>5. 제3자 제공</h2>
+      <p>개인정보를 외부 상업 서비스에 판매하거나 제공하지 않습니다. 지도, 주소 검색, 경로 계산 등 외부 API 사용 시 해당 API 제공자의 정책이 함께 적용될 수 있습니다.</p>
+    </section>
+    <section>
+      <h2>6. 문의</h2>
+      <p>개인정보 정정·삭제 또는 계정 접근 문제는 <a class="back-link" href="/contact.html">문의 페이지</a>를 통해 요청할 수 있습니다.</p>
+    </section>
+  </main>
+  <footer>© 2026 RouteOn Team. 졸업작품 프로젝트.</footer>
+</body>
+</html>

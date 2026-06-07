@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>루트온 — 회원가입</title>
+  <script>
+    (function () {
+      var s = localStorage.getItem('theme');
+      var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', s || (d ? 'dark' : 'light'));
+    })();
+  </script>
+  <style>
+    :root {
+      --lime: #c6f135;
+      --t-bg: #0c0e12;
+      --t-card: #1c2029;
+      --t-border: rgba(255,255,255,.08);
+      --t-border-section: rgba(255,255,255,.06);
+      --t-text: #e8eaef;
+      --t-text-strong: #f3f4f6;
+      --t-text-muted: #8b93a7;
+      --t-text-label: #c5cad6;
+      --t-input-bg: #151820;
+      --t-info-bg: rgba(198,241,53,.06);
+      --t-info-border: rgba(198,241,53,.3);
+      --t-info-text: #c5cad6;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --t-bg: #f5f7fa;
+      --t-card: #ffffff;
+      --t-border: #e2e8f0;
+      --t-border-section: #eef0f3;
+      --t-text: #1e2230;
+      --t-text-strong: #0f1117;
+      --t-text-muted: #5c6478;
+      --t-text-label: #374151;
+      --t-input-bg: #f8fafc;
+      --t-info-bg: #fffde8;
+      --t-info-border: #FFE812;
+      --t-info-text: #555;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; background: var(--t-bg); font-family: 'Malgun Gothic', sans-serif; }
+    .auth-card { background: var(--t-card); padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.2); width: 420px; border: 1px solid var(--t-border); }
+    .logo-img { height: 40px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
+    h2 { margin: 0 0 6px 0; color: var(--t-text-strong); text-align: center; }
+    .subtitle { text-align: center; color: var(--t-text-muted); font-size: 13px; margin-bottom: 24px; }
+    .section-label { font-size: 11px; font-weight: bold; color: var(--t-text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--t-border-section); }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; margin-bottom: 5px; font-size: 13px; color: var(--t-text-label); font-weight: bold; }
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="password"] {
+      width: 100%; padding: 11px; border: 1px solid var(--t-border); border-radius: 6px; font-size: 14px;
+      background: var(--t-input-bg); color: var(--t-text); outline: none;
+    }
+    input[type="text"]::placeholder,
+    input[type="email"]::placeholder,
+    input[type="tel"]::placeholder,
+    input[type="password"]::placeholder { color: var(--t-text-muted); }
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="tel"]:focus,
+    input[type="password"]:focus { border-color: var(--lime); }
+    input[type="file"] { display: none; }
+    .file-drop {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      width: 100%; padding: 20px 16px;
+      border: 1.5px dashed var(--t-border); border-radius: 8px;
+      cursor: pointer; text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .file-drop:hover { border-color: var(--lime); background: rgba(198,241,53,.04); }
+    .file-drop.has-file { border-color: var(--lime); background: rgba(198,241,53,.06); border-style: solid; }
+    .file-drop-icon { font-size: 22px; line-height: 1; }
+    .file-drop-text { font-size: 13px; color: var(--t-text-muted); font-weight: 500; word-break: break-all; }
+    .file-drop.has-file .file-drop-text { color: var(--t-text); }
+    .file-drop-hint { font-size: 11px; color: var(--t-text-muted); opacity: 0.7; }
+    .btn-submit { width: 100%; padding: 14px; background: var(--lime); color: #111; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 14px; }
+    .btn-submit:hover { background: #a8d42e; }
+    .link { display: block; margin-top: 16px; font-size: 13px; color: var(--t-text-muted); text-decoration: none; text-align: center; }
+    .link:hover { color: var(--t-text); text-decoration: underline; }
+    .error-msg { color: #f87171; font-size: 12px; margin-top: 5px; display: none; }
+    .info-box { background: var(--t-info-bg); border: 1px solid var(--t-info-border); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--t-info-text); margin-bottom: 20px; line-height: 1.6; }
+    .join-type { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 20px; background: var(--t-input-bg); border: 1px solid var(--t-border); border-radius: 8px; }
+    .join-type button { padding: 10px; border: 0; border-radius: 5px; background: transparent; color: var(--t-text-muted); font-weight: bold; cursor: pointer; }
+    .join-type button.active { background: var(--t-card); color: var(--t-text-strong); box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <img src="./routeon_logo.png" alt="RouteOn Logo" class="logo-img">
+    <h2 id="formTitle">기업 등록</h2>
+    <p class="subtitle" id="formSubtitle">루트온 서비스를 시작하려면 기업을 먼저 등록하세요</p>
+
+    <div class="join-type" role="tablist" aria-label="가입 유형">
+      <button type="button" class="active" data-mode="company">기업 등록</button>
+      <button type="button" data-mode="admin">관리자 가입</button>
+    </div>
+
+    <div class="info-box" id="infoBox">
+      서류 심사 완료 후 조직코드가 활성화됩니다.<br>
+      최초 계정은 최상위 기업관리자로 등록됩니다.
+    </div>
+
+    <form id="registerForm">
+      <div id="companyFields">
+        <div class="section-label">기업 정보</div>
+
+        <div class="form-group">
+          <label>기업명</label>
+          <input type="text" id="orgName" required placeholder="예: (주)루트물류">
+        </div>
+      </div>
+
+      <div id="adminOrgFields" hidden>
+        <div class="section-label">소속 기업</div>
+        <div class="form-group">
+          <label>조직코드</label>
+          <input type="text" id="orgCode" placeholder="예: RT-ABC123">
+        </div>
+      </div>
+
+      <div class="section-label">계정 정보</div>
+
+      <div class="form-group">
+        <label>이름</label>
+        <input type="text" id="name" required placeholder="이름 입력">
+      </div>
+
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="username" required placeholder="아이디 입력">
+      </div>
+
+      <div class="form-group">
+        <label>이메일</label>
+        <input type="email" id="email" required placeholder="admin@company.com">
+      </div>
+
+      <div class="form-group">
+        <label>휴대전화 번호</label>
+        <input type="tel" id="phone" required placeholder="010-0000-0000">
+      </div>
+
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="password" required placeholder="비밀번호 입력">
+        <div id="pwd-error" class="error-msg">비밀번호는 4자 이상이어야 합니다.</div>
+      </div>
+
+      <div class="form-group">
+        <label>비밀번호 확인</label>
+        <input type="password" id="passwordConfirm" required placeholder="비밀번호 다시 입력">
+        <div id="pwd-match-error" class="error-msg">비밀번호가 일치하지 않습니다.</div>
+      </div>
+
+      <div id="documentFields">
+        <div class="section-label">사업자 서류</div>
+
+        <div class="form-group">
+          <label>첨부 파일 (사업자등록증 등)</label>
+          <label class="file-drop" for="docFile">
+            <span class="file-drop-icon">파일</span>
+            <span class="file-drop-text" id="fileLabel">클릭하여 파일 선택</span>
+            <span class="file-drop-hint">PDF · JPG · PNG / 최대 10MB</span>
+          </label>
+          <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required>
+          <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitButton">기업 등록 신청</button>
+    </form>
+
+    <a href="/login" class="link">이미 계정이 있으신가요? 로그인</a>
+  </div>
+
+  <script>
+    const API = (() => {
+      const h = location.hostname;
+      if (!h || h === 'localhost' || h === '127.0.0.1') return 'http://localhost:8000';
+      if (location.port && location.port !== '80' && location.port !== '443') return `${location.protocol}//${h}:8000`;
+      return `${location.protocol}//${location.host}/api`;
+    })();
+
+    let registerMode = 'company';
+
+    document.querySelectorAll('[data-mode]').forEach(button => {
+      button.addEventListener('click', () => {
+        registerMode = button.dataset.mode;
+        document.querySelectorAll('[data-mode]').forEach(item => item.classList.toggle('active', item === button));
+        const isCompany = registerMode === 'company';
+        document.getElementById('companyFields').hidden = !isCompany;
+        document.getElementById('documentFields').hidden = !isCompany;
+        document.getElementById('adminOrgFields').hidden = isCompany;
+        document.getElementById('orgName').required = isCompany;
+        document.getElementById('docFile').required = isCompany;
+        document.getElementById('orgCode').required = !isCompany;
+        document.getElementById('formTitle').textContent = isCompany ? '기업 등록' : '관리자 가입';
+        document.getElementById('formSubtitle').textContent = isCompany
+          ? '루트온 서비스를 시작하려면 기업을 먼저 등록하세요'
+          : '소속 기업의 조직코드로 관리자 가입을 신청하세요';
+        document.getElementById('infoBox').innerHTML = isCompany
+          ? '서류 심사 완료 후 조직코드가 활성화됩니다.<br>최초 계정은 최상위 기업관리자로 등록됩니다.'
+          : '기업의 승인 정책에 따라 즉시 승인되거나 승인 대기 상태로 접수됩니다.';
+        document.getElementById('submitButton').textContent = isCompany ? '기업 등록 신청' : '관리자 가입 신청';
+      });
+    });
+
+    document.getElementById('docFile').addEventListener('change', function () {
+      const label = document.getElementById('fileLabel');
+      const drop = document.querySelector('.file-drop');
+      if (this.files[0]) {
+        label.textContent = this.files[0].name;
+        drop.classList.add('has-file');
+      } else {
+        label.textContent = '클릭하여 파일 선택';
+        drop.classList.remove('has-file');
+      }
+    });
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (!localStorage.getItem('theme')) document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    });
+
+    function formatPhone(value) {
+      const digits = value.replace(/\D/g, '').slice(0, 11);
+      if (digits.length <= 3) return digits;
+      if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+      if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+      return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+    }
+
+    document.getElementById('phone').addEventListener('input', function () {
+      this.value = formatPhone(this.value);
+    });
+
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const orgName         = document.getElementById('orgName').value.trim();
+      const orgCode         = document.getElementById('orgCode').value.trim().toUpperCase();
+      const name            = document.getElementById('name').value.trim();
+      const username        = document.getElementById('username').value.trim();
+      const email           = document.getElementById('email').value.trim();
+      const phone           = document.getElementById('phone').value.trim();
+      const password        = document.getElementById('password').value;
+      const passwordConfirm = document.getElementById('passwordConfirm').value;
+
+      document.getElementById('pwd-error').style.display       = 'none';
+      document.getElementById('pwd-match-error').style.display = 'none';
+      document.getElementById('file-error').style.display      = 'none';
+
+      if (password.length < 4) {
+        document.getElementById('pwd-error').style.display = 'block';
+        return;
+      }
+      if (password !== passwordConfirm) {
+        document.getElementById('pwd-match-error').style.display = 'block';
+        return;
+      }
+
+      if (registerMode === 'admin') {
+        const res = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username, password, phone, name, email,
+            org_code: orgCode,
+            role: 'admin'
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.account_status === 'approved'
+            ? '관리자 가입이 승인되었습니다.\n바로 로그인할 수 있습니다.'
+            : '관리자 가입 신청이 접수되었습니다.\n최상위 기업관리자의 승인 후 로그인할 수 있습니다.');
+          window.location.href = '/login.html';
+        } else {
+          alert(data.detail || '가입 신청에 실패했습니다.');
+        }
+        return;
+      }
+
+      const docFile = document.getElementById('docFile').files[0];
+      if (!docFile) {
+        document.getElementById('file-error').style.display = 'block';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('name',     orgName);
+      formData.append('username', username);
+      formData.append('password', password);
+      formData.append('phone',    phone);
+      formData.append('email',    email);
+      formData.append('admin_name', name);
+      formData.append('doc_file', docFile);
+
+      const res = await fetch(`${API}/organizations`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(
+          `🎉 기업 등록 신청 완료!\n\n` +
+          `기업명: ${data.org_name || orgName}\n\n` +
+          `서류 심사 후 이용 가능합니다.\n심사 완료 시 로그인하여 조직코드를 확인해주세요.`
+        );
+        window.location.href = '/login.html';
+      } else {
+        alert(data.detail || '등록에 실패했습니다.');
+      }
+    });
+  </script>
+</body>
+</html>

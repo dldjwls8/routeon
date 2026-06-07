@@ -6,6 +6,15 @@
 
 ---
 
+## v1.0.119 (2026-06-07)
+### CLAUDE.md 디렉터리 구조 정확화
+- **`frontend/` 레거시 간략화**: 기존 15줄로 상세히 나열되던 `frontend/` 디렉터리 구조를 4줄로 축약하고 "레거시 관리자 웹 (Vue 마이그레이션 전 정적 HTML, 유지보수 모드)"임을 명시
+- **`frontend-vue/` 실제 파일 목록 반영**: `...`로 축약되어 있던 `frontend-vue/src/` 하위를 실제 파일 목록으로 전면 교체
+  - 누락되었던 `src/api/client.js`, `src/components/PageChrome.vue`, `src/constants.js`, `src/assets/dashboard.css` 추가
+  - `src/views/` 하위 20개 뷰 전체 나열 — `ControlLiveView.vue`, `DashboardView.vue`, `DispatchManageView.vue`, `OrderIntakeView.vue`, `OrderListView.vue`, `CustomerListView.vue`, `DriversView.vue`, `VehiclesView.vue`, `StaffView.vue`, `ScheduleCalendarView.vue`, `ScheduleGanttView.vue`, `ScheduleMilestonesView.vue`, `TripStatsView.vue`, `ProfileView.vue` 등
+  - `public/` 하위 레거시 HTML 파일들도 `*.html`로 묶어 표시
+- **DB 변경 없음**: 문서 수정만 해당, 백엔드·DB·프론트엔드 코드 변경 없음
+
 ## v1.0.118 (2026-06-07)
 ### 운행관제 탭 실시간 폴리라인 기능 구현
 - **배경**: 기존 지도중심 웹 관제에서 차량별 운행 경로를 폴리라인으로 표시하는 기능이 있었으나, Vue 3 마이그레이션 후 운행관제(`control-live`) 탭에서는 폴리라인이 구현되지 않아 차량 클릭 시 단순히 지도 중심만 이동했음. 실시간 GPS 수신에 따라 "지나간 길"과 "남은 길"을 구분해 시각적으로 표시할 필요가 있었음

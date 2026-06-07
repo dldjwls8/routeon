@@ -84,47 +84,54 @@ routeon/
 │       ├── 공영차고지정보_260325.xls
 │       ├── 물류단지정보_260325.xls
 │       └── 물류창고정보_260325.xls  (미사용 — 5,825건, 휴식지 부적합)
-└── frontend/
-    ├── index.html          랜딩 페이지
-    ├── intro.html          서비스 소개
-    ├── login.html
-    ├── register.html       기업 등록 또는 일반 관리자 가입 신청
-    ├── dashboard.html      관리자 대시보드 HTML 껍데기 (65줄)
-    ├── dashboard.css       대시보드 스타일 (dashboard.html에서 분리)
-    ├── dashboard.js        대시보드 JS 로직 (dashboard.html에서 분리)
-    ├── api-client.js       API/WS 주소·토큰·인증 헤더·공용 fetch
-    ├── drivers.html        레거시 진입점 → dashboard.html?main=basic&page=drivers
-    ├── vehicles.html       레거시 진입점 → dashboard.html?main=basic&page=vehicles
-    ├── stats.html          레거시 진입점 → dashboard.html?main=schedule&page=trip-stats
-    ├── settings.html       관리자 프로필·계정 보안·탈퇴·화면 테마 설정
-    ├── superadmin.html     슈퍼 관리자 (기업 심사·전역 운영 설정)
-    ├── terms.html          이용약관 안내
-    ├── privacy.html        개인정보 처리방침 안내
-    ├── copyright.html      저작권 안내
-    └── contact.html        프로젝트 문의 안내
-├── frontend-vue/           Vue 3 + Vite SPA 관리자 웹 (기존 frontend/ 마이그레이션)
-│   ├── index.html          SPA 진입점 (legacy scripts + Vue app mount)
-│   ├── vite.config.js      Vite 빌드 설정
-│   ├── package.json        의존성 (vue, vue-router, vite)
-│   ├── public/
-│   │   ├── dashboard.js    레거시 대시보드 로직 (6,989줄 그대로 보존, IIFE로 init() 노출)
-│   │   ├── api-client.js   API/WS 주소·토큰·인증 헤더·공용 fetch
-│   │   └── ...             정적 에셋 (logo, HTML 템플릿)
-│   └── src/
-│       ├── main.js         Vue 앱 생성·라우터 등록·레거시 양방향 동기화
-│       ├── App.vue         대시보드/비대시보드 레이아웃 분기 (DashboardLayout 조건부 wrapping)
-│       ├── router/
-│       │   └── index.js    Vue Router 경로 정의·meta.main·meta.label
-│       ├── layouts/
-│       │   └── DashboardLayout.vue  대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container)
-│       └── views/
-│           ├── IndexView.vue       랜딩 페이지
-│           ├── LoginView.vue       로그인
-│           ├── RegisterView.vue    기업/관리자 가입
-│           ├── SettingsView.vue    계정 설정
-│           ├── ChatView.vue        내부 채팅
-│           ├── IntroView.vue       서비스 소개
-│           └── ...                 기타 정적 페이지
+├── frontend/               레거시 관리자 웹 (Vue 마이그레이션 전 정적 HTML, 유지보수 모드)
+│   ├── dashboard.html      통합 대시보드 진입점
+│   ├── dashboard.js        레거시 대시보드 로직 (~7,000줄 IIFE)
+│   └── ...                 기타 정적 페이지 (login, register, settings, superadmin 등)
+└── frontend-vue/           Vue 3 + Vite SPA 관리자 웹 (현재 활성 개발 대상)
+    ├── index.html            SPA 진입점 (legacy scripts + Vue app mount)
+    ├── vite.config.js        Vite 빌드 설정
+    ├── package.json          의존성 (vue, vue-router, vite)
+    ├── public/               레거시 정적 에셋 (Nginx가 그대로 서빙)
+    │   ├── dashboard.js      레거시 대시보드 로직 (6,989줄 그대로 보존, IIFE로 init() 노출)
+    │   ├── api-client.js     API/WS 주소·토큰·인증 헤더·공용 fetch
+    │   ├── *.html            레거시 진입점 (login, register, settings, chat, superadmin, terms, privacy, contact, driver, drivers, vehicles, stats)
+    │   └── routeon_logo.png
+    └── src/
+        ├── main.js           Vue 앱 생성·라우터 등록·레거시 양방향 동기화
+        ├── App.vue           대시보드/비대시보드 레이아웃 분기 (DashboardLayout 조건부 wrapping)
+        ├── constants.js      프론트엔드 상수 (API_BASE, WS_BASE 등)
+        ├── api/
+        │   └── client.js     axios 기반 API 클라이언트 (interceptors, 인증 헤더)
+        ├── router/
+        │   └── index.js      Vue Router 경로 정의·meta.main·meta.label
+        ├── layouts/
+        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container)
+        ├── components/
+        │   └── PageChrome.vue        페이지 공통 크롬 (뒤로가기·타이틀·액션바 래퍼)
+        ├── assets/
+        │   └── dashboard.css   레거시 대시보드 스타일 (dashboard.js와 동일한 CSS 변수·클래스)
+        └── views/
+            ├── IndexView.vue            랜딩 페이지
+            ├── IntroView.vue            서비스 소개
+            ├── LoginView.vue            로그인
+            ├── RegisterView.vue         기업/관리자 가입
+            ├── SettingsView.vue         계정 설정
+            ├── ProfileView.vue          프로필
+            ├── ChatView.vue             내부 채팅
+            ├── DashboardView.vue        대시보드 메인
+            ├── ControlLiveView.vue      운행관제 (실시간 GPS + 폴리라인)
+            ├── OrderIntakeView.vue      오더접수
+            ├── OrderListView.vue        오더목록
+            ├── DispatchManageView.vue   배차관리
+            ├── CustomerListView.vue     고객관리
+            ├── DriversView.vue          기사관리
+            ├── VehiclesView.vue         차량관리
+            ├── StaffView.vue            담당자관리
+            ├── ScheduleCalendarView.vue     일정 캘린더
+            ├── ScheduleGanttView.vue        일정 간트
+            ├── ScheduleMilestonesView.vue   일정 마일스톤
+            └── TripStatsView.vue            운행통계
 ```
 
 ### 컨테이너
