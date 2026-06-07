@@ -481,7 +481,7 @@
           const eventDate = (t.started_at || t.created_at || '').split('T')[0];
           if (eventDate) {
             DATA.scheduleEvents.push({
-              date: eventDate, type: 'trip',
+              date: eventDate, datetime: t.started_at || t.created_at || '', type: 'trip',
               label: `${d?.name || '기사'} · ${_tripLabel[t.status] || t.status}`,
               orderId: t.id.slice(0, 8),
             });
@@ -624,10 +624,11 @@
         }));
         // 캘린더에 오더 이벤트 추가
         deliveries.forEach(d => {
-          const eventDate = (d.deadline || d.created_at || '').split('T')[0];
+          const eventTime = d.deadline || d.created_at || '';
+          const eventDate = eventTime.split('T')[0];
           if (eventDate) {
             DATA.scheduleEvents.push({
-              date: eventDate, type: 'order',
+              date: eventDate, datetime: eventTime, type: 'order',
               label: d.address || '배송',
               orderId: displayOrderNo({ id: d.id, created_at: d.created_at }),
             });
@@ -772,6 +773,11 @@
   let selectedStaffId = null;
   let customerDetailTab = 'info';
   let customerEditMode = false;
+  let driverEditMode = false;
+  let vehicleEditMode = false;
+  let staffEditMode = false;
+  let orderEditMode = false;
+  let profileEditMode = false;
   let orderFilter = '전체';
   let customerListFilter = '전체';
   const PAGE_SIZE = 20;
@@ -783,7 +789,13 @@
   let vehicleSearch = '';
   let customerSearch = '';
   let orderSearch = '';
-  let ganttDate = new Date().toISOString().slice(0, 10);
+  const localDateValue = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  let ganttDate = localDateValue();
   let statsPeriod = '주';
   let calendarYear  = new Date().getFullYear();
   let calendarMonth = new Date().getMonth() + 1;
@@ -842,6 +854,7 @@
       return;
     }
     if (page === 'bulk-dispatch' || page === 'dispatch-assign') page = 'dispatch-manage';
+    if (currentPage === 'control-live' && page !== 'control-live') selectedControlVehicleId = null;
     if (isMapPage(currentPage) && !isMapPage(page)) hideLiveMap();
     currentMain = main;
     const group = NAV.find(g => g.id === main);
@@ -1121,8 +1134,10 @@
       : 'GPS 미수신';
     return `
       <label>마지막 GPS <span class="badge badge-muted">읽기 전용</span></label>
-      <p style="margin:0;font-size:13px">${coord} · 갱신 ${vehicleLastGpsAt(v)}</p>
-      <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">관리자 입력 없음 · 앱 위치 로그 기준</p>`;
+      <div>
+        <p style="margin:0;font-size:13px">${coord} · 갱신 ${vehicleLastGpsAt(v)}</p>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">관리자 입력 없음 · 앱 위치 로그 기준</p>
+      </div>`;
   }
 
   function driverById(id) {
@@ -1505,6 +1520,32 @@
     downloadBlob(`routeon_order_intake_template_${todayStr()}.csv`, 'text/csv;charset=utf-8', csv);
   }
 
+  function downloadTripStatsExcel() {
+    const rows = DATA.statsTrips.map(t => ({
+      '운행 번호': `운행 ${String(t.id || '').slice(0, 8)}`,
+      '기사': t.driver || '미배정',
+      '차량': t.plate || (t.vehicleId ? vehicleById(t.vehicleId)?.plate : '') || '미배정',
+      '운행 일자': t.date || '',
+      '상태': t.status || '',
+      '안전 점검': t.safety || '',
+      '상차 체류': t.dwellPickup || '',
+      '하차 체류': t.dwellDelivery || '',
+      '남은 정류': t.remainingStops ?? '',
+    }));
+    if (window.XLSX) {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), '사후통계');
+      XLSX.writeFile(wb, `routeon_trip_stats_${todayStr()}.xlsx`);
+      return;
+    }
+    const headers = Object.keys(rows[0] || { '운행 번호': '' });
+    const csv = '\ufeff' + [
+      headers.join(','),
+      ...rows.map(row => headers.map(key => `"${String(row[key] ?? '').replaceAll('"', '""')}"`).join(',')),
+    ].join('\n');
+    downloadBlob(`routeon_trip_stats_${todayStr()}.csv`, 'text/csv;charset=utf-8', csv);
+  }
+
   function excelDateTimeValue(value) {
     if (value instanceof Date) {
       return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}T${String(value.getHours()).padStart(2,'0')}:${String(value.getMinutes()).padStart(2,'0')}`;
@@ -1646,6 +1687,7 @@
 
   function inlineDetailCardHtml(title, bodyHtml, opts = {}) {
     const saveLabel = opts.saveLabel || '저장';
+    const secondaryAction = opts.secondaryAction || '';
     return `
       <div class="card inline-detail" id="inlineDetail">
         <div class="card-hd inline-detail-hd">
@@ -1654,7 +1696,7 @@
         </div>
         <div class="card-bd inline-detail-bd">${bodyHtml}</div>
         <div class="inline-detail-footer">
-          <span></span>
+          <div class="inline-detail-secondary">${secondaryAction}</div>
           <button type="button" class="btn btn-primary btn-sm" id="inlineDetailSave">${saveLabel}</button>
         </div>
       </div>`;
@@ -1673,13 +1715,19 @@
       }
     };
     let composing = false;
+    let skipNextInput = false;
     input.addEventListener('compositionstart', () => { composing = true; });
     input.addEventListener('compositionend', (event) => {
       composing = false;
+      skipNextInput = true;
       onValue(event.target.value);
       renderAndRestore();
     });
     input.addEventListener('input', (event) => {
+      if (skipNextInput) {
+        skipNextInput = false;
+        return;
+      }
       onValue(event.target.value);
       if (!composing && !event.isComposing) renderAndRestore();
     });
@@ -1783,10 +1831,6 @@
     });
     if (customerEditMode) bindPlaceSearch(card);
     if (customerDetailTab === 'location') setTimeout(() => initCustomerDetailMap(root, c), 0);
-    const danger = document.createElement('div');
-    danger.className = 'detail-danger-zone';
-    danger.innerHTML = '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteCustomerBtn">고객 삭제</button>';
-    card.querySelector('.inline-detail-bd')?.appendChild(danger);
     $('#deleteCustomerBtn', root).onclick = async () => {
       if (!confirm(`고객 «${c.name}»을 삭제하시겠습니까?`)) return;
       const res = await apiFetch(`/customers/${c.id}`, { method: 'DELETE' });
@@ -1833,7 +1877,7 @@
         <div class="form-grid" style="max-width:100%">
           <label>연락처</label><span>${d.phone}</span>
           <label>상태</label>
-          <select id="driverStatus" ${locked ? 'disabled' : ''}>
+          <select id="driverStatus" ${locked || !driverEditMode ? 'disabled' : ''}>
             <option ${d.status === '운행가능' ? 'selected' : ''}>운행가능</option>
             ${locked ? '<option selected>운행중</option>' : ''}
             <option ${d.status === '휴무' ? 'selected' : ''}>휴무</option>
@@ -1843,25 +1887,27 @@
           <div>
             <label style="font-size:12px;font-weight:600">배정 차량</label>
             <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px">기사 상태와 별도 — 배차 시 투입 차량 선택</p>
-            <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px" ${locked ? 'disabled' : ''}>
+            <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px" ${locked || !driverEditMode ? 'disabled' : ''}>
               ${vehicleSelectOptions(d.vehicleId, { allowEmpty: true })}
             </select>
             <div class="vehicle-preview" id="driverVehiclePreview">${vehiclePreviewHtml(vehicleById(d.vehicleId))}</div>
           </div>
         </div>
-        <div class="detail-danger-zone">
-          ${locked ? '<span class="text-muted-hint">운행 중에는 기사 정보를 변경하거나 삭제할 수 없습니다.</span>' : ''}
-          <button type="button" class="btn btn-sm btn-danger-outline" id="deleteDriverBtn" ${locked ? 'disabled' : ''}>기사 삭제</button>
-        </div>
+        ${locked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 기사 정보를 변경하거나 삭제할 수 없습니다.</p>' : ''}
       </div>
       <div class="tab-panel" data-panel="hist">${d._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(d.auditEvents)}</div>`;
   }
 
   function bindDriverDetail(root, d) {
     const card = $('#inlineDetail', root);
-    $('#inlineDetailBack', root).onclick = () => { selectedDriverId = null; renderPage(); };
+    $('#inlineDetailBack', root).onclick = () => { selectedDriverId = null; driverEditMode = false; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
       if (d.status === '운행중' || driverHasActiveTrip(d.id)) { toast('운행 중인 기사는 수정할 수 없습니다.', 'error'); return; }
+      if (!driverEditMode) {
+        driverEditMode = true;
+        renderPage();
+        return;
+      }
       const newStatus = $('#driverStatus', root).value;
       const vid = $('#driverVehicleAssign', root).value;
       const newVehicleId = vid ? Number(vid) : null;
@@ -1876,6 +1922,7 @@
       DATA.drivers.forEach(x => { if (x.vehicleId === d.vehicleId && x.id !== d.id) x.vehicleId = null; });
       d.vehicleId = newVehicleId;
       d.history.push({ at: new Date().toISOString().slice(0, 10), note: `배정 차량 → ${vid ? driverVehicleLabel(d) : '미배정'}` });
+      driverEditMode = false;
       toast('기사 정보가 저장되었습니다');
       await loadEntityEvents(d, 'driver', d.id);
     };
@@ -1903,6 +1950,7 @@
 
   function selectDriver(id) {
     selectedDriverId = id;
+    driverEditMode = false;
     renderPage();
     const driver = DATA.drivers.find(d => d.id === id);
     if (driver && !driver.auditEvents?.length) loadEntityEvents(driver, 'driver', driver.id);
@@ -1921,18 +1969,18 @@
       <div class="tab-panel active" data-panel="info">
       <div class="form-grid" style="max-width:100%">
         <label>톤급</label>
-        <select id="vehTonnage" ${locked ? 'disabled' : ''}>${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehTonnage" ${locked || !vehicleEditMode ? 'disabled' : ''}>${tonOpts.map(t => `<option ${v.tonnage === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <label>차종</label>
-        <select id="vehType" ${locked ? 'disabled' : ''}>${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <select id="vehType" ${locked || !vehicleEditMode ? 'disabled' : ''}>${typeOpts.map(t => `<option ${v.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
         ${vehicleLastGpsDetailHtml(v)}
         <label>상태</label>
-        <select id="vehStatus" ${locked ? 'disabled' : ''}>
+        <select id="vehStatus" ${locked || !vehicleEditMode ? 'disabled' : ''}>
           <option ${v.status === '가용' ? 'selected' : ''}>가용</option>
           ${locked ? '<option selected>운행중</option>' : ''}
           <option ${v.status === '정비' ? 'selected' : ''}>정비</option>
         </select>
         <label>연결 기사</label>
-        <select id="vehDriver" ${locked ? 'disabled' : ''}>
+        <select id="vehDriver" ${locked || !vehicleEditMode ? 'disabled' : ''}>
           <option value="">— 미연결 —</option>
           ${DATA.drivers.map(d => `<option value="${d.id}" ${linked && linked.id === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
         </select>
@@ -1941,17 +1989,20 @@
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 6px">배차 출발점 · 최근 GPS</p>
         ${vehiclePreviewHtml(v)}
       </div>
-      <div class="detail-danger-zone">
-        ${locked ? '<span class="text-muted-hint">운행 중에는 차량 정보를 변경하거나 비활성화할 수 없습니다.</span>' : ''}
-        <button type="button" class="btn btn-sm btn-danger-outline" id="deleteVehicleBtn" ${locked ? 'disabled' : ''}>차량 비활성화</button>
-      </div></div>
+      ${locked ? '<p class="text-muted-hint detail-lock-hint">운행 중에는 차량 정보를 변경하거나 삭제할 수 없습니다.</p>' : ''}
+      </div>
       <div class="tab-panel" data-panel="hist">${v._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(v.auditEvents)}</div>`;
   }
 
   function bindVehicleDetail(root, v) {
-    $('#inlineDetailBack', root).onclick = () => { selectedVehicleId = null; renderPage(); };
+    $('#inlineDetailBack', root).onclick = () => { selectedVehicleId = null; vehicleEditMode = false; renderPage(); };
     $('#inlineDetailSave', root).onclick = async () => {
       if (v.status === '운행중' || vehicleHasActiveTrip(v.id)) { toast('운행 중인 차량은 수정할 수 없습니다.', 'error'); return; }
+      if (!vehicleEditMode) {
+        vehicleEditMode = true;
+        renderPage();
+        return;
+      }
       const tonnageStr = $('#vehTonnage', root).value;
       const type = $('#vehType', root).value;
       const status = $('#vehStatus', root).value;
@@ -1973,26 +2024,28 @@
       DATA.drivers.forEach(d => { if (d.vehicleId === v.id) d.vehicleId = null; });
       if (driverId) { const d = driverById(driverId); if (d) d.vehicleId = v.id; }
 
+      vehicleEditMode = false;
       toast('차량 정보가 저장되었습니다');
       await loadEntityEvents(v, 'vehicle', v.id);
     };
     bindDetailTabs($('#inlineDetail', root));
     $('#deleteVehicleBtn', root).onclick = async () => {
-      if (!confirm(`차량 «${v.plate}»를 비활성화하시겠습니까?`)) return;
+      if (!confirm(`차량 «${v.plate}»를 삭제하시겠습니까?`)) return;
       const res = await apiFetch(`/vehicles/${v.id}`, { method: 'DELETE' });
       if (!res.ok && res.status !== 204) {
         const error = await res.json().catch(() => ({}));
-        toast(error.detail || '비활성화 실패', 'error');
+        toast(error.detail || '차량 삭제 실패', 'error');
         return;
       }
       selectedVehicleId = null;
-      toast(`차량 «${v.plate}» 비활성화 완료`);
+      toast(`차량 «${v.plate}» 삭제 완료`);
       await loadRealData();
     };
   }
 
   function selectVehicle(id) {
     selectedVehicleId = Number(id);
+    vehicleEditMode = false;
     renderPage();
     const vehicle = vehicleById(selectedVehicleId);
     if (vehicle && !vehicle.auditEvents?.length) loadEntityEvents(vehicle, 'vehicle', vehicle.id);
@@ -2127,6 +2180,10 @@
 
   function orderDetailBodyHtml(o, startTab) {
     const tab = startTab || 'info';
+    const editable = orderIsEditable(o);
+    const detailField = (id, value) => orderEditMode
+      ? `<input id="${id}" value="${escapeHtml(value || '')}" ${editable ? '' : 'disabled'}>`
+      : `<span>${escapeHtml(value || '—')}</span>`;
     return `
       <div class="customer-detail-summary">
         <span>상태 ${statusBadge(o.status)}${(() => { const tr = tripForOrder(o); return tr ? tripExtraBadgesHtml(tr) : ''; })()}</span>
@@ -2143,17 +2200,17 @@
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
           <label>오더번호</label><span>${orderNoHtml(o, { raw: false })}</span>
-          <label>화주</label><span>${o.customer}</span>
-          <label>수신자</label><span>${o.recipient || '—'}</span>
-          <label>화물</label><span>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</span>
-          <label>시간창</label><span>${o.window}</span>
+          <label>화주</label>${detailField('orderDetailCustomer', o.customer)}
+          <label>수신자</label>${detailField('orderDetailRecipient', o.recipient)}
+          <label>화물</label>${detailField('orderDetailCargo', [o.cargo, o.tons].filter(Boolean).join(' · '))}
+          <label>시간창</label>${detailField('orderDetailWindow', o.window)}
           <label>접수시간</label><span>${formatDateTimeShort(o.created_at)}</span>
-          <label>연락처</label><span>${o.contact || '—'}</span>
-          <label>상차</label><span>${o.pickup}</span>
-          <label>하차</label><span>${o.delivery}</span>
+          <label>연락처</label>${detailField('orderDetailContact', o.contact)}
+          <label>상차</label>${detailField('orderDetailPickup', o.pickup)}
+          <label>하차</label>${detailField('orderDetailDelivery', o.delivery)}
           ${o.cancelReason ? `<label>취소 사유</label><span>${o.cancelReason}</span>` : ''}
         </div>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:12px">우측 상단의 「수정」 버튼에서 편집 · 접수 건만 전체 필드 수정 가능</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:12px">${editable ? '수정을 누른 뒤 접수 정보를 변경할 수 있습니다.' : '현재 상태에서는 조회만 가능합니다.'}</p>
       </div>
       <div class="tab-panel ${tab === 'stops' ? 'active' : ''}" data-panel="stops">${orderStopsTableHtml(o)}</div>
       <div class="tab-panel ${tab === 'hist' ? 'active' : ''}" data-panel="hist">${orderHistoryTableHtml(o)}</div>`;
@@ -2161,16 +2218,48 @@
 
   function bindOrderDetail(root, o) {
     const card = $('#inlineDetail', root);
-    $('#inlineDetailBack', root).onclick = () => { selectedOrderId = null; orderDetailTab = 'info'; renderPage(); };
-    $('#inlineDetailSave', root).onclick = () => {
-      openOrderEditModal(o, root);
+    $('#inlineDetailBack', root).onclick = () => { selectedOrderId = null; orderEditMode = false; orderDetailTab = 'info'; renderPage(); };
+    $('#inlineDetailSave', root).onclick = async () => {
+      if (!orderEditMode) {
+        if (!orderIsEditable(o)) {
+          toast('접수 상태의 오더만 수정할 수 있습니다.', 'error');
+          return;
+        }
+        orderEditMode = true;
+        renderOrderList(root);
+        return;
+      }
+      const pickup = $('#orderDetailPickup', root).value.trim();
+      const delivery = $('#orderDetailDelivery', root).value.trim();
+      const customer = $('#orderDetailCustomer', root).value.trim();
+      const recipient = $('#orderDetailRecipient', root).value.trim();
+      const cargoText = $('#orderDetailCargo', root).value.trim();
+      const contact = normalizePhone($('#orderDetailContact', root).value);
+      const [cargo, tons = ''] = cargoText.split(' · ');
+      const res = await apiFetch(`/deliveries/${o.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          pickup_address: pickup,
+          address: delivery,
+          shipper_name: customer,
+          recipient_name: recipient || null,
+          cargo_type: cargo || null,
+          cargo_size: tons || null,
+          contact_phone: contact || null,
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        toast(error.detail || '오더 저장 실패', 'error');
+        return;
+      }
+      Object.assign(o, { pickup, delivery, customer, recipient, cargo, tons, contact });
+      orderEditMode = false;
+      toast('오더가 저장되었습니다');
+      renderOrderList(root);
     };
     bindDetailTabs(card);
     if (orderCanDelete(o)) {
-      const danger = document.createElement('div');
-      danger.className = 'detail-danger-zone';
-      danger.innerHTML = '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteOrderBtn">오더 삭제</button>';
-      card.querySelector('.inline-detail-bd')?.appendChild(danger);
       $('#deleteOrderBtn', root).onclick = async () => {
         if (!confirm(`오더 ${displayOrderNo(o)}를 삭제하시겠습니까?`)) return;
         const res = await apiFetch(`/deliveries/${o.id}`, { method: 'DELETE' });
@@ -2190,6 +2279,7 @@
 
   function selectOrder(id, opts = {}) {
     selectedOrderId = id;
+    orderEditMode = false;
     orderDetailTab = opts.tab || 'info';
     renderPage();
     loadOrderEvents(id);
@@ -2228,21 +2318,25 @@
           <strong>화면 접근 권한</strong>
           ${Object.entries(permissionLabels).map(([key, label]) => {
             const checked = s.is_org_owner || s.permissions?.[key] !== false;
-            return `<label class="permission-toggle"><span>${label}</span><span class="ui-switch"><input type="checkbox" data-permission="${key}" ${checked ? 'checked' : ''} ${canManage ? '' : 'disabled'}><span class="ui-switch-track"></span></span></label>`;
+            return `<label class="permission-toggle"><span>${label}</span><span class="ui-switch"><input type="checkbox" data-permission="${key}" ${checked ? 'checked' : ''} ${canManage && staffEditMode ? '' : 'disabled'}><span class="ui-switch-track"></span></span></label>`;
           }).join('')}
         </div>
         ${canManage ? '<p class="text-muted-hint">최상위 관리자만 일반 관리자의 접근 권한을 수정할 수 있습니다.</p>' : ''}
-        ${isSelf || s.is_org_owner ? '' : `<div class="detail-danger-zone"><button type="button" class="btn btn-sm btn-danger-outline" id="deleteStaffBtn">담당자 삭제</button></div>`}
       </div>
       <div class="tab-panel" data-panel="hist">${s._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(s.auditEvents)}</div>`;
   }
 
   function bindStaffDetail(root, s) {
-    $('#inlineDetailBack', root).onclick = () => { selectedStaffId = null; renderPage(); };
+    $('#inlineDetailBack', root).onclick = () => { selectedStaffId = null; staffEditMode = false; renderPage(); };
     bindDetailTabs($('#inlineDetail', root));
     $('#inlineDetailSave', root).onclick = async () => {
       if (!DATA.me?.is_org_owner || s.is_org_owner || s.id === _currentUserId) {
         toast('최상위 관리자만 다른 담당자의 권한을 수정할 수 있습니다.', 'error');
+        return;
+      }
+      if (!staffEditMode) {
+        staffEditMode = true;
+        renderPage();
         return;
       }
       const permissions = {};
@@ -2259,6 +2353,7 @@
         return;
       }
       s.permissions = permissions;
+      staffEditMode = false;
       toast('담당자 접근 권한이 수정되었습니다.');
       await loadEntityEvents(s, 'staff', s.id);
     };
@@ -2279,6 +2374,7 @@
 
   function selectStaff(id) {
     selectedStaffId = id;
+    staffEditMode = false;
     renderPage();
     const staff = staffById(id);
     if (staff && !staff.auditEvents?.length) loadEntityEvents(staff, 'staff', staff.id);
@@ -2324,7 +2420,7 @@
     const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
     const monthEvents = DATA.scheduleEvents
       .filter(e => e.date.startsWith(monthPrefix))
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .sort((a, b) => String(b.datetime || b.date).localeCompare(String(a.datetime || a.date)));
     const todayY = new Date().getFullYear(), todayM = new Date().getMonth() + 1;
     const isCurrentMonth = year === todayY && month === todayM;
     root.innerHTML = `
@@ -2356,11 +2452,11 @@
           ${monthEvents.length === 0
             ? '<p style="padding:20px;color:var(--text-muted);text-align:center">이번 달 일정이 없습니다</p>'
             : tableScrollWrap(`<table>
-            <thead><tr><th>날짜</th><th>ID</th><th>유형</th><th>내용</th></tr></thead>
+            <thead><tr><th>날짜 및 시간</th><th>일정</th><th>유형</th><th>내용</th></tr></thead>
             <tbody>${monthEvents.map(e => `
               <tr>
-                <td>${e.date}</td>
-                <td><code style="font-size:11px">${e.orderId}</code></td>
+                <td>${e.datetime ? formatDateTimeShort(e.datetime) : e.date}</td>
+                <td>${e.type === 'trip' ? `운행 ${escapeHtml(e.orderId)}` : `오더 ${escapeHtml(e.orderId)}`}</td>
                 <td>${e.type === 'trip' ? '<span class="badge badge-run">운행</span>' : '<span class="badge badge-info">오더</span>'}</td>
                 <td>${e.label}</td>
               </tr>`).join('')}
@@ -2399,7 +2495,7 @@
           <div class="gantt-scale">${hours.map(h => `<span>${h}:00</span>`).join('')}</div>
           ${rows.map(row => `
             <div class="gantt-row">
-              <div class="gantt-label">${row.label}<code>${row.sub} · ${row.orderId}</code></div>
+              <div class="gantt-label">${row.label}<code>${row.sub} · 운행 ${row.orderId}</code></div>
               <div class="gantt-track">
                 <div class="gantt-bar" style="left:${row.startPct}%;width:${row.widthPct}%;background:${row.color}" title="${row.orderId}">${row.text}</div>
               </div>
@@ -2419,12 +2515,12 @@
     const moveDate = (days) => {
       const date = new Date(`${ganttDate}T00:00:00`);
       date.setDate(date.getDate() + days);
-      ganttDate = date.toISOString().slice(0, 10);
+      ganttDate = localDateValue(date);
       renderScheduleGantt(root);
     };
     $('#ganttPrev', root).onclick = () => moveDate(-1);
     $('#ganttNext', root).onclick = () => moveDate(1);
-    $('#ganttToday', root).onclick = () => { ganttDate = new Date().toISOString().slice(0, 10); renderScheduleGantt(root); };
+    $('#ganttToday', root).onclick = () => { ganttDate = localDateValue(); renderScheduleGantt(root); };
     $('#ganttDate', root).onchange = (event) => { ganttDate = event.target.value; renderScheduleGantt(root); };
   }
 
@@ -2436,7 +2532,7 @@
             <div class="milestone-date">${m.date}</div>
             <div>
               <div class="milestone-title">${m.title}</div>
-              <div class="milestone-meta">${m.note}${m.orderId ? ` · <code>${m.orderId}</code>` : ''}</div>
+              <div class="milestone-meta">${m.note}${m.orderId ? ` · <code>운행 ${m.orderId}</code>` : ''}</div>
             </div>
             ${milestoneStatusBadge(m.status)}
           </article>`).join('');
@@ -2635,7 +2731,7 @@
   }
 
   function applyPageTheme() {
-    document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport', 'order-list-viewport');
+    document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport', 'order-list-viewport', 'order-intake-viewport');
     document.body.classList.add('page-compact');
     if (currentPage === 'dashboard') document.body.classList.add('theme-dashboard');
     else document.body.classList.add('theme-app');
@@ -2644,6 +2740,9 @@
     }
     if (currentPage === 'order-list') {
       document.body.classList.add('order-list-viewport');
+    }
+    if (currentPage === 'order-intake') {
+      document.body.classList.add('order-intake-viewport');
     }
     syncSubNavLayout();
   }
@@ -2674,6 +2773,7 @@
       const isActive = currentMain === group.id;
       const hasSub = MAIN_WITH_SUB.includes(group.id);
       const item = el('div', 'nav-main-item' + (isActive ? ' active' : '') + (hasSub ? ' has-sub' : ''));
+      item.dataset.main = group.id;
       const btn = el('button', 'nav-pill' + (isActive ? ' active' : ''), '');
       btn.type = 'button';
       btn.dataset.main = group.id;
@@ -2999,7 +3099,10 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('drivers', { desc: '등록 기사 · 좌측 목록 · 우측 상세' }),
       listCard,
-      selected ? inlineDetailCardHtml(selected.name, driverDetailBodyHtml(selected)) : ''
+      selected ? inlineDetailCardHtml(selected.name, driverDetailBodyHtml(selected), {
+        saveLabel: driverEditMode ? '저장' : '수정',
+        secondaryAction: `<button type="button" class="btn btn-sm btn-danger-outline" id="deleteDriverBtn" ${selected.status === '운행중' || driverHasActiveTrip(selected.id) ? 'disabled' : ''}>기사 삭제</button>`,
+      }) : ''
     );
 
     bindImeSearch($('#driverSearch', root), (value) => {
@@ -3077,7 +3180,10 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('vehicles', { desc: '차량 마스터 · 좌측 목록 · 우측 상세' }),
       listCard,
-      selected ? inlineDetailCardHtml(selected.plate, vehicleDetailBodyHtml(selected)) : ''
+      selected ? inlineDetailCardHtml(selected.plate, vehicleDetailBodyHtml(selected), {
+        saveLabel: vehicleEditMode ? '저장' : '수정',
+        secondaryAction: `<button type="button" class="btn btn-sm btn-danger-outline" id="deleteVehicleBtn" ${selected.status === '운행중' || vehicleHasActiveTrip(selected.id) ? 'disabled' : ''}>차량 삭제</button>`,
+      }) : ''
     );
 
     bindImeSearch($('#vehicleSearch', root), (value) => {
@@ -3176,7 +3282,12 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('staff', { desc: '담당자 · 좌측 목록 · 우측 상세' }),
       listCard,
-      selected ? inlineDetailCardHtml(selected.name, staffDetailBodyHtml(selected), { saveLabel: '수정' }) : ''
+      selected ? inlineDetailCardHtml(selected.name, staffDetailBodyHtml(selected), {
+        saveLabel: staffEditMode ? '저장' : '수정',
+        secondaryAction: selected.id === _currentUserId || selected.is_org_owner
+          ? ''
+          : '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteStaffBtn">담당자 삭제</button>',
+      }) : ''
     );
     $('#staffTable tbody', root).querySelectorAll('tr[data-id]').forEach(tr => {
       tr.onclick = () => selectStaff(tr.dataset.id);
@@ -3212,7 +3323,8 @@
   function renderProfile(root) {
     const me = DATA.me || {};
     const org = DATA.organization || {};
-    const ownerOnly = me.is_org_owner ? '' : 'disabled';
+    const canEdit = !!me.is_org_owner && profileEditMode;
+    const ownerOnly = canEdit ? '' : 'disabled';
     root.innerHTML = `
       <div class="page-sticky-top">
       ${pageChromeHtml('profile', { title: '기업 정보', desc: '기업 운영 정보와 가입 승인 정책' })}
@@ -3226,7 +3338,7 @@
           </div>
           <div class="tab-panel active" data-panel="company">
             <form id="companyForm" class="form-grid">
-              <label>기업명</label><input name="name" value="${escapeHtml(org.name || '')}">
+              <label>기업명</label><input name="name" value="${escapeHtml(org.name || '')}" ${ownerOnly}>
               <label>조직코드</label>
               <div class="org-code-control">
                 <code id="companyOrgCode">${escapeHtml(org.org_code || '—')}</code>
@@ -3236,7 +3348,7 @@
               <label>기사 자동승인</label>
               <label class="setting-toggle-row">
                 <span>조직코드 가입 즉시 승인</span>
-                <span class="ui-switch"><input type="checkbox" name="auto_approve_drivers" ${org.auto_approve_drivers ? 'checked' : ''}><span class="ui-switch-track"></span></span>
+                <span class="ui-switch"><input type="checkbox" name="auto_approve_drivers" ${org.auto_approve_drivers ? 'checked' : ''} ${ownerOnly}><span class="ui-switch-track"></span></span>
               </label>
               <label>관리자 자동승인</label>
               <label class="setting-toggle-row">
@@ -3244,11 +3356,11 @@
                 <span class="ui-switch"><input type="checkbox" name="auto_approve_admins" ${org.auto_approve_admins ? 'checked' : ''} ${ownerOnly}><span class="ui-switch-track"></span></span>
               </label>
             </form>
-            ${me.is_org_owner ? '' : '<p class="text-muted-hint">조직코드 재발급과 관리자 자동승인은 최상위 기업관리자만 변경할 수 있습니다.</p>'}
+            ${me.is_org_owner ? '' : '<p class="text-muted-hint">기업 정보는 최상위 기업관리자만 수정할 수 있습니다.</p>'}
           </div>
           <div class="tab-panel" data-panel="hist">${org._auditLoading ? '<p class="empty-hint">수정 기록을 불러오는 중입니다.</p>' : auditHistoryHtml(org.auditEvents)}</div>
           <div style="margin-top:16px">
-            <button type="button" class="btn btn-primary" id="saveProfile">저장</button>
+            <button type="button" class="btn btn-primary" id="saveProfile" ${me.is_org_owner ? '' : 'disabled'}>${profileEditMode ? '저장' : '수정'}</button>
           </div>
         </div>
       </div>
@@ -3262,6 +3374,15 @@
       };
     });
     $('#saveProfile', root).onclick = async () => {
+      if (!me.is_org_owner) {
+        toast('최상위 기업관리자만 기업 정보를 수정할 수 있습니다.', 'error');
+        return;
+      }
+      if (!profileEditMode) {
+        profileEditMode = true;
+        renderProfile(root);
+        return;
+      }
       const activePanel = root.querySelector('.tab-panel.active');
       const tab = activePanel?.dataset.panel;
 
@@ -3277,6 +3398,7 @@
         if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.detail || '저장 실패', 'error'); return; }
         const updated = await res.json();
         Object.assign(DATA.organization, updated);
+        profileEditMode = false;
         toast('기업 정보가 저장됐습니다');
         await loadEntityEvents(DATA.organization, 'organization', org.id);
       }
@@ -3358,7 +3480,10 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('customer-list', { desc: '거래처 · 좌측 목록 · 우측 상세 · 당일 임시 화주' }),
       listCard,
-      selected ? inlineDetailCardHtml(detailTitle, customerDetailBodyHtml(selected, detailTab), { saveLabel: customerEditMode ? '저장' : '수정' }) : ''
+      selected ? inlineDetailCardHtml(detailTitle, customerDetailBodyHtml(selected, detailTab), {
+        saveLabel: customerEditMode ? '저장' : '수정',
+        secondaryAction: '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteCustomerBtn">고객 삭제</button>',
+      }) : ''
     );
     root.querySelectorAll('#custFilterChips .chip').forEach(chip => {
       chip.onclick = () => {
@@ -3575,7 +3700,14 @@
           </div>
           <div class="bulk-driver-assigned">
             <p class="field-label">배정 오더 ${assigned.length}건</p>
-            ${assigned.length ? assigned.map(id => `<span class="badge badge-muted">${id}</span>`).join(' ') : '<p class="bulk-driver-empty">아직 배정 없음</p>'}
+            ${assigned.length
+              ? `<div class="bulk-assigned-chips">${assigned.map(id => {
+                  const order = DATA.orders.find(o => o.id === id);
+                  return `<button type="button" class="bulk-assigned-chip" data-unassign-order="${id}" data-driver-id="${d.id}" title="배정 취소">
+                    ${displayOrderNo(order || { id })}<span aria-hidden="true">&times;</span>
+                  </button>`;
+                }).join('')}</div>`
+              : '<p class="bulk-driver-empty">오더를 선택해 배정하세요</p>'}
           </div>
         </div>`;
     }).join('');
@@ -3635,18 +3767,32 @@
     root.innerHTML = `
       <div class="page-sticky-top">
       ${pageChromeHtml('dispatch-manage', { desc: '오더 선택 · 기사·차량 배정 · 경로 및 결과 확인' })}
+      <div class="workflow-steps dispatch-workflow-steps" aria-label="배차 진행 단계">
+        <div class="workflow-step ${bulkSelectedOrderIds.length || assignedCount ? 'is-active' : ''}">
+          <span>1</span><strong>오더 선택</strong><small>${bulkSelectedOrderIds.length}건 선택</small>
+        </div>
+        <div class="workflow-step ${bulkSelectedDriverIds.length || assignedDriverCount ? 'is-active' : ''}">
+          <span>2</span><strong>기사 선택</strong><small>${bulkSelectedDriverIds.length}명 선택</small>
+        </div>
+        <div class="workflow-step ${assignedCount ? 'is-active' : ''}">
+          <span>3</span><strong>배정 확인</strong><small>${assignedCount}건 배정</small>
+        </div>
+      </div>
       </div>
       <div class="page-body-fill dispatch-zone-layout dispatch-zone-layout--bulk page-dispatch-manage">
       <section class="dispatch-orders-pane">
       <div class="card bulk-setup-card" id="sec-bulk-setup">
-        <div class="card-hd card-hd--dispatch">
-          <div class="card-hd-lead">
-            <h2>미배정 오더</h2>
-            <span class="text-muted-hint" style="font-size:12px">행 클릭 또는 체크로 다중 선택</span>
-          </div>
-          <label class="dispatch-inline-toggle">
-            <input type="checkbox" id="bulkAllowMixed" ${bulkAllowMixedLoad ? 'checked' : ''}>
-            혼적 허용
+          <div class="card-hd card-hd--dispatch">
+            <div class="card-hd-lead">
+            <span class="section-step">1</span>
+            <div>
+              <h2>미배정 오더</h2>
+              <span class="text-muted-hint" style="font-size:12px">배차할 오더를 먼저 선택하세요</span>
+            </div>
+            </div>
+          <label class="dispatch-inline-toggle custom-toggle-row">
+            <span>혼적 허용</span>
+            <span class="ui-switch"><input type="checkbox" id="bulkAllowMixed" ${bulkAllowMixedLoad ? 'checked' : ''}><span class="ui-switch-track"></span></span>
           </label>
         </div>
         <div class="card-bd" style="padding:0">
@@ -3681,12 +3827,14 @@
 
       <aside class="dispatch-resource-pane">
       <div class="card bulk-resource-card">
-        <div class="card-hd card-hd--dispatch">
+          <div class="card-hd card-hd--dispatch">
           <div class="card-hd-lead">
-            <h2>기사·차량 선택</h2>
-            <span class="text-muted-hint" style="font-size:12px">1건은 단건 배차, 여러 건은 다건 배차로 처리</span>
+            <span class="section-step">2</span>
+            <div>
+              <h2>기사·차량 선택</h2>
+              <span class="text-muted-hint" style="font-size:12px">선택 오더를 담당할 기사를 고르세요</span>
+            </div>
           </div>
-          <button type="button" class="btn btn-primary btn-sm" id="runBulkDispatch" ${canRunBulk ? '' : 'disabled'}>배차 실행</button>
         </div>
         <div class="card-bd">
           <div class="driver-panel bulk-driver-panel">
@@ -3703,13 +3851,18 @@
 
           <div class="bulk-setup-footer">
             <div class="bulk-assign-bar ${canAssign ? '' : 'bulk-assign-bar--dim'}" id="bulkAssignBar">
-              <span class="bulk-assign-bar-label">오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
+              <span class="section-step section-step--small">3</span>
+              <span class="bulk-assign-bar-label">선택 오더 <strong>${bulkSelectedOrderIds.length}</strong>건</span>
               <span class="bulk-assign-bar-arrow" aria-hidden="true">→</span>
-              <span class="bulk-assign-bar-label">기사 <strong>${driverBarLabel}</strong></span>
-              <button type="button" class="btn btn-primary" id="bulkAssignToDriver" ${canAssign ? '' : 'disabled'}>기사에게 배정</button>
+              <span class="bulk-assign-bar-label">선택 기사 <strong>${driverBarLabel}</strong></span>
+              <button type="button" class="btn btn-primary" id="bulkAssignToDriver" ${canAssign ? '' : 'disabled'}>선택 항목 배정</button>
             </div>
-            <div class="bulk-setup-exec">
-              <p class="bulk-pre-kpi">미배정 <strong>${fullPool.length}</strong>건 · 기사 배정 <strong>${assignedCount}</strong>건 · 배정 기사 <strong>${assignedDriverCount}</strong>명</p>
+            <div class="bulk-execute-bar">
+              <div>
+                <strong>배정 검토</strong>
+                <p class="bulk-pre-kpi">오더 ${assignedCount}건 · 기사 ${assignedDriverCount}명${!bulkAllowMixedLoad ? ' · 기사당 1건' : ' · 혼적 허용'}</p>
+              </div>
+              <button type="button" class="btn btn-primary" id="runBulkDispatch" ${canRunBulk ? '' : 'disabled'}>배차 실행</button>
             </div>
           </div>
         </div>
@@ -3835,11 +3988,21 @@
     });
     root.querySelectorAll('.bulk-driver-card').forEach(card => {
       card.onclick = (e) => {
-        if (e.target.closest('input')) return;
+        if (e.target.closest('input, button')) return;
         const id = card.dataset.driverId;
         const ids = new Set(bulkSelectedDriverIds);
         ids.has(id) ? ids.delete(id) : ids.add(id);
         bulkSelectedDriverIds = [...ids];
+        renderBulkDispatch(root);
+      };
+    });
+    root.querySelectorAll('[data-unassign-order]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const driverId = String(btn.dataset.driverId);
+        const orderId = btn.dataset.unassignOrder;
+        bulkOrderAssignments[driverId] = (bulkOrderAssignments[driverId] || []).filter(id => id !== orderId);
+        if (!bulkOrderAssignments[driverId].length) delete bulkOrderAssignments[driverId];
         renderBulkDispatch(root);
       };
     });
@@ -4290,8 +4453,9 @@
         <div class="card-hd">
           <h2>미배차 건</h2>
           <span style="font-size:12px;color:var(--text-muted)">접수 저장 · 행 클릭 또는 체크로 다중 선택</span>
-          <label class="toolbar" style="margin-left:auto;font-size:12px;cursor:pointer;font-weight:normal">
-            <input type="checkbox" id="dispatchMixedOnlyFilter" ${dispatchPendingMixedOnly ? 'checked' : ''}> 혼적만
+          <label class="toolbar custom-toggle-row" style="margin-left:auto;font-size:12px;cursor:pointer;font-weight:normal">
+            <span>혼적만</span>
+            <span class="ui-switch"><input type="checkbox" id="dispatchMixedOnlyFilter" ${dispatchPendingMixedOnly ? 'checked' : ''}><span class="ui-switch-track"></span></span>
           </label>
         </div>
         <div class="card-bd" style="padding:0">
@@ -4326,8 +4490,9 @@
             <p class="field-label" style="margin-bottom:12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
               <span><strong>${selectedRows.length}건 선택</strong> · 대표 ${selectedPending.id} · ${placeShortLabel(selectedPending.pickup)} ▶ ${placeShortLabel(selectedPending.delivery)} · ${selectedPending.shipper || selectedPending.customer}</span>
               <span style="font-weight:normal;font-size:12px">혼적 여부 <strong>${mixedLoadLabel(isMixedLoad(selectedPending))}</strong> ${mixedLoadBadge(isMixedLoad(selectedPending))}</span>
-              <label style="font-weight:normal;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="checkbox" id="toggleSelectedMixed" ${isMixedLoad(selectedPending) ? 'checked' : ''}> 혼적 (편집)
+              <label class="custom-toggle-row" style="font-weight:normal;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                <span>혼적 (편집)</span>
+                <span class="ui-switch"><input type="checkbox" id="toggleSelectedMixed" ${isMixedLoad(selectedPending) ? 'checked' : ''}><span class="ui-switch-track"></span></span>
               </label>
             </p>
             ${manualAssignPanelHtml(assignIds)}
@@ -4917,7 +5082,7 @@
             <tbody>
               ${DATA.statsTrips.map(t => `
                 <tr class="trip-row${selectedTripId === t.id ? ' selected' : ''}" data-trip="${t.id}">
-                  <td>${t.id}</td><td>${t.driver}</td><td>${t.date}</td>
+                  <td>운행 ${String(t.id).slice(0, 8)}</td><td>${t.driver}</td><td>${t.date}</td>
                   <td>${statusBadge(t.status)}${tripExtraBadgesHtml(t)}</td>
                   <td>${t.safety === '주의' ? '<span class="badge badge-warn">주의</span>' : t.safety === '적합' ? '<span class="badge badge-ok">적합</span>' : '—'}</td>
                 </tr>`).join('')}
@@ -4939,6 +5104,7 @@
         <label>차량</label><select id="statsVehicle"><option value="">전체</option>${DATA.vehicleStats.map(v => `<option>${v.plate}</option>`).join('')}</select>
         <label>권역</label><select id="statsRegionFilter">${odRegionSelectHtml('전체')}</select>
         <button type="button" class="btn btn-sm btn-primary" id="statsApply">조회</button>
+        <button type="button" class="btn-excel btn-excel-sm" id="statsExcel">엑셀 다운로드</button>
       </div>
       </div>
       <div class="page-scroll-main">
@@ -5040,6 +5206,7 @@
       const filterLabel = [driverName, vehiclePlate, regionFilter !== '전체' ? regionFilter : ''].filter(Boolean).join(' · ');
       renderByDayChart($('#byDayChart', root), rows, `${statsPeriod}간 일별 운행 현황${filterLabel ? ` · ${filterLabel}` : ''}`);
     };
+    $('#statsExcel', root).onclick = downloadTripStatsExcel;
     root.querySelectorAll('tbody .trip-row[data-trip]').forEach(tr => {
       tr.onclick = () => selectTrip(tr.dataset.trip);
     });
@@ -5675,8 +5842,15 @@
     if (!wrap) return;
     const items = root._pendingIntakes || [];
     wrap.innerHTML = `
-      <h4>접수 대기열 <span class="text-muted-hint">(${items.length})</span></h4>
-      ${pendingIntakeTableHtml(items)}`;
+      <div class="pending-intake-head">
+        <div><span class="section-step">2</span><h4>접수 대기열</h4></div>
+        <strong>${items.length}건</strong>
+      </div>
+      ${pendingIntakeTableHtml(items)}
+      <div class="pending-intake-footer">
+        <span>검토 후 한 번에 저장합니다</span>
+        <button type="button" class="btn btn-primary" id="submitOrder">${items.length ? `오더 ${items.length}건 저장` : '입력 내용 저장'}</button>
+      </div>`;
     bindPendingIntakeActions(root);
   }
 
@@ -5843,11 +6017,15 @@
     return `
       <article class="task-card" data-task="${taskNum}">
         <div class="task-card-head">
-          <h3>${taskNum === 1 ? '접수 입력' : `추가 태스크 ${taskNum}`}</h3>
+          <div>
+            <p class="task-card-kicker">ORDER ${String(taskNum).padStart(2, '0')}</p>
+            <h3>${taskNum === 1 ? '신규 오더 입력' : `추가 오더 ${taskNum}`}</h3>
+          </div>
           <button type="button" class="task-remove" data-remove-task="${taskNum}" aria-label="태스크 삭제" ${taskNum === 1 ? 'hidden' : ''} tabindex="-1">&times;</button>
         </div>
-        <div class="stop-block">
-          <div class="stop-label"><span class="ico">📍</span> 상차지</div>
+        <div class="intake-route-grid">
+        <div class="stop-block stop-block--pickup">
+          <div class="stop-label"><span class="stop-number">1</span><span>상차 정보</span></div>
           ${intakePlaceInput(`pickup_${taskNum}`, pickup, taskNum === 1, t + 1)}
           <div class="delivery-fields">
             ${cargoTypeSelectHtml(`pickup_cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 2}" data-intake-field="pickup_cargo_${taskNum}"`)}
@@ -5855,8 +6033,9 @@
           </div>
           <button type="button" class="intake-aux-link" data-add-pickup="${taskNum}" tabindex="-1">+ 상차지 추가</button>
         </div>
-        <div class="stop-block">
-          <div class="stop-label"><span class="ico">📦</span> 하차지</div>
+        <div class="route-connector" aria-hidden="true"><span>→</span></div>
+        <div class="stop-block stop-block--delivery">
+          <div class="stop-label"><span class="stop-number">2</span><span>하차 정보</span></div>
           ${intakePlaceInput(`delivery_${taskNum}`, delivery, taskNum === 1, t + 4)}
           <div class="delivery-fields">
             <input type="text" class="intake-field" name="recipient_${taskNum}" placeholder="수신자(고객사명)" tabindex="${t + 5}" data-intake-field="recipient_${taskNum}">
@@ -5865,9 +6044,11 @@
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
         </div>
+        </div>
         ${taskNum === 1 ? `
-          <div class="stop-block task-meta-divider">
-            <div class="form-grid" style="max-width:100%;grid-template-columns:100px 1fr;gap:10px 12px">
+          <div class="stop-block task-meta-divider order-meta-block">
+            <h4>오더 정보</h4>
+            <div class="form-grid intake-order-meta-grid">
               <label>화주(고객) *</label>
               <div class="intake-customer-control">
                 <select class="intake-field" name="customer" required tabindex="${t + 8}" data-intake-field="customer">${custOpts}</select>
@@ -5906,15 +6087,22 @@
     root.innerHTML = `
         <div class="page-sticky-top">
         ${pageChromeHtml('order-intake', { desc: '화주·상·하차 입력 · Enter 대기열 · 저장 후 배차·지정' })}
+        <div class="workflow-steps intake-workflow-steps" aria-label="오더 접수 진행 단계">
+          <div class="workflow-step is-active"><span>1</span><strong>정보 입력</strong><small>상·하차와 화주</small></div>
+          <div class="workflow-step ${root._pendingIntakes.length ? 'is-active' : ''}"><span>2</span><strong>대기열 확인</strong><small>${root._pendingIntakes.length}건 준비</small></div>
+          <div class="workflow-step"><span>3</span><strong>일괄 저장</strong><small>오더 접수 완료</small></div>
+        </div>
         </div>
         <form id="intakeForm" class="page-body-fill intake-viewport">
           <div class="card intake-compact" style="margin-bottom:0;flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="card-hd intake-hd">
-              <h2>배송 접수</h2>
+              <div class="card-hd-lead">
+                <span class="section-step">1</span>
+                <div><h2>오더 정보 입력</h2><span class="text-muted-hint">필수 항목을 입력한 뒤 대기열에 추가하세요</span></div>
+              </div>
               <div class="intake-hd-meta">
-                <span class="intake-kbd-hint inline"><kbd>Enter</kbd> 다음 · 마지막 <kbd>Enter</kbd> 대기열 · <kbd>Alt+P</kbd> 상차지 · <kbd>Alt+D</kbd> 하차지</span>
                 <button type="button" class="btn btn-sm" id="excelTemplate">양식 다운로드</button>
-                <button type="button" class="btn-excel btn-excel-sm" id="excelImport">엑셀</button>
+                <button type="button" class="btn-excel btn-excel-sm" id="excelImport">엑셀 불러오기</button>
               </div>
             </div>
             <div class="card-bd">
@@ -5923,15 +6111,22 @@
                   <div id="taskCardsList">
                     ${Array.from({ length: taskCount }, (_, i) => taskCardHtml(i + 1, custOpts, null, i * 10)).join('')}
                   </div>
-                  <button type="button" class="intake-aux-link" id="addTaskCard" style="margin-bottom:8px">+ 태스크 추가</button>
-                  <div class="intake-actions" style="margin-top:10px">
-                    <button type="button" class="btn-add-intake" id="addIntakeRow">접수 추가</button>
-                    <button type="button" class="btn btn-primary" id="submitOrder">접수 저장</button>
+                  <button type="button" class="btn-add-task" id="addTaskCard">+ 오더 입력 폼 추가</button>
+                  <div class="intake-actions">
+                    <span class="intake-kbd-hint inline"><kbd>Enter</kbd> 다음 항목 · 마지막 항목에서 대기열 추가</span>
+                    <button type="button" class="btn-add-intake" id="addIntakeRow">대기열에 추가</button>
                   </div>
                 </div>
                 <div class="pending-intake-wrap compact" id="pendingIntakePanel">
-                  <h4>접수 대기열 <span class="text-muted-hint">(${root._pendingIntakes.length})</span></h4>
+                  <div class="pending-intake-head">
+                    <div><span class="section-step">2</span><h4>접수 대기열</h4></div>
+                    <strong>${root._pendingIntakes.length}건</strong>
+                  </div>
                   ${pendingIntakeTableHtml(root._pendingIntakes)}
+                  <div class="pending-intake-footer">
+                    <span>검토 후 한 번에 저장합니다</span>
+                    <button type="button" class="btn btn-primary" id="submitOrder">${root._pendingIntakes.length ? `오더 ${root._pendingIntakes.length}건 저장` : '입력 내용 저장'}</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -6019,7 +6214,7 @@
       commitIntakeRow(root, taskNum);
     };
 
-    $('#submitOrder', root).onclick = async () => {
+    const submitIntakeOrders = async () => {
       const form = $('#intakeForm', root);
       for (const card of root.querySelectorAll('[data-task]')) {
         const taskNum = Number(card.dataset.task);
@@ -6050,6 +6245,9 @@
       renderPendingIntakePanel(root);
       toast(`접수 완료 ${total}건 · DB 저장 완료`);
     };
+    $('#intakeForm', root).addEventListener('click', (e) => {
+      if (e.target.closest('#submitOrder')) submitIntakeOrders();
+    });
   }
 
   function renderOrderList(root) {
@@ -6126,7 +6324,12 @@
     root.innerHTML = masterDetailShell(
       pageChromeHtml('order-list', { desc: '좌측 목록 · 우측 상세에서 수정' }),
       listCard,
-      selected ? inlineDetailCardHtml(`${displayOrderNo(selected)} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), { saveLabel: '수정' }) : ''
+      selected ? inlineDetailCardHtml(`${displayOrderNo(selected)} · ${selected.customer}`, orderDetailBodyHtml(selected, detailTab), {
+        saveLabel: orderEditMode ? '저장' : '수정',
+        secondaryAction: orderCanDelete(selected)
+          ? '<button type="button" class="btn btn-sm btn-danger-outline" id="deleteOrderBtn">오더 삭제</button>'
+          : '',
+      }) : ''
     );
     bindImeSearch($('#orderSearch', root), (value) => {
       orderPage = 1;
@@ -6284,7 +6487,12 @@
       markerEl.onclick = () => {
         if (_liveMapPage !== 'control-live') return;
         selectedControlVehicleId = Number(vehicleId);
-        renderControlLive(document.querySelector('.page-viewport-inner'));
+        document.querySelectorAll('[data-control-vehicle-id]').forEach(row => {
+          row.classList.toggle('selected', Number(row.dataset.controlVehicleId) === selectedControlVehicleId);
+        });
+        renderVehicleLocationMarkers();
+        map?.setCenter(position);
+        applyLiveMapFixedView('control-live');
       };
       const marker = new kakao.maps.CustomOverlay({
         position,

@@ -358,9 +358,11 @@ async def update_org_settings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """관리자: 기업 운영 설정 변경 (현재: 기사 자동승인 on/off)"""
+    """최상위 기업관리자: 기업 운영 설정 변경"""
     if not current_user.organization_id:
         raise HTTPException(404, "소속 기업이 없습니다.")
+    if not current_user.is_org_owner:
+        raise HTTPException(403, "최상위 기업관리자만 기업 정보를 수정할 수 있습니다.")
     _r = await db.execute(
         select(Organization).where(Organization.id == current_user.organization_id)
     )
@@ -381,8 +383,6 @@ async def update_org_settings(
     if "auto_approve_drivers" in req:
         org.auto_approve_drivers = bool(req["auto_approve_drivers"])
     if "auto_approve_admins" in req:
-        if not current_user.is_org_owner:
-            raise HTTPException(403, "최상위 기업관리자만 관리자 자동승인을 변경할 수 있습니다.")
         org.auto_approve_admins = bool(req["auto_approve_admins"])
 
     changes = changed_fields(before, {

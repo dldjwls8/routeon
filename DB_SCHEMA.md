@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-06 (v1.0.100 기준, 프로필 이미지·운행 상태 변경 방어)
+> 최종 검토: 2026-06-07 (v1.0.101 기준, 기업 설정 최상위 관리자 권한 확인)
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 테이블 구조
 
-> v1.0.100은 `users.profile_image`를 추가한다. 기존 `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
+> v1.0.101은 DB 구조 변경이 없다. 기존 `users.profile_image`, `organizations.auto_approve_admins`, `users.account_status`와 레거시 `role=pending` 보정은 그대로 유지한다.
 
 ### `organizations`
 
@@ -88,6 +88,7 @@
 - `account_status=pending/rejected` 계정은 로그인과 인증된 API 이용이 차단된다.
 - `permissions`의 빈 JSON은 기존 계정 호환을 위해 프론트에서 전체 허용으로 해석하며, 명시적인 `false` 키만 접근을 차단한다.
 - 최상위 관리자만 다른 일반 관리자의 `permissions`를 수정하거나 계정을 삭제할 수 있고, 최상위 관리자 계정은 삭제할 수 없다.
+- 기업명·기사/관리자 자동승인 등 `PATCH /organizations/me/settings`의 모든 설정 변경은 최상위 관리자만 가능하다. 조직코드 재발급은 별도 전용 API를 사용하며, 일반 관리자의 설정 변경 요청은 HTTP 403을 반환한다.
 - 진행 중 Trip이 있는 기사는 상태·배정 차량 변경과 삭제가 거부된다. 본인 탈퇴는 `scheduled` 또는 `in_progress` Trip이 없어야 한다.
 - 일반 계정은 현재 비밀번호 확인 후 탈퇴할 수 있다. 최상위 기업관리자는 먼저 권한을 이전해야 하며 직접 탈퇴할 수 없다.
 - `profile_image`는 `/auth/me/profile-image` 업로드·삭제 API로 관리하고 채팅 파트너 응답에 포함된다.
