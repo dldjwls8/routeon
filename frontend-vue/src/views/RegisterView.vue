@@ -77,7 +77,7 @@
               <span class="file-drop-text" id="fileLabel">클릭하여 파일 선택</span>
               <span class="file-drop-hint">PDF · JPG · PNG / 최대 10MB</span>
             </label>
-            <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png" required>
+            <input type="file" id="docFile" accept=".pdf,.jpg,.jpeg,.png">
             <div id="file-error" class="error-msg">파일을 선택해주세요.</div>
           </div>
         </div>
@@ -112,7 +112,7 @@ onMounted(() => {
       document.getElementById('documentFields').hidden = !isCompany;
       document.getElementById('adminOrgFields').hidden = isCompany;
       document.getElementById('orgName').required = isCompany;
-      document.getElementById('docFile').required = isCompany;
+      document.getElementById('docFile').required = false;
       document.getElementById('orgCode').required = !isCompany;
       document.getElementById('formTitle').textContent = isCompany ? '기업 등록' : '관리자 가입';
       document.getElementById('formSubtitle').textContent = isCompany
@@ -201,10 +201,6 @@ onMounted(() => {
     }
 
     const docFile = document.getElementById('docFile').files[0];
-    if (!docFile) {
-      document.getElementById('file-error').style.display = 'block';
-      return;
-    }
     const formData = new FormData();
     formData.append('name',     orgName);
     formData.append('username', username);
@@ -212,7 +208,7 @@ onMounted(() => {
     formData.append('phone',    phone);
     formData.append('email',    email);
     formData.append('admin_name', name);
-    formData.append('doc_file', docFile);
+    if (docFile) formData.append('doc_file', docFile);
 
     const res = await fetch(`${API}/organizations`, {
       method: 'POST',

@@ -49,26 +49,28 @@ async def create_organization(
     admin_name: str     = Form(...),
     phone:    str       = Form(...),
     email:    str       = Form(...),
-    doc_file: UploadFile = File(...),
+    doc_file: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
     기업 최초 등록 + 관리자 계정 동시 생성.
-    - 사업자등록증 등 첨부파일 필수 (PDF, JPG, PNG, 10MB 이하)
+    - 사업자등록증 등 첨부파일 선택 (PDF, JPG, PNG, 10MB 이하)
     - 등록 후 status=pending_review → 슈퍼 관리자 승인 후 이용 가능
     """
     import random, string
     from datetime import datetime
 
-    # 파일 확장자 확인
-    ext = Path(doc_file.filename).suffix.lower()
-    if ext not in ALLOWED_EXTS:
-        raise HTTPException(400, f"허용된 파일 형식: PDF, JPG, PNG")
+    # 파일이 제공된 경우에만 검증 및 저장
+    if doc_file:
+        # 파일 확장자 확인
+        ext = Path(doc_file.filename).suffix.lower()
+        if ext not in ALLOWED_EXTS:
+            raise HTTPException(400, f"허용된 파일 형식: PDF, JPG, PNG")
 
-    # 파일 크기 확인
-    contents = await doc_file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(400, "파일 크기는 10MB 이하여야 합니다.")
+        # 파일 크기 확인
+        contents = await doc_file.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(400, "파일 크기는 10MB 이하여야 합니다.")
 
     # 아이디 중복 확인
     _r = await db.execute(select(User).where(User.username == username))
@@ -94,16 +96,17 @@ async def create_organization(
     db.add(org)
     await db.flush()  # org.id 확보
 
-    # 파일 저장
-    org_upload_dir = UPLOAD_DIR / str(org.id)
-    org_upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_filename = f"{org.id}{ext}"
-    file_path = org_upload_dir / safe_filename
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    # 파일 저장 (선택)
+    if doc_file:
+        org_upload_dir = UPLOAD_DIR / str(org.id)
+        org_upload_dir.mkdir(parents=True, exist_ok=True)
+        safe_filename = f"{org.id}{ext}"
+        file_path = org_upload_dir / safe_filename
+        with open(file_path, "wb") as f:
+            f.write(contents)
 
-    org.doc_filename = doc_file.filename
-    org.doc_path     = str(file_path)
+        org.doc_filename = doc_file.filename
+        org.doc_path     = str(file_path)
 
     # 관리자 계정 생성
     admin = User(
