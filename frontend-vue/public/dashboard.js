@@ -17,7 +17,7 @@
   }
   function logout() {
     localStorage.clear();
-    location.href = '/login.html';
+    location.href = '/login';
   }
 
   /* OS 테마 변경 시 '자동' 상태이면 즉시 반영 */
@@ -58,7 +58,7 @@
   function requireAdminSession() {
     const role = localStorage.getItem('role');
     if (!getToken() || role !== 'admin') {
-      location.href = '/login.html'; return false;
+      location.href = '/login'; return false;
     }
     return true;
   }
@@ -783,7 +783,8 @@
         }
       }
 
-      // 페이지 재렌더링
+      // 페이지 재렌더링 — Vue SPA에서는 dashboard.js가 직접 렌더링하지 않음
+      /*
       if (!canAccessMain(currentMain)) {
         const firstAllowed = NAV.find(group => canAccessMain(group.id)) || NAV[0];
         currentMain = firstAllowed.id;
@@ -793,6 +794,7 @@
       renderPage();
       restoreScrollState(scrollState);
       if (isMapPage()) showLiveMap();
+      */
 
     } catch (e) {
       console.error('데이터 로드 오류:', e);
@@ -929,8 +931,9 @@
     currentMain = main;
     const group = NAV.find(g => g.id === main);
     currentPage = page || (group ? group.pages[0].id : NAV[0].pages[0].id);
-    renderNav();
-    renderPage();
+    /* Vue SPA — dashboard.js 직접 렌더링 비활성화 */
+    /* renderNav(); */
+    /* renderPage(); */
     const targetPage = currentPage;
     if (isMapPage(targetPage)) setTimeout(() => showLiveMap(targetPage), 50);
     if (typeof window._onRouteOnGotoPage === 'function') {
@@ -3027,6 +3030,8 @@
   }
 
   function renderNav() {
+    /* Vue SPA — dashboard.js 직접 렌더링 비활성화 */
+    return;
     const nav = $('#navMain');
     nav.innerHTML = '';
     NAV.filter(group => canAccessMain(group.id)).forEach(group => {
@@ -3067,6 +3072,8 @@
   }
 
   function renderPage() {
+    /* Vue SPA — dashboard.js 직접 렌더링 비활성화 */
+    return;
     if (isMapPage()) hideLiveMap();
     const main = $('#mainContent');
     main.innerHTML = '';
@@ -6966,15 +6973,15 @@
   async function init() {
     if (!requireAdminSession()) return;
     const d = new Date();
-    $('#headerDate').textContent = d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
-    $('#brandHome').onclick = () => gotoPage('dashboard', 'dashboard');
-    $('#modalOverlay').onclick = (e) => { if (e.target === $('#modalOverlay')) closeModal(); };
+    const hd = $('#headerDate'); if (hd) hd.textContent = d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+    const bh = $('#brandHome'); if (bh) bh.onclick = () => gotoPage('dashboard', 'dashboard');
+    const mo = $('#modalOverlay'); if (mo) mo.onclick = (e) => { if (e.target === mo) closeModal(); };
     // 탑바 버튼 이벤트
-    $('#messageBtn').onclick = () => { location.href = '/chat.html'; };
-    $('#notifBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('notifDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('notifDropdown'); } };
-    $('#userMenuBtn').onclick = (e) => { e.stopPropagation(); const d = document.getElementById('userDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('userDropdown'); } };
-    $('#ddSettings').onclick = () => { _closeAllDropdowns(); location.href = '/settings.html'; };
-    $('#ddLogout').onclick = () => logout();
+    const mb = $('#messageBtn'); if (mb) mb.onclick = () => { location.href = '/chat'; };
+    const nb = $('#notifBtn'); if (nb) nb.onclick = (e) => { e.stopPropagation(); const d = document.getElementById('notifDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('notifDropdown'); } };
+    const um = $('#userMenuBtn'); if (um) um.onclick = (e) => { e.stopPropagation(); const d = document.getElementById('userDropdown'); if (d.classList.contains('open')) { _closeAllDropdowns(); } else { _openDropdown('userDropdown'); } };
+    const ds = $('#ddSettings'); if (ds) ds.onclick = () => { _closeAllDropdowns(); location.href = '/settings'; };
+    const dl = $('#ddLogout'); if (dl) dl.onclick = () => logout();
     document.addEventListener('click', () => _closeAllDropdowns());
     let _resizeRaf = null;
     window.addEventListener('resize', () => {
@@ -6990,8 +6997,9 @@
     bindIntakeStopShortcuts();
     bindDesiredArrivalAutoFormat();
     applyInitialQueryState();
-    renderNav();
-    renderPage();
+    /* Vue가 탭/페이지를 렌더링하므로 dashboard.js의 renderNav/renderPage는 비활성화 */
+    /* renderNav(); */
+    /* renderPage(); */
     await loadRealData();
     loadChatConversations();
     connectChatWebSocket();

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PageChrome from '@/components/PageChrome.vue'
-import { getTripStats } from '@/services/statisticsService.js'
+import { apiClient } from '@/api/client.js'
 import { getDeliveries } from '@/services/deliveryService.js'
 import { getVehicles } from '@/services/vehicleService.js'
 import { getDrivers } from '@/services/driverService.js'
@@ -16,6 +16,7 @@ const vehicles = ref([])
 const drivers = ref([])
 const dashOrderTab = ref('전체')
 const loading = ref(true)
+const mapRef = ref(null)
 
 const orderTabs = ['전체', '접수', '수락대기', '배차', '운행중', '완료']
 
@@ -30,7 +31,10 @@ const pct = computed(() => totalCount.value ? Math.round((completedCount.value /
 
 const fleetByType = computed(() => {
   const m = {}
-  vehicles.value.forEach(v => { m[v.type] = (m[v.type] || 0) + 1 })
+  vehicles.value.forEach(v => {
+    const t = v.vehicle_type || v.type || '미지정'
+    m[t] = (m[t] || 0) + 1
+  })
   return m
 })
 const fleetMax = computed(() => Math.max(...Object.values(fleetByType.value), 1))
@@ -78,24 +82,45 @@ function formatDateTimeShort(v) {
 }
 
 function openQuickEdit() {
-  const selected = [...quickIds.value]
-  const max = 3
-  const labels = quickOptions.map(item =>
-    `\n      <label><input type="checkbox" value="${item.id}" ${selected.includes(item.id)?'checked':''}> ${item.label}</label>`
-  ).join('')
-  // 간단히 confirm 기반으로 처리 — 실제로는 modal 컴포넌트가 필요하지만 MVP용
-  // Vue 환경에서는 alert/confirm으로 우선 대체
+  // TODO: modal-based quick link editor
+}
+
+async function initMap() {
+  try {
+    const res = await apiClient.fetch('/config')
+    if (!res.ok) return
+    const cfg = await res.json()
+    const key = cfg.kakao_js_key || cfg.kakao_key || cfg.key
+    if (!key) return
+    const script = document.createElement('script')
+    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&libraries=services&autoload=false`
+    script.onload = () => {
+      if (!window.kakao?.maps) return
+      window.kakao.maps.load(() => {
+        const container = mapRef.value
+        if (!container) return
+        container.innerHTML = '<div id="dash-map-inner" style="width:100%;height:100%;"></div>'
+        const mapEl = document.getElementById('dash-map-inner')
+        const opts = {
+          center: new window.kakao.maps.LatLng(36.5, 127.8),
+          level: 13,
+        }
+        new window.kakao.maps.Map(mapEl, opts)
+      })
+    }
+    document.head.appendChild(script)
+  } catch (e) {
+    console.warn('카카오맵 초기화 실패:', e)
+  }
 }
 
 async function load() {
   try {
-    const [s, o, v, d] = await Promise.all([
-      getTripStats().catch(() => null),
+    const [o, v, d] = await Promise.all([
       getDeliveries().catch(() => []),
       getVehicles().catch(() => []),
       getDrivers().catch(() => []),
     ])
-    stats.value = s
     orders.value = (Array.isArray(o) ? o : (o.items || [])).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     vehicles.value = Array.isArray(v) ? v : (v.items || [])
     drivers.value = Array.isArray(d) ? d : (d.items || [])
@@ -106,7 +131,10 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  initMap()
+})
 </script>
 
 <template>
@@ -157,7 +185,7 @@ onMounted(load)
       </aside>
 
       <div class="dash-right">
-        <div class="dash-map-card" aria-label="요약 지도"></div>
+        <div ref="mapRef" class="dash-map-card" aria-label="요약 지도"></div>
         <div class="dash-orders-card">
           <div class="dash-orders-hd">
             <h2>오더</h2>
