@@ -4155,7 +4155,7 @@
             ${bulkOrderSearch ? `<span class="text-muted-hint">검색 ${pool.length}건</span>` : ''}
           </div>
           <div class="dispatch-setup-main dispatch-setup-main--stack">
-            <div id="bulkOrderPool">
+            <div id="bulkOrderPool" style="display:flex;flex-direction:column;min-height:0;flex:1">
               ${tableScrollWrap(`<table class="bulk-pool-table">
                 <thead><tr>
                   <th><input type="checkbox" id="chkAllBulkPool" ${allPoolSelected ? 'checked' : ''} aria-label="전체 선택"></th>
@@ -4196,7 +4196,7 @@
             ${bulkDriverSearch ? `<span class="text-muted-hint">검색 ${visibleDrivers.length}명</span>` : ''}
           </div>
           <div class="dispatch-setup-main dispatch-setup-main--stack">
-            <div id="bulkDriverList">
+            <div id="bulkDriverList" style="display:flex;flex-direction:column;min-height:0;flex:1">
               ${tableScrollWrap(`<table class="bulk-pool-table">
                 <thead><tr>
                   <th><input type="checkbox" id="chkAllBulkDrivers" ${drivers.length && bulkSelectedDriverIds.length === drivers.length ? 'checked' : ''} aria-label="전체 선택"></th>
