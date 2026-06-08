@@ -25,7 +25,7 @@
 | 최적화 | Google OR-Tools (TSP) |
 | 인프라 | Docker Compose, Nginx, Oracle Cloud |
 | 앱 | Android Studio (Kotlin) |
-| 관리자 웹 | Vue 3 + Vite SPA (`frontend-vue/`) — 마이그레이션 완료. 기존 `frontend/`는 레거시로 유지. 운행관제 탭은 실시간 GPS 기반 폴리라인(지나간 경로 흐림·남은 경로 선명) 표시 지원 |
+| 관리자 웹 | Vue 3 + Vite SPA (`frontend-vue/`) — 마이그레이션 완료. 기존 `frontend/`는 레거시로 유지. Vue는 **레이아웃 쉘(topbar·nav·footer)과 라우팅만 담당**하며, 실제 페이지 DOM 렌더링은 레거시 `frontend-vue/public/dashboard.js`가 통제. 운행관제 탭은 실시간 GPS 기반 폴리라인(지나간 경로 흐림·남은 경로 선명) 표시 지원 |
 
 ---
 
@@ -133,7 +133,7 @@ routeon/
         ├── router/
         │   └── index.js      Vue Router 경로 정의·meta.main·meta.label
         ├── layouts/
-        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container) — 메시지/알림 뱃지·드롭다운 reactive 구현, legacy dashboard.js DOM ID 유지 및 Vue→legacy 동기화
+        │   └── DashboardLayout.vue   대시보드 쉘 (topbar, nav, mainContent, footer, modal, toast, map-container) — 메시지/알림 뱃지·드롭다운 reactive 구현, nav를 Vue reactive로 직접 렌더링. mainContent의 <slot>은 display:none으로 숨기고 레거시 dashboard.js renderPage()가 #mainContent를 완전히 덮어씀. Vue→legacy 동기화는 router.afterEach → window.RouteOnGotoPage() 경유
         ├── components/
         │   └── PageChrome.vue        페이지 공통 크롬 (뒤로가기·타이틀·액션바 래퍼)
         ├── assets/

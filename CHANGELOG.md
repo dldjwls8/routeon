@@ -6,6 +6,30 @@
 
 ---
 
+## v1.0.126 (2026-06-08)
+### Vue·레거시 아키텍처 복원 및 v1.0.124-125 누락 기능 포팅
+- **배경**: v1.0.124-125에서 Vue 컴포넌트(`OrderListView.vue`, `DispatchManageView.vue`, `DashboardView.vue` 등)에만 구현된 기능(수락대기 상태, 시간 추적, 상태 변경 드롭다운, 배차관리 기사·차량 선택 UI, 중복 연결 필터링 등)이 실제 운영 화면에 반영되지 않았음. 원인은 Vue 마운트 DOM과 레거시 `dashboard.js`가 동시에 `mainContent`를 조작하여 충돌이 발생하고, Vue `<slot>`이 `dashboard.js`에 의해 가려져 실제로 표시되지 않았기 때문. 이에 Vue는 레이아웃 쉘(topbar·nav·footer)과 라우팅만 담당하고, 모든 페이지 DOM 렌더링은 레거시 `dashboard.js`가 통제하는 아키텍처로 복원
+- **Vue ↔ 레거시 dashboard.js 아키텍처 복원**:
+  - `DashboardLayout.vue` — topbar·nav·footer만 Vue reactive로 직접 렌더링. `mainContent` 영역의 `<slot>`은 `display:none`으로 숨기고 `dashboard.js` `renderPage()`가 `#mainContent`를 완전히 비운 뒤 모든 DOM을 재생성하도록 위임. 이로써 Vue 컴포넌트 DOM과 `dashboard.js` DOM 사이의 충돌 및 이중 렌더링을 원천 차단
+  - `router.afterEach` — Vue Router path 변경 시 `window.RouteOnGotoPage(meta.main, route.name)`를 호출해 URL 쿼리 파라미터(`?main=&page=`)와 Vue Router path를 동시에 유지. 브라우저 뒤로가기·앞으로가기·직접 URL 접근 모두에서 `dashboard.js` `gotoPage()`가 정상 동작
+  - `App.vue` — 대시보드 라우트는 `DashboardLayout`으로 감싸고 비대시보드 라우트는 순수 Vue 렌더링. 주석으로 "Vue slot은 dashboard.js renderPage에 의해 덮어씌워짐" 명시
+- **v1.0.124-125 누락 기능을 dashboard.js에 포팅**:
+  - `accepted`(수락대기) 상태 — `deliveryStatusMap`에 `accepted: '수락대기'` 추가, `statusBadge()`에 영문→한글 매핑, 대시보드/배차관리 상태 탭에 `'수락대기'` 추가
+  - `deliveryDisplayStatus()` 헬퍼 — `pending` + `driver_id` 존재 시 `'배차'`, `accepted` 시 `'수락대기'` 반환. `orderMatchesFilter()`도 표시값 기준으로 필터링
+  - `statusOptions(status)` 헬퍼 및 오더 상세 `<select>` 상태 드롭다운 — `접수` → `접수/수락대기/운행중/취소`, `수락대기` → `수락대기/운행중/취소`, `운행중` → `운행중/완료/취소`, `배차` → `배차/운행중/취소`. 저장 시 한글→영문 역매핑(`revMap`) 후 서버에만 변경된 `status` 전송
+  - 시간 추적 필드 — `DATA.orders` 매핑에 `assigned_at`, `started_at`, `completed_at`, `cancelled_at`, `pickup_time`, `unloading_time` 추가. 오더 상세 읽기 모드에 `배차 시간`, `운행 시작`, `운행 완료`, `총 운행 시간`, `취소 기간`, `상차 시간`, `하차 시간` 표시
+  - `formatDuration(start, end)` 헬퍼 추가 — 밀리초 차이를 `N시간 M분` 또는 `M분`으로 반환
+  - 목록·대시보드 정렬 — `created_at` 기준 내림차순(최신순)으로 `sort()`. 대시보드 오더 요약 카드 상태 탭에 `'수락대기'` 추가
+  - 배차관리 기사·차량 `<select>` UI — `tripEditMode`일 때 기사·차량 `<select>` 표시, `vehicleSelectOptions()`/`driverSelectOptions()`에 `disabledIds` 인자 추가. 이미 다른 기사/차량에 연결된 상대는 목록에서 `disabled` 처리
+  - UUID 문자열 비교 버그 수정 — `vehicleSelectOptions()`와 `driverSelectOptions()`에서 `Number(selectedId) === v.id`를 `String(selectedId) === String(v.id)`로 교체해 UUID 비교 오류 수정
+  - 배차 취소요청 알림 분리 — `_locationAlerts` 전역 배열과 `updateLocationNotifUI()` 추가. `connectLocationWebSocket()`에서 `trip.cancel_requested` 메시지 수신 시 알림 버튼(🔔) 뱃지와 드롭다운에 표시 — 채팅 unread와 독립적으로 카운트
+- **수락대기 상태 제거·복원**: 사용자 요청으로 `accepted` 상태를 한때 제거(`c889b70` — DB enum, migration, `/accept` 엔드포인트, 프론트 상태 맵 전부 삭제)했으나, 다시 요청으로 완전 복원(`d57e0fb` — `git revert --no-edit`). 현재 `DeliveryStatus` enum, `database.py` migration, `deliveries.py` `assign_delivery()`의 `accepted` 설정, `PATCH /deliveries/{id}/accept` 엔드포인트, 프론트 `statusBadge()`·`statusOptions()`·`deliveryDisplayStatus()` 모두 복원되어 정상 동작
+- **캐시 버스팅 및 캐시 정책 강화**: `frontend-vue/index.html`에서 `api-client.js`와 `dashboard.js`를 `?v=3` 쿼리 파라미터로 로드. `<meta>` Cache-Control `no-cache, no-store, must-revalidate` 태그 추가. `nginx.conf`의 `/`와 `/assets/` location에 동일 `Cache-Control`/`Pragma`/`Expires` 헤더를 `always`로 추가해 SPA HTML과 정적 에셋이 브라우저에 캐시되지 않도록 방어
+- **기타 버그 수정**: `VehiclesView.vue` 차량 종류 표시에서 `v.type` → `v.vehicle_type || v.type` 폴백 적용. `statisticsService.js` 404 처리 개선. `DashboardView.vue` 카카오맵 초기화 로직 추가 및 통계 API 호출 제거(빈 상태로 유지)
+- **검증**: `npm run build`(Vue) 성공, `node --check`로 레거시 `dashboard.js` 구문 검사 통과, 백엔드 AST 구문 검사 통과, nginx 설정 syntax `nginx -t` 확인
+
+---
+
 ## v1.0.125 (2026-06-08)
 ### accepted 상태·시간 추적·정렬 최신순·배차관리 UI 보강
 - **배경**: 기존에는 관리자가 배정하면 바로 `in_progress`(운행중)로 전이되어 기사 수락 단계가 없었음. 오더 상세에서는 상하차 시간이 기록·표시되지 않았고, 목록/대시보드 정렬이 오래된 순이었으며, 배차관리 탭에서 기사·차량을 선택하는 UI가 없어 수정이 불편했음
