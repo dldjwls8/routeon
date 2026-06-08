@@ -248,7 +248,7 @@ function escapeHtml(str) {
     </header>
     <main class="content" id="mainContent">
       <section class="page active page-viewport">
-        <div class="page-center page-shell page-viewport-inner">
+        <div class="page-center page-viewport-inner">
           <slot />
         </div>
       </section>
