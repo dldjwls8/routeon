@@ -22,7 +22,6 @@ const heading = computed(() => props.title || pageLabel.value)
 
 <template>
   <header class="page-chrome">
-    <p class="page-breadcrumb">{{ main?.label }} › <strong>{{ pageLabel }}</strong></p>
     <h1 class="page-heading">{{ heading }}</h1>
     <p v-if="desc" class="page-desc">{{ desc }}</p>
   </header>

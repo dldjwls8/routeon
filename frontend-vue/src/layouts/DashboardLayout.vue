@@ -246,7 +246,13 @@ function escapeHtml(str) {
         </div>
       </div>
     </header>
-    <main class="content" id="mainContent"><slot /></main>
+    <main class="content" id="mainContent">
+      <section class="page active page-viewport">
+        <div class="page-center page-shell page-viewport-inner">
+          <slot />
+        </div>
+      </section>
+    </main>
     <footer class="footer legal-footer" aria-label="서비스 안내">
       <div class="legal-footer-main">
         <strong>RouteOn 관제 시스템</strong>
