@@ -279,7 +279,7 @@
       delivery,
       tons: formatDispatchSize(item),
       window: item.window || (item.tw && item.tw.includes('T') ? item.tw.split('T')[1]?.slice(0, 5) : null) || item.latestAt || '—',
-      status: item.status || '접수',
+      status: item.status || '수락대기',
       tooltip: dispatchStopTooltip(item),
     };
   }
@@ -669,7 +669,7 @@
       const dvr = await apiFetch(`/deliveries`);
       if (dvr.ok) {
         const deliveries = await dvr.json();
-        const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
+        const deliveryStatusMap = { pending: '접수', accepted: '수락대기', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
         DATA.orders = deliveries.map(d => ({
           id: d.id,
           tripId: d.trip_id || null,
@@ -982,7 +982,9 @@
   };
 
   function statusBadge(s) {
-    const map = { '운행가능': 'badge-ok', '운행중': 'badge-run', '휴무': 'badge-muted', '접수': 'badge-muted', '배차': 'badge-info', '완료': 'badge-ok', '진행': 'badge-run', '취소': 'badge-muted', '가용': 'badge-ok', '정비': 'badge-muted', '운행중(차량)': 'badge-run' };
+    const labelMap = { accepted: '수락대기', pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
+    const label = labelMap[s] || s;
+    const map = { '운행가능': 'badge-ok', '운행중': 'badge-run', '휴무': 'badge-muted', '접수': 'badge-muted', '배차': 'badge-info', '수락대기': 'badge-muted', '완료': 'badge-ok', '진행': 'badge-run', '취소': 'badge-muted', '가용': 'badge-ok', '정비': 'badge-muted', '운행중(차량)': 'badge-run' };
     return `<span class="badge ${map[label] || 'badge-muted'}">${label}</span>`;
   }
 
@@ -1004,7 +1006,7 @@
   }
 
   function orderCanCancel(o) {
-    return (o.status === '접수' || o.status === '배차') && o.status !== '취소';
+    return (o.status === '접수' || o.status === '수락대기' || o.status === '배차') && o.status !== '취소';
   }
 
   function orderCanDelete(o) {
@@ -1014,6 +1016,7 @@
   function deliveryDisplayStatus(o) {
     if (!o) return '—';
     const s = o.status;
+    if (s === '수락대기' || s === 'accepted') return '수락대기';
     if (s === '배차' || s === 'assigned') return '배차';
     if (s === '접수' || s === 'pending') return (o.driver || o.driver_id || o.assigned_to) ? '배차' : '접수';
     return s;
@@ -1022,6 +1025,7 @@
   function orderMatchesFilter(o, filter) {
     if (filter === '전체') return true;
     const display = deliveryDisplayStatus(o);
+    if (filter === '수락대기') return display === '수락대기';
     if (filter === '배차') return display === '배차';
     return o.status === filter;
   }
@@ -2310,8 +2314,8 @@
 
   function statusOptions(status) {
     const map = {
-      '접수': ['접수', '배차', '운행중', '취소'],
-      '배차': ['배차', '운행중', '취소'],
+      '접수': ['접수', '수락대기', '운행중', '취소'],
+      '수락대기': ['수락대기', '운행중', '취소'],
       '운행중': ['운행중', '완료', '취소'],
       '배차': ['배차', '운행중', '취소'],
       '완료': ['완료'],
@@ -2450,7 +2454,7 @@
       const [cargo, tons = ''] = cargoText.split(' · ');
       const statusEl = $('#orderDetailStatus', root);
       const newStatus = statusEl ? statusEl.value : null;
-      const revMap = { '접수': 'pending', '배차': 'pending', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
+      const revMap = { '접수': 'pending', '수락대기': 'accepted', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
       const body = {
         pickup_address: pickup,
         address: delivery,
@@ -3177,7 +3181,7 @@
     try { quickIds = JSON.parse(localStorage.getItem('dashboardQuickLinks') || '["intake","dispatch"]'); }
     catch { quickIds = ['intake', 'dispatch']; }
     const quickLinks = quickIds.map(id => quickOptions.find(item => item.id === id)).filter(Boolean);
-    const orderTabs = ['전체', '접수', '배차', '운행중', '완료'];
+    const orderTabs = ['전체', '접수', '수락대기', '배차', '운행중', '완료'];
     const filteredOrders = DATA.orders.filter(o => dashOrderTab === '전체' || o.status === dashOrderTab);
     const dashboardOrders = filteredOrders.slice(0, 5);
     const completed = DATA.orders.filter(o => o.status === '완료').length;
@@ -4869,7 +4873,7 @@
             </thead>
             <tbody>
               ${dispatchListTableRows(
-                DATA.dispatchOrders.map(o => ({ ...o, order_id: o.id, status: '접수', window: o.latestAt })),
+                DATA.dispatchOrders.map(o => ({ ...o, order_id: o.id, status: '수락대기', window: o.latestAt })),
                 { checkbox: true, checkboxClass: 'dispatch-chk', rowClass: 'order-row-clickable' }
               )}
             </tbody>
@@ -6612,7 +6616,7 @@
   }
 
   function renderOrderList(root) {
-    const statuses = ['전체', '접수', '배차', '운행중', '완료', '취소'];
+    const statuses = ['전체', '접수', '수락대기', '배차', '운행중', '완료', '취소'];
     const q = orderSearch.trim().toLowerCase();
     const allRows = DATA.orders.filter(o => {
       if (!orderMatchesFilter(o, orderFilter)) return false;
