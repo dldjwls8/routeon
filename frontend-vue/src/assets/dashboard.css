@@ -2776,11 +2776,13 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     .dispatch-zone-layout .dispatch-orders-pane .table-scroll {
       max-height: none;
       min-height: 0;
       flex: 1;
+      overflow-y: auto;
     }
     .dispatch-zone-layout .dispatch-resource-pane .table-scroll,
     .dispatch-zone-layout .dispatch-resource-pane .driver-list {
@@ -2789,6 +2791,13 @@
       flex: 1;
       overflow-y: auto;
       overscroll-behavior: contain;
+    }
+    .dispatch-zone-layout .dispatch-setup-main {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
     .dispatch-zone-layout .bulk-setup-footer,
     .dispatch-zone-layout .bulk-assign-bar,
