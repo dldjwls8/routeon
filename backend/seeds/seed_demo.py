@@ -42,7 +42,7 @@ DEMO_PASSWORD = hash_password("Pass1234!")
 
 ORG = {
     "name": "데모물류",
-    "org_code": "DEMO001",
+    "org_code": "RT-UK61HX",
     "status": OrgStatus.approved,
     "auto_approve_drivers": True,
     "auto_approve_admins": True,
@@ -84,19 +84,30 @@ VEHICLES = [
     {"plate_number": "890아1234", "vehicle_type": "탑차",     "height_m": 2.2, "weight_kg": 2500, "length_cm": 550, "width_cm": 200},
     {"plate_number": "901자2345", "vehicle_type": "냉동",     "height_m": 2.6, "weight_kg": 4000, "length_cm": 650, "width_cm": 215},
     {"plate_number": "012차3456", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210},
+    {"plate_number": "345하6789", "vehicle_type": "리프트",   "height_m": 2.4, "weight_kg": 4000, "length_cm": 700, "width_cm": 220},
 ]
 
 CUSTOMERS = [
-    {"name": "서울상사",    "phone": "010-3000-0001", "address": "서울특별시 강남구 테헤란로 123",          "lat": 37.4979, "lon": 127.0276},
-    {"name": "경기물류",    "phone": "010-3000-0002", "address": "경기도 수원시 팔달구 권선로 45",          "lat": 37.2636, "lon": 127.0286},
-    {"name": "인천유통",    "phone": "010-3000-0003", "address": "인천광역시 연수구 인천타워대로 100",      "lat": 37.4042, "lon": 126.6810},
-    {"name": "부산화물",    "phone": "010-3000-0004", "address": "부산광역시 해운대구 해운대로 200",        "lat": 35.1587, "lon": 129.1604},
-    {"name": "대구상운",    "phone": "010-3000-0005", "address": "대구광역시 수성구 동대구로 300",          "lat": 35.8570, "lon": 128.6266},
-    {"name": "광주물산",    "phone": "010-3000-0006", "address": "광주광역시 서구 상무대로 400",            "lat": 35.1520, "lon": 126.8895},
-    {"name": "대전유통",    "phone": "010-3000-0007", "address": "대전광역시 유성구 대학로 150",            "lat": 36.3640, "lon": 127.3451},
-    {"name": "울산화학",    "phone": "010-3000-0008", "address": "울산광역시 남구 삼산로 500",              "lat": 35.5384, "lon": 129.3114},
-    {"name": "성남전자",    "phone": "010-3000-0009", "address": "경기도 성남시 분당구 판교로 600",         "lat": 37.3802, "lon": 127.1156},
-    {"name": "천안식품",    "phone": "010-3000-0010", "address": "충청남도 천안시 서북구 성정로 700",       "lat": 36.8151, "lon": 127.1139},
+    {"name": "데모물류",      "phone": "010-1111-2222", "address": "경기 화성시 팔탄면 덕충산길 11",              "lat": 37.1208, "lon": 126.9023},
+    {"name": "삼성전자",      "phone": "010-2222-3333", "address": "경기도 수원시 영통구 삼성로 129",             "lat": 37.2571, "lon": 127.0536},
+    {"name": "LG생활건강",    "phone": "010-3333-4444", "address": "서울특별시 강서구 마곡중앙6로 72",            "lat": 37.5585, "lon": 126.8291},
+    {"name": "CJ대한통운",    "phone": "010-4444-5555", "address": "경기도 이천시 호법면 중부대로 310",           "lat": 37.2484, "lon": 127.4235},
+    {"name": "현대제철",      "phone": "010-5555-6666", "address": "충청남도 당진시 송악읍 현대제철로 1",         "lat": 36.9100, "lon": 126.6430},
+    {"name": "포스코",        "phone": "010-6666-7777", "address": "경상북도 포항시 남구 동해문로 148",           "lat": 36.0190, "lon": 129.3435},
+    {"name": "한국타이어",    "phone": "010-7777-8888", "address": "충청남도 금산군 금산읍 무극로 215",           "lat": 36.1060, "lon": 127.4883},
+    {"name": "기아자동차",    "phone": "010-8888-9999", "address": "광주광역시 북구 하남대로 757",                "lat": 35.1608, "lon": 126.8820},
+    {"name": "롯데칠성",      "phone": "010-9999-0000", "address": "경기도 화성시 팔탄면 에이스로 100",           "lat": 37.1208, "lon": 126.9023},
+    {"name": "아모레퍼시픽",  "phone": "010-0000-1111", "address": "경기도 용인시 수지구 신수로 100",             "lat": 37.3228, "lon": 127.0971},
+    {"name": "네이버",        "phone": "010-1212-2323", "address": "경기도 성남시 분당구 정자일로 95",            "lat": 37.3595, "lon": 127.1054},
+    {"name": "카카오",        "phone": "010-2323-3434", "address": "경기도 성남시 분당구 판교역로 166",           "lat": 37.3943, "lon": 127.1101},
+    {"name": "쿠팡",          "phone": "010-3434-4545", "address": "경기도 이천시 마장면 배터지로 100",           "lat": 37.2484, "lon": 127.4235},
+    {"name": "이마트",        "phone": "010-4545-5656", "address": "서울특별시 성동구 뚝섬로 377",                "lat": 37.5443, "lon": 127.0560},
+    {"name": "GS리테일",      "phone": "010-5656-6767", "address": "경기도 김포시 양촌읍 양촌역로 100",           "lat": 37.6152, "lon": 126.6289},
+    {"name": "한진",          "phone": "010-6767-7878", "address": "경기도 화성시 팔탄면 에이스로 200",           "lat": 37.1208, "lon": 126.9023},
+    {"name": "동원산업",      "phone": "010-7878-8989", "address": "부산광역시 강서구 녹산산업중로 333",          "lat": 35.1110, "lon": 128.8360},
+    {"name": "오뚜기",        "phone": "010-8989-9090", "address": "충청북도 청주시 흥덕구 오송읍 오송생명로 183", "lat": 36.6801, "lon": 127.4010},
+    {"name": "농심",          "phone": "010-9090-0101", "address": "서울특별시 동작구 여의대방로 112",            "lat": 37.4985, "lon": 126.9390},
+    {"name": "하이트진로",    "phone": "010-0101-1212", "address": "서울특별시 강남구 영동대로 714",              "lat": 37.5142, "lon": 127.0603},
 ]
 
 
@@ -164,32 +175,32 @@ async def seed():
                 await db.refresh(vehicle)
                 print(f"[CREATE] 차량 {vehicle.plate_number} ({vehicle.vehicle_type}) — id={vehicle.id}")
 
-            # 기사와 차량 연결
-            driver = drivers[idx]
-            if driver.vehicle_id != vehicle.id:
-                driver.vehicle_id = vehicle.id
-                db.add(driver)
-                await db.commit()
-                print(f"[LINK] 기사 {driver.name} → 차량 {vehicle.plate_number}")
+            # 기사와 차량 연결 (기사 수만큼만)
+            if idx < len(drivers):
+                driver = drivers[idx]
+                if driver.vehicle_id != vehicle.id:
+                    driver.vehicle_id = vehicle.id
+                    db.add(driver)
+                    await db.commit()
+                    print(f"[LINK] 기사 {driver.name} → 차량 {vehicle.plate_number}")
+            else:
+                print(f"[STANDBY] 차량 {vehicle.plate_number} (예비)")
             vehicles.append(vehicle)
 
-        # 6) Customers
+        # 6) Customers — 완전 교체: 기존 고객 전체 삭제 후 엑셀 기준 20개 신규 등록
+        from sqlalchemy import delete
+        del_result = await db.execute(
+            delete(Customer).where(Customer.organization_id == org_id)
+        )
+        await db.commit()
+        print(f"[DELETE] 기존 고객 {del_result.rowcount}건 삭제 완료")
+
         for cdata in CUSTOMERS:
-            result = await db.execute(
-                select(Customer).where(
-                    Customer.organization_id == org_id,
-                    Customer.name == cdata["name"],
-                )
-            )
-            customer = result.scalar_one_or_none()
-            if customer:
-                print(f"[SKIP] 고객 '{customer.name}' 이미 존재 — id={customer.id}")
-            else:
-                customer = Customer(organization_id=org_id, **cdata)
-                db.add(customer)
-                await db.commit()
-                await db.refresh(customer)
-                print(f"[CREATE] 고객 '{customer.name}' — id={customer.id}")
+            customer = Customer(organization_id=org_id, **cdata)
+            db.add(customer)
+            await db.commit()
+            await db.refresh(customer)
+            print(f"[CREATE] 고객 '{customer.name}' — id={customer.id}")
 
         print("\n✅ 시연용 데모 데이터 구성 완료")
         print(f"   기업: {org.name} ({org.org_code})")

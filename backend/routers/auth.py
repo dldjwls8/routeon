@@ -497,6 +497,17 @@ async def get_users(
                     "recorded_at": loc.recorded_at.isoformat() if loc.recorded_at else None,
                 }
 
+    # 배정 차량 이름 조회
+    vehicle_ids = [u.vehicle_id for u in users if u.vehicle_id]
+    vehicle_name_by_id = {}
+    if vehicle_ids:
+        from models import Vehicle
+        _rv = await db.execute(
+            select(Vehicle).where(Vehicle.id.in_(vehicle_ids))
+        )
+        for v in _rv.scalars().all():
+            vehicle_name_by_id[v.id] = v.plate_number or v.vehicle_type or str(v.id)
+
     return [
         {
             "id":            str(u.id),
@@ -506,6 +517,7 @@ async def get_users(
             "phone":         u.phone,
             "org_code":      None,
             "vehicle_id":    u.vehicle_id,
+            "vehicle_name":  vehicle_name_by_id.get(u.vehicle_id) if u.vehicle_id else None,
             "driver_status": u.driver_status,
             "created_at":    u.created_at.isoformat(),
             "is_org_owner":  u.is_org_owner,

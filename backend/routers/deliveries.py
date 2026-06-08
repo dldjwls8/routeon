@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from database import get_db
@@ -16,6 +17,7 @@ from auth import get_current_user, require_admin, require_driver
 from core.managers import manager
 from core.utils import normalize_phone
 from services.order_events import order_event_schema, record_order_event
+from services.cargo_capacity import validate_vehicle_capacity_for_waypoints
 
 router = APIRouter()
 
@@ -113,7 +115,7 @@ async def create_delivery(
 ):
     """관리자: 배송지 단건 등록"""
     contact_phone = normalize_phone(req.contact_phone)
-    shipper_phone = normalize_phone(req.shipper_phone) or contact_phone
+    shipper_phone = normalize_phone(req.shipper_phone)
     delivery = Delivery(
         organization_id  = current_user.organization_id,
         address          = req.address,
@@ -159,7 +161,7 @@ async def create_deliveries_batch(
     deliveries = []
     for req in reqs:
         contact_phone = normalize_phone(req.contact_phone)
-        shipper_phone = normalize_phone(req.shipper_phone) or contact_phone
+        shipper_phone = normalize_phone(req.shipper_phone)
         d = Delivery(
             organization_id=current_user.organization_id,
             address=req.address, lat=req.lat, lon=req.lon,
@@ -223,6 +225,19 @@ async def assign_delivery(
     driver = _r2.scalar_one_or_none()
     if not driver:
         raise HTTPException(404, "기사를 찾을 수 없습니다.")
+
+    # 톤수 검증: 기사에게 배정된 차량이 화물을 적재할 수 있는지 확인
+    if driver.vehicle_id:
+        vehicle = (await db.execute(
+            select(Vehicle).where(Vehicle.id == driver.vehicle_id)
+        )).scalar_one_or_none()
+        if vehicle:
+            waypoint = {
+                "cargo_weight_ton": delivery.cargo_weight_ton,
+                "cargo_size": delivery.cargo_size,
+                "type": "unloading",
+            }
+            validate_vehicle_capacity_for_waypoints(vehicle, [waypoint])
 
     delivery.assigned_to = driver.id
     delivery.status      = DeliveryStatus.in_progress
@@ -396,7 +411,7 @@ async def get_deliveries(
     기사: 본인에게 배정된 in_progress 배송 목록
     관리자: 전체 배송 목록
     """
-    stmt = select(Delivery)
+    stmt = select(Delivery).options(selectinload(Delivery.driver))
     if current_user.role == UserRole.driver:
         stmt = stmt.where(
             Delivery.assigned_to == current_user.id,
@@ -407,7 +422,7 @@ async def get_deliveries(
     stmt = stmt.order_by(Delivery.sequence, Delivery.created_at)
     _r = await db.execute(stmt)
     deliveries = _r.scalars().all()
-    return [_delivery_schema(d) for d in deliveries]
+    return [_delivery_schema(d, d.driver) for d in deliveries]
 
 
 @router.get("/deliveries/{delivery_id}/events")
@@ -457,7 +472,7 @@ async def get_delivery(
     return _delivery_schema(delivery)
 
 
-def _delivery_schema(d: Delivery) -> dict:
+def _delivery_schema(d: Delivery, driver: User = None) -> dict:
     """Delivery 모델 → dict 변환 헬퍼"""
     return {
         "id":               str(d.id),
@@ -471,7 +486,7 @@ def _delivery_schema(d: Delivery) -> dict:
         "pickup_lon":       d.pickup_lon,
         "shipper_name":     d.shipper_name,
         "contact_phone":    d.contact_phone,
-        "shipper_phone":    d.shipper_phone or d.contact_phone,
+        "shipper_phone":    d.shipper_phone,
         "mixed_load":       d.mixed_load,
         "cargo_type":       d.cargo_type,
         "cargo_size":       d.cargo_size,
@@ -483,6 +498,8 @@ def _delivery_schema(d: Delivery) -> dict:
         "sequence":         d.sequence,
         "trip_id":          str(d.trip_id)    if d.trip_id    else None,
         "assigned_to":      str(d.assigned_to) if d.assigned_to else None,
+        "driver_id":        str(d.assigned_to) if d.assigned_to else None,
+        "driver_name":      (driver.name or driver.username) if driver else None,
         "completed_at":     d.completed_at.isoformat() if d.completed_at else None,
         "created_at":       d.created_at.isoformat(),
     }

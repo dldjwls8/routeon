@@ -93,7 +93,11 @@ routeon/
 └── frontend-vue/           Vue 3 + Vite SPA 관리자 웹 (현재 활성 개발 대상)
     ├── index.html            SPA 진입점 (legacy scripts + Vue app mount)
     ├── vite.config.js        Vite 빌드 설정
-    ├── package.json          의존성 (vue, vue-router, vite)
+    ├── package.json          의존성 (vue, vue-router, vite, sheetjs)
+    ├── .env.example          환경변수 템플릿 (API_BASE, KAKAO_JS_KEY 등)
+    ├── .gitignore            node_modules, dist, .env 등
+    ├── jsconfig.json         VS Code 경로 alias 설정
+    ├── README.md             Vue 프로젝트 개요 및 빌드/배포 가이드
     ├── public/               레거시 정적 에셋 (Nginx가 그대로 서빙)
     │   ├── dashboard.js      레거시 대시보드 로직 (6,989줄 그대로 보존, IIFE로 init() 노출)
     │   ├── api-client.js     API/WS 주소·토큰·인증 헤더·공용 fetch
@@ -124,6 +128,8 @@ routeon/
         │   ├── useApi.js            API loading/error 상태 관리
         │   ├── useListPage.js       목록 페이지네이션/검색/필터 상태 관리
         │   └── useChatSocket.js     채팅 WebSocket + unread 상태 공유 composable (DashboardLayout·ChatView 공용)
+        ├── stores/
+        │   └── index.js             Pinia 스토어 초기화 (향후 전역 상태 확장용)
         ├── router/
         │   └── index.js      Vue Router 경로 정의·meta.main·meta.label
         ├── layouts/
@@ -483,7 +489,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 유저/차량
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `GET /users?role=&account_status=` | 관리자 | 같은 기업 유저를 역할과 승인 상태로 조회 |
+| `GET /users?role=&account_status=` | 관리자 | 같은 기업 유저를 역할과 승인 상태로 조회. `role=driver` 조회 시 `vehicle_name`(배정 차량명)을 포함해 기사 목록에서 차량 정보를 한 눈에 확인할 수 있다 |
 | `PATCH /users/{id}` | 관리자 | 기사 정보 수정. 수동 상태는 `운행가능/휴무`만 허용하고 운행 중 기사 변경은 거부. 담당자 `permissions` 수정은 최상위 관리자만 가능 |
 | `DELETE /users/{id}` | 관리자 | 같은 조직 유저 삭제. 운행 중 기사, 본인, 최상위 관리자 삭제는 거부하며 담당자 삭제는 최상위 관리자만 가능 |
 | `GET /vehicles` | 관리자 | 같은 조직 차량 목록. 연결 기사(`driver_id`, `driver_name`)와 차량 위치 스냅샷 `last_gps` 포함 |
@@ -563,7 +569,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 ### 사용자/차량
 | 엔드포인트 | 권한 | 설명 |
 |-----------|------|------|
-| `GET /users?role=&account_status=` | 관리자 | 같은 조직 사용자 목록. 역할(`driver/admin`)과 승인 상태(`pending/approved/rejected`) 필터 지원 |
+| `GET /users?role=&account_status=` | 관리자 | 같은 조직 사용자 목록. 역할(`driver/admin`)과 승인 상태(`pending/approved/rejected`) 필터 지원. `role=driver` 응답에 `vehicle_name` 포함 |
 | `PATCH /users/{id}` | 관리자 | 기사 상태·배정 차량 변경. 수동 상태는 `운행가능/휴무`만 허용하고 운행 중 기사 변경은 거부. 담당자 화면 권한은 최상위 관리자만 수정 |
 | `DELETE /users/{id}` | 관리자 | 같은 조직 사용자 삭제. 운행 중 기사·본인·최상위 관리자 삭제 불가, 담당자 삭제는 최상위 관리자만 가능 |
 | `GET /vehicles` | 관리자 | 같은 조직 활성 차량 목록. 차량 위치 스냅샷 `last_gps`, `driver_id`, `driver_name` 포함 |
@@ -632,6 +638,7 @@ settings.html 구조:
 - 담당자는 조직별 `is_org_owner=true`인 최상위 관리자와 일반 관리자로 구분한다. 일반 관리자는 가입 페이지에서 조직코드로 신청하며, 최상위 기업관리자가 `기본정보 > 담당자`에서 승인·반려한다.
 - 관리자 신청은 `auto_approve_admins=true`이면 즉시 승인되고, 아니면 최상위 기업관리자 승인 대기다. 승인된 일반 관리자는 `dashboard`, `control`, `dispatch`, `customers`, `schedule`, `basic` 권한이 기본 활성화된다.
 - 기사·차량 목록 행에는 삭제 버튼을 두지 않고 선택 후 우측 상세 최하단에서 삭제/비활성화한다. 상세 닫기는 우측 상단, 저장은 우측 하단에 배치한다. 기사 계정은 관리자 화면에서 직접 추가하지 않고 공개 가입·승인 흐름으로만 생성한다.
+- 차량 상세의 `기사 연결` 필드는 수정 모드에서 `<select>`로 제공하며, 이미 다른 차량에 연결된 기사는 목록에 표시하지 않는다(`availableDrivers` computed: 현재 차량의 `driver_id`를 제외한 뒤 `assignedDriverIds(Set)`에 포함된 기사를 필터링). 마찬가지로 기사 상세의 `배정 차량` 필드도 이미 다른 기사에게 배정된 차량은 목록에서 제외한다(`availableVehicles` computed: 현재 기사의 `vehicle_id`를 제외한 뒤 `assignedVehicleIds(Set)`에 포함된 차량을 필터링). 저장은 각각 `PATCH /vehicles/{id}`와 `PATCH /users/{id}`로 전송한다.
 - 기사 수동 상태는 `운행가능/휴무`, 차량 수동 상태는 `가용/정비`만 제공한다. 진행 중 Trip이 연결된 기사·차량은 삭제 작업을 잠그며, 차량은 상태·연결 기사 변경만 잠그고 톤급·차종 같은 기본 정보는 운행 중에도 수정할 수 있다. 서버도 같은 규칙을 검증한다.
 - 차량 상세의 톤급·차종 `<select>`는 표준 옵션 목록(`tonOpts`/`typeOpts`)에 없는 기존 값(과거 자유 입력 데이터 등)도 `tonChoices`/`typeChoices`로 옵션에 포함해 그대로 표시한다 — 그렇지 않으면 일치하는 옵션이 없어 브라우저가 첫 옵션을 기본 선택하고, 좌측 목록과 우측 상세 표시값이 달라 보이며 저장 시 실제 값이 다른 값으로 조용히 덮어써진다(엔티티 이벤트 감사 로그에서 실제 발생 사례 확인·복구함). 톤급 저장 시 `tonMap`에 없는 표기는 숫자를 직접 파싱해 `weight_kg`로 환산한다.
 - 차량 목록·상세의 "운행중" 상태 표시는 DB의 `Vehicle.status` 원본이 아니라 `vehicleEffectiveStatus()`(진행 중 Trip 존재 여부로 보정)를 사용한다. `Vehicle.status`는 운행 시작·종료 시 서버에서 자동 갱신되지 않으므로, 활성 운행이 있어도 DB값은 `가용`으로 남아있을 수 있다.
@@ -672,7 +679,7 @@ dashboard.html 오더·배차 UI:
 - 접수창 화주 선택은 고객 마스터가 비어 있어도 `등록된 화주 없음` placeholder를 표시하며, 임시 화주 추가는 select의 `+ 임시 화주 추가` 옵션 하나로만 제공한다(별도 버튼 없음). 임시 화주 생성 모달의 연락처 입력은 `bindPhoneAutoFormat`으로 입력 중 자동으로 `010-0000-0000` 형식의 `-`를 채워 넣는다.
 - `오더관리 > 오더목록`은 오더번호·화주·상하차지·화물 통합 검색을 제공한다. 행 클릭을 상세 조회, 행 체크박스와 헤더 전체 체크박스를 다중 선택으로 사용하며 별도 `현재 페이지 선택/해제`, `선택 해제` 버튼은 두지 않는다. 선택한 `접수` 상태 오더만 `오더관리 > 배차관리`로 전달한다.
 - 오더목록에는 `+ 접수 창` 버튼을 두지 않는다. 접수는 상단 하위 메뉴의 `오더접수`로 이동한다.
-- 오더목록 행에는 별도 수정 버튼을 두지 않는다. 행을 선택한 뒤 우측 상세 하단 `수정` 버튼으로 인라인 편집을 시작한다.
+- 오더목록 행에는 별도 수정 버튼을 두지 않는다. 행을 선택한 뒤 우측 상세 하단 `수정` 버튼으로 인라인 편집을 시작한다. 수정 모드에서 상태는 `<select>` 드롭다운으로 변경할 수 있으며, 허용 전이는 `statusOptions(status)`로 관리한다 — `pending` → `pending/in_progress/cancelled`, `in_progress` → `in_progress/done/done_manual/cancelled`. `done`/`done_manual`/`cancelled`는 수정 불가. 저장 시 `status`가 변경된 경우에만 서버에 전송한다.
 - 오더 목록 컬럼 순서는 `상태`, `접수 시간`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `시간창`, `오더번호` 순서를 기본으로 한다. 목록과 상세는 `RO-YYMMDD-XXXXXX` 표시 형식만 사용하고 긴 원본 UUID는 노출하지 않는다.
 - 오더 상세의 `상·하차` 탭은 `cargo_id` 원본 필드명 대신 `화물 ID`를 사용하고 `RO-...-화물N` 형식으로 표시한다. `지도` 탭은 등록된 모든 상차·하차 좌표를 상차/하차 색상이 다른 핀(`order-stop-pin`, 라벨+드롭핀 모양)으로 표시하며, 탭 전환 직후 컨테이너 크기가 확정되기 전 흰 화면이 보이지 않도록 지도 생성 후 `relayout()`으로 강제 재렌더링한다.
 - 오더 상세 지도(`.order-detail-map`)와 고객·기사·차량 상세의 위치 지도(`.entity-detail-map`)는 같은 반응형 높이 규칙(`height: min(58vh, 520px); min-height: 360px`)을 공유한다 — 고정 픽셀(예: 260~330px)로 두면 상세 컨테이너에 비해 상하 길이가 짧아 보이는 문제가 있어 뷰포트 비율 기반으로 통일했다.
@@ -720,12 +727,13 @@ footer 및 법적 안내 페이지:
 - `theme-app` 페이지(차량·담당자·기업정보·고객관리·간트 등)의 `.content`는 매직 넘버 `min-height` 대신 표준 sticky-footer flex 패턴(`flex: 1 1 auto; min-height: 0`)을 사용한다 — 콘텐츠가 짧아도 footer가 항상 화면 하단에 밀착하고, 콘텐츠가 넘치면 자연스럽게 페이지 스크롤이 생긴다. 화면별 고정 높이가 필요한 `theme-dashboard`/`dispatch-viewport`/`order-list-viewport`/`order-intake-viewport`는 각자 별도 규칙으로 `.content`를 재정의한다.
 
 dashboard.html 채팅 알림 WS:
-- WS /ws/chat 경량 연결 (수신 전용, 전송 없음) — `connectChatWebSocket()`
+- WS `/ws/chat` 경량 연결 (수신 전용, 전송 없음) — `connectChatWebSocket()`
 - `chat.message` 수신 시: `message.sender_id ≠ currentUserId`면 해당 상대 unread 배지 +1
 - `chat.read` 수신 시: `reader_id === currentUserId`면 해당 상대 배지 → 0
 - 대화방은 `conversation_id → partner_id`로 매핑해 기사와 관리자 알림을 함께 처리한다.
 - 초기 로드 시 `loadChatConversations()` 로 기존 unread 카운트 일괄 반영
-- 대시보드 탑바의 메시지 버튼은 `/chat.html`로 이동한다. 미읽음 메시지가 있으면 기존 알림 점과 동일하게 메시지 버튼에도 배지를 표시한다.
+- 대시보드 탑바의 메시지 버튼(💬)은 `/chat.html`로 이동한다. 미읽음 메시지가 있으면 메시지 버튼에만 배지를 표시한다.
+- 배차 취소 요청 알림은 별도 WS `/ws/location`에서 `trip.cancel_requested` 이벤트를 수신해 처리한다. 취소 요청이 있으면 알림 버튼(🔔)에 배지를 표시하고 드롭다운에 요청 목록을 노출한다 — 채팅 unread와 알림 배지를 분리해 각각 독립적으로 카운트한다.
 - 관리자 웹 세션 가드는 `admin`만 대시보드 접근을 허용한다. `superadmin`은 `/superadmin.html` 전용이다.
 
 Android 앱 채팅 구현 필수 사항:

@@ -1,10 +1,71 @@
 <script setup>
-import { onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { onMounted, onUnmounted, watch, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatSocket } from '@/composables/useChatSocket.js'
+import { apiClient } from '@/api/client.js'
 
 const router = useRouter()
 const chat = useChatSocket()
+const WS_BASE = apiClient.wsBase
+
+const locationAlerts = ref([])
+let locationWs = null
+
+function getToken() {
+  return localStorage.getItem('token') || ''
+}
+
+function connectLocationSocket() {
+  const token = getToken()
+  if (!token || locationWs) return
+  const ws = new WebSocket(`${WS_BASE}/ws/location?token=${token}`)
+  locationWs = ws
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data)
+      if (msg.type === 'trip.cancel_requested') {
+        locationAlerts.value.push({
+          type: 'trip.cancel_requested',
+          trip_id: msg.trip_id,
+          driver_id: msg.driver_id,
+          reason: msg.reason,
+          at: new Date().toISOString(),
+        })
+      }
+    } catch {}
+  }
+  ws.onclose = () => { locationWs = null; setTimeout(connectLocationSocket, 5000) }
+  ws.onerror = () => ws.close()
+}
+
+function disconnectLocationSocket() {
+  if (locationWs) {
+    locationWs.close()
+    locationWs = null
+  }
+}
+
+function updateMessageBadge(total) {
+  const mb = document.getElementById('messageBadge')
+  if (mb) mb.style.display = total > 0 ? '' : 'none'
+}
+
+function updateNotifUI() {
+  const nb = document.getElementById('notifBadge')
+  const drop = document.getElementById('notifDropdown')
+  const alerts = locationAlerts.value
+  if (nb) nb.style.display = alerts.length > 0 ? '' : 'none'
+  if (!drop) return
+  if (!alerts.length) {
+    drop.innerHTML = '<div class="topbar-dropdown-header">알림</div><div class="topbar-dropdown-empty">새 알림이 없습니다</div>'
+    return
+  }
+  const items = alerts.slice().reverse().map((a, idx) => {
+    const reason = escapeHtml(a.reason)
+    return `<button type="button" class="topbar-dropdown-item" onclick="location.href='/dispatch-manage'">🚨 기사 취소 요청 <span class="badge badge-danger" style="margin-left:auto">${reason}</span></button>`
+  }).join('')
+  drop.innerHTML = `<div class="topbar-dropdown-header">새 알림</div>${items}`
+}
 
 /* ── 대시보드 초기화 ── */
 onMounted(async () => {
@@ -14,12 +75,11 @@ onMounted(async () => {
     await window.RouteOnInit()
   }
 
-  /* ── Vue unread → legacy DOM badge 동기화 ── */
   chat.connect()
   chat.loadPartners()
   chat.loadConversations()
+  connectLocationSocket()
 
-  /* messageBtn 클릭을 Vue router 로 연결 */
   nextTick(() => {
     const mb = document.getElementById('messageBtn')
     if (mb) mb.onclick = () => { router.push('/chat') }
@@ -29,35 +89,16 @@ onMounted(async () => {
 onUnmounted(() => {
   document.body.classList.remove('theme-dashboard')
   chat.disconnect()
+  disconnectLocationSocket()
 })
 
-/* totalUnread 변화를 감시하여 legacy DOM badge 직접 동기화 */
 watch(() => chat.totalUnread.value, (total) => {
-  const mb = document.getElementById('messageBadge')
-  const nb = document.getElementById('notifBadge')
-  if (mb) mb.style.display = total > 0 ? '' : 'none'
-  if (nb) nb.style.display = total > 0 ? '' : 'none'
-
-  const drop = document.getElementById('notifDropdown')
-  if (!drop) return
-
-  if (!total) {
-    drop.innerHTML = '<div class="topbar-dropdown-header">알림</div><div class="topbar-dropdown-empty">새 알림이 없습니다</div>'
-    return
-  }
-
-  const entries = Object.entries(chat.state.convByPartner || {})
-    .filter(([, c]) => (c?.unread_count || 0) > 0)
-
-  const items = entries.map(([pid, c]) => {
-    const p = chat.state.partners?.find(x => x.id === pid)
-    const name = p?.name || p?.username || '사용자'
-    const n = c.unread_count
-    return `<button type="button" class="topbar-dropdown-item" onclick="location.href='/chat?partner_id=${pid}'">💬 ${escapeHtml(name)}<span class="badge badge-info" style="margin-left:auto">${n > 99 ? '99+' : n}</span></button>`
-  }).join('')
-
-  drop.innerHTML = `<div class="topbar-dropdown-header">새 메시지</div>${items}`
+  updateMessageBadge(total)
 }, { immediate: true })
+
+watch(locationAlerts, () => {
+  updateNotifUI()
+}, { deep: true, immediate: true })
 
 function escapeHtml(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

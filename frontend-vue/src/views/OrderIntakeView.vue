@@ -29,6 +29,19 @@ const form = ref({
   mixed_load: false,
 })
 
+const selectedCustomerId = ref(null)
+
+function onCustomerChange() {
+  const c = customers.value.find(x => x.id == selectedCustomerId.value)
+  if (c) {
+    form.value.shipper_name = c.name
+    form.value.contact_phone = c.phone || ''
+  } else {
+    form.value.shipper_name = ''
+    form.value.contact_phone = ''
+  }
+}
+
 // 엑셀 일괄 접수 상태
 const excelLoading = ref(false)
 const excelError = ref('')
@@ -54,6 +67,7 @@ async function submit() {
     submitted.value = true
     setTimeout(() => submitted.value = false, 2000)
     Object.keys(form.value).forEach(k => { form.value[k] = k==='mixed_load'?false:'' })
+    selectedCustomerId.value = null
   } catch (e) { alert('접수 실패') }
   finally { loading.value = false }
 }
@@ -150,7 +164,14 @@ onMounted(load)
           <div class="card-bd">
             <!-- 단건 접수 -->
             <div v-if="activeTab==='single'" class="form-grid" style="max-width:100%">
-              <label>화주</label><input v-model="form.shipper_name" placeholder="화주명">
+              <label>화주</label>
+              <div style="display:flex;gap:8px;flex-direction:column">
+                <select v-model="selectedCustomerId" @change="onCustomerChange">
+                  <option :value="null">직접 입력</option>
+                  <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+                <input v-model="form.shipper_name" :readonly="!!selectedCustomerId" placeholder="화주명">
+              </div>
               <label>상차지</label><input v-model="form.pickup_address" placeholder="상차지 주소">
               <label>상차 중량(톤)</label><input v-model="form.pickup_cargo_weight_ton" placeholder="예: 5.0">
               <label>하차지 *</label><input v-model="form.address" placeholder="하차지 주소">

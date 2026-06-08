@@ -49,7 +49,6 @@ def apply_delivery_to_waypoint(waypoint: dict, delivery: Delivery) -> None:
     waypoint["shipper_phone"] = (
         waypoint.get("shipper_phone")
         or delivery.shipper_phone
-        or delivery.contact_phone
     )
 
 

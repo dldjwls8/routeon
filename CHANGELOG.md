@@ -6,6 +6,22 @@
 
 ---
 
+## v1.0.124 (2026-06-08)
+### 오더목록 상태 변경·배차대기 제거·알림 분리·중복 연결 필터링·톤수 검증 보강
+- **배경**: 오더목록에서 상태를 변경할 수 없어 별도 작업이 필요했고, DB에 실제 없는 가짜 "배차대기" 상태가 UI에 남아 있어 혼란을 야기. 배차 취소 요청이 채팅 메시지와 섞여 알림 구분이 어려웠으며, 차량·기사 상세에서 이미 연결된 상대가 목록에 남아 중복 배정 우려가 있었음. 단건 배차(`assign_delivery`)에서는 톤수 초과 검증이 누락되어 일괄 배차와 보호 수준이 달랐음
+- **오더목록 상태 변경 UI 추가**: `OrderListView.vue` 우측 상세 패널에 `<select>` 상태 드롭다운 추가. 허용 전이는 `statusOptions(status)`로 관리 — `pending` → `pending/in_progress/cancelled`, `in_progress` → `in_progress/done/done_manual/cancelled`. 저장 시 `status`가 변경되었을 때만 서버에 전송
+- **배차대기(fake status) 완전 제거**: `constants.js`의 `ORDER_STATUS_MAP`에서 `assigned: '배차'` 제거. 대신 `deliveryDisplayStatus(order)` 헬퍼 추가 — `pending`이면서 `driver_id`가 있으면 표시값을 "배차"로, 없으면 "접수"로 반환. 실제 DB `DeliveryStatus`는 `pending` 하나만 유지. `OrderListView.vue` 상태 칩 목록에서 "배차대기" 제거, 필터 로직도 `deliveryDisplayStatus(o)` 기준으로 단순화
+- **배차 취소요청 알림 분리**: `DashboardLayout.vue`에 `/ws/location` 연결(`connectLocationSocket`)을 추가해 `trip.cancel_requested` 이벤트를 별도 `locationAlerts` 배열로 관리. 상단 메시지 버튼(💬) 뱃지는 채팅 unread만 카운트하고, 알림 버튼(🔔) 뱃지는 취소 요청 건수만 표시 — 기존에 채팅 메시지가 알림 드롭다운에 섞이던 문제 해결
+- **차량 상세 — 이미 연결된 기사 목록에서 제외**: `VehiclesView.vue`에 `vehicleEditMode`, `editDriverId`, `drivers` 목록 추가. `availableDrivers` computed는 현재 차량의 `driver_id` 외에도 `assignedDriverIds(Set)`에 포함된 기사를 제외해 이미 다른 차량에 연결된 기사가 목록에 남지 않도록 필터링. 저장 시 `patchVehicle()`로 `driver_id` 업데이트
+- **기사 상세 — 이미 배정된 차량 목록에서 제외**: `DriversView.vue`에 `driverEditMode`, `editVehicleId`, `vehicles` 목록 추가. `availableVehicles` computed는 현재 기사의 `vehicle_id` 외에도 `assignedVehicleIds(Set)`에 포함된 차량을 제외. 저장 시 `patchDriver()`로 `vehicle_id` 업데이트
+- **기사·차량 API 응답 보강**: `auth.py` `get_users()`에서 기사 목록 응답에 `vehicle_name`을 포함하도록 Vehicle 이름을 별도 조회해 매핑. `driverService.js`는 `/users?role=driver`로 호출하고 `patchDriver`는 `/users/{id}`로 수정. `vehicleService.js`에 `patchVehicle(id, body)` 추가
+- **단건 배차 톤수 검증 추가**: `deliveries.py` `assign_delivery()`에서 배정 대상 기사가 `vehicle_id`를 가지고 있으면, 해당 차량을 조회한 뒤 `cargo_weight_ton`/`cargo_size`를 담은 임시 waypoint로 `validate_vehicle_capacity_for_waypoints()`를 호출. 일괄 자동배차(`/trips/auto-dispatch`)와 동일한 보호 수준 적용
+- **Vue 프로젝트 기본 구조 보강**: `frontend-vue/.env.example`, `.gitignore`, `jsconfig.json`, `README.md`, `stores/index.js` 등 누락된 SPA 기반 파일 추가. `OrderIntakeView.vue`에 전화번호 컴포넌트 적용
+- **DB 변경 없음**: 테이블·컬럼·ENUM 추가 없음. `deliveries.status`는 기존 `pending`을 그대로 사용하며 표시값 분리만 프론트에서 처리
+- **검증**: `npm run build`(Vue) 성공, 백엔드 AST 구문 검사 통과, `git status`로 변경 파일 16건 확인
+
+---
+
 ## v1.0.123 (2026-06-08)
 ### deliveries 테이블 불필요 컬럼 제거 — 담당자·수신자·희망도착
 - **배경**: `contact_name`(담당자), `recipient_name`(수신자/하차수취인), `deadline`(희망도착일시) 필드를 실제 업무 흐름에서 사용하지 않기로 결정. 고객관리의 담당자(`customers.contact`)는 v1.0.116에서 이미 제거되었으며, 배송 단위의 `contact_name`/`recipient_name`/`deadline`도 이번에 일괄 정리

@@ -1,25 +1,28 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import PageChrome from '@/components/PageChrome.vue'
-import { getDeliveries, deleteDelivery } from '@/services/deliveryService.js'
-import { ORDER_STATUS_MAP, statusBadgeClass, PAGE_SIZE } from '@/constants.js'
+import { getDeliveries, deleteDelivery, patchDelivery } from '@/services/deliveryService.js'
+import { getCustomers } from '@/services/customerService.js'
+import { ORDER_STATUS_MAP, statusBadgeClass, deliveryDisplayStatus, PAGE_SIZE } from '@/constants.js'
 
 const orders = ref([])
+const customers = ref([])
 const loading = ref(true)
 const orderFilter = ref('전체')
 const orderSearch = ref('')
 const orderPage = ref(1)
 const selectedOrderId = ref(null)
 const orderEditMode = ref(false)
+const editForm = ref({})
+const selectedCustomerId = ref(null)
 
-const statuses = ['전체', '접수', '배차대기', '배차', '운행중', '완료', '취소']
+const statuses = ['전체', '접수', '배차', '운행중', '완료', '취소']
 
 const allRows = computed(() => {
   let rows = orders.value
   if (orderFilter.value !== '전체') {
     rows = rows.filter(o => {
-      const s = ORDER_STATUS_MAP[o.status] || o.status
-      if (orderFilter.value === '배차대기') return s === '접수' && !o.driver_id
+      const s = deliveryDisplayStatus(o)
       return s === orderFilter.value
     })
   }
@@ -61,7 +64,7 @@ function isMixedLoad(o) {
 }
 
 function orderIsEditable(o) {
-  return ['pending','assigned'].includes(o.status)
+  return ['pending','in_progress'].includes(o.status)
 }
 
 function orderCanDelete(o) {
@@ -75,8 +78,12 @@ function routeCellHtml(o) {
 async function load() {
   loading.value = true
   try {
-    const data = await getDeliveries()
+    const [data, c] = await Promise.all([
+      getDeliveries(),
+      getCustomers().catch(() => [])
+    ])
     orders.value = Array.isArray(data) ? data : (data.items || [])
+    customers.value = Array.isArray(c) ? c : (c.items || [])
   } catch (e) {
     console.error(e)
   } finally {
@@ -84,9 +91,74 @@ async function load() {
   }
 }
 
+function statusOptions(status) {
+  const map = {
+    pending: [
+      { value: 'pending', label: '접수' },
+      { value: 'in_progress', label: '운행중' },
+      { value: 'cancelled', label: '취소' },
+    ],
+    in_progress: [
+      { value: 'in_progress', label: '운행중' },
+      { value: 'done', label: '완료' },
+      { value: 'done_manual', label: '완료(수동)' },
+      { value: 'cancelled', label: '취소' },
+    ],
+  }
+  return map[status] || []
+}
+
 function selectOrder(id) {
   selectedOrderId.value = id
   orderEditMode.value = false
+  selectedCustomerId.value = null
+  const o = orders.value.find(o => o.id === id)
+  if (o) {
+    editForm.value = {
+      status: o.status,
+      shipper_name: o.shipper_name || '',
+      pickup_address: o.pickup_address || '',
+      address: o.address || '',
+      cargo_type: o.cargo_type || '',
+      cargo_size: o.cargo_size || '',
+      cargo_weight_ton: o.cargo_weight_ton != null ? String(o.cargo_weight_ton) : '',
+      contact_phone: o.contact_phone || '',
+      shipper_phone: o.shipper_phone || '',
+      mixed_load: !!o.mixed_load,
+    }
+  }
+}
+
+function onCustomerChangeEdit() {
+  const c = customers.value.find(x => x.id == selectedCustomerId.value)
+  if (c) {
+    editForm.value.shipper_name = c.name
+    editForm.value.contact_phone = c.phone || ''
+  }
+}
+
+async function saveOrder() {
+  if (!selected.value) return
+  try {
+    const payload = {
+      status: editForm.value.status !== selected.value.status ? editForm.value.status : undefined,
+      shipper_name: editForm.value.shipper_name || undefined,
+      pickup_address: editForm.value.pickup_address || undefined,
+      address: editForm.value.address || undefined,
+      cargo_type: editForm.value.cargo_type || undefined,
+      cargo_size: editForm.value.cargo_size || undefined,
+      cargo_weight_ton: editForm.value.cargo_weight_ton ? parseFloat(editForm.value.cargo_weight_ton) : undefined,
+      contact_phone: editForm.value.contact_phone || undefined,
+      shipper_phone: editForm.value.shipper_phone || undefined,
+      mixed_load: editForm.value.mixed_load,
+    }
+    await patchDelivery(selected.value.id, payload)
+    orderEditMode.value = false
+    selectedCustomerId.value = null
+    await load()
+  } catch (e) {
+    alert('저장 실패: ' + (e.message || ''))
+  }
 }
 
 async function deleteOrder() {
@@ -131,7 +203,7 @@ onMounted(load)
                   <tr v-for="o in rows" :key="o.id" :class="{ selected: selectedOrderId===o.id }" @click="selectOrder(o.id)" class="order-row-clickable"
                   >
                     <td>
-                      <span class="badge" :class="statusBadgeClass(ORDER_STATUS_MAP[o.status]||o.status)">{{ ORDER_STATUS_MAP[o.status]||o.status }}</span>
+                      <span class="badge" :class="statusBadgeClass(deliveryDisplayStatus(o))">{{ deliveryDisplayStatus(o) }}</span>
                       <span v-if="orderIsEditable(o)" class="badge-edit">수정</span>
                     </td>
                     <td>{{ formatDateTimeShort(o.created_at) }}</td>
@@ -162,22 +234,50 @@ onMounted(load)
             <button type="button" class="detail-close-btn" @click="selectedOrderId=null">×</button>
           </div>
           <div class="inline-detail-bd">
-            <div class="form-grid" style="max-width:100%">
+            <div v-if="!orderEditMode" class="form-grid" style="max-width:100%">
               <label>오더번호</label><span>{{ displayOrderNo(selected) }}</span>
-              <label>상태</label><span><span class="badge" :class="statusBadgeClass(ORDER_STATUS_MAP[selected.status]||selected.status)">{{ ORDER_STATUS_MAP[selected.status]||selected.status }}</span></span>
+              <label>상태</label><span><span class="badge" :class="statusBadgeClass(deliveryDisplayStatus(selected))">{{ deliveryDisplayStatus(selected) }}</span></span>
               <label>화주</label><span>{{ selected.shipper_name || '—' }}</span>
               <label>상차지</label><span>{{ selected.pickup_address || '—' }}</span>
               <label>하차지</label><span>{{ selected.address || '—' }}</span>
               <label>화물</label><span>{{ selected.cargo_type || '—' }} {{ selected.cargo_size ? `· ${selected.cargo_size}` : '' }}{{ selected.cargo_weight_ton != null ? ` · ${selected.cargo_weight_ton}톤` : '' }}</span>
               <label>기사</label><span>{{ selected.driver_name || '—' }}</span>
+              <label>연락처</label><span>{{ selected.contact_phone || '—' }}</span>
+              <label>화주 연락처</label><span>{{ selected.shipper_phone || '—' }}</span>
               <label>혼적</label><span>{{ selected.mixed_load ? '혼적' : '단독' }}</span>
+            </div>
+            <div v-else class="form-grid" style="max-width:100%">
+              <label>오더번호</label><span>{{ displayOrderNo(selected) }}</span>
+              <label>상태</label>
+              <select v-model="editForm.status">
+                <option v-for="opt in statusOptions(selected.status)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+              <label>화주</label>
+              <div style="display:flex;gap:8px;flex-direction:column">
+                <select v-model="selectedCustomerId" @change="onCustomerChangeEdit">
+                  <option :value="null">직접 입력</option>
+                  <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+                <input v-model="editForm.shipper_name" :readonly="!!selectedCustomerId" placeholder="화주명">
+              </div>
+              <label>상차지</label><input v-model="editForm.pickup_address">
+              <label>하차지</label><input v-model="editForm.address">
+              <label>화물</label><input v-model="editForm.cargo_type">
+              <label>화물 크기</label><input v-model="editForm.cargo_size">
+              <label>하차 중량(톤)</label><input v-model="editForm.cargo_weight_ton">
+              <label>연락처</label><input v-model="editForm.contact_phone">
+              <label>화주 연락처</label><input v-model="editForm.shipper_phone">
+              <label>혼적</label><input type="checkbox" v-model="editForm.mixed_load">
             </div>
           </div>
           <div class="inline-detail-footer">
             <div class="inline-detail-secondary">
               <button v-if="orderCanDelete(selected)" type="button" class="btn btn-sm btn-danger-outline" @click="deleteOrder">오더 삭제</button>
             </div>
-            <div><button type="button" class="btn btn-primary" @click="orderEditMode=!orderEditMode">{{ orderEditMode ? '저장' : '수정' }}</button></div>
+            <div style="display:flex;gap:8px">
+              <button v-if="orderEditMode" type="button" class="btn btn-secondary" @click="orderEditMode=false; selectOrder(selectedOrderId)">취소</button>
+              <button type="button" class="btn btn-primary" @click="orderEditMode ? saveOrder() : (orderEditMode=true)">{{ orderEditMode ? '저장' : '수정' }}</button>
+            </div>
           </div>
         </div>
       </div>

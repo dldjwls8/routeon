@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-08 (v1.0.123 기준, `deliveries` 테이블에서 `contact_name`, `recipient_name`, `deadline` 3컬럼 제거 및 관련 코드·문서 정리)
+> 최종 검토: 2026-06-08 (v1.0.124 기준, `deliveries` 테이블에서 `contact_name`, `recipient_name`, `deadline` 3컬럼 제거 및 관련 코드·문서 정리. v1.0.124는 DB 스키마 변경 없이 프론트 표시값·API 검증·알림 분리만 수정함)
 
 ---
 
