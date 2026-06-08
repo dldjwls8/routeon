@@ -247,11 +247,8 @@ function escapeHtml(str) {
       </div>
     </header>
     <main class="content" id="mainContent">
-      <section class="page active page-viewport">
-        <div class="page-center page-viewport-inner">
-          <slot />
-        </div>
-      </section>
+      <!-- Vue slot은 dashboard.js renderPage에 의해 덮어씌워짐 -->
+      <div style="display:none"><slot /></div>
     </main>
     <footer class="footer legal-footer" aria-label="서비스 안내">
       <div class="legal-footer-main">

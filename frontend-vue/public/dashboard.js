@@ -278,7 +278,7 @@
       delivery,
       tons: formatDispatchSize(item),
       window: item.window || (item.tw && item.tw.includes('T') ? item.tw.split('T')[1]?.slice(0, 5) : null) || item.latestAt || '—',
-      status: item.status || '배차대기',
+      status: item.status || '수락대기',
       tooltip: dispatchStopTooltip(item),
     };
   }
@@ -385,7 +385,7 @@
         <td>${n.shipper}</td>
         ${routeCellHtml(n.pickup, n.delivery)}
         <td>${n.tons}</td>
-        <td>${n.window}</td>
+        
         <td>${statusBadge(n.status)}</td>
       </tr>`;
     }).join('');
@@ -398,7 +398,7 @@
     return tableScrollWrap(`<table>
       <thead>
         <tr>
-          <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
+          <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>상태</th>
         </tr>
       </thead>
       <tbody>${dispatchListTableRows(stops, { rowClass: 'order-row-clickable' })}</tbody>
@@ -975,7 +975,7 @@
   };
 
   function statusBadge(s) {
-    const map = { '운행가능': 'badge-ok', '운행중': 'badge-run', '휴무': 'badge-muted', '접수': 'badge-muted', '배차': 'badge-info', '배차대기': 'badge-muted', '완료': 'badge-ok', '진행': 'badge-run', '취소': 'badge-muted', '가용': 'badge-ok', '정비': 'badge-muted', '운행중(차량)': 'badge-run' };
+    const map = { '운행가능': 'badge-ok', '운행중': 'badge-run', '휴무': 'badge-muted', '접수': 'badge-muted', '배차': 'badge-info', '수락대기': 'badge-muted', '완료': 'badge-ok', '진행': 'badge-run', '취소': 'badge-muted', '가용': 'badge-ok', '정비': 'badge-muted', '운행중(차량)': 'badge-run' };
     return `<span class="badge ${map[s] || 'badge-muted'}">${s}</span>`;
   }
 
@@ -1006,7 +1006,7 @@
 
   function orderMatchesFilter(o, filter) {
     if (filter === '전체') return true;
-    if (filter === '배차대기') return o.status === '접수' && !o.driver;
+    if (filter === '수락대기') return o.status === '접수' && !o.driver;
     return o.status === filter;
   }
 
@@ -2311,7 +2311,6 @@
           <label>오더번호</label><span>${orderNoHtml(o, { raw: false })}</span>
           <label>화주</label>${customerField}
           <label>화물</label>${detailField('orderDetailCargo', [o.cargo, o.tons].filter(Boolean).join(' · '))}
-          <label>시간창</label>${detailField('orderDetailWindow', o.window)}
           <label>접수시간</label><span>${formatDateTimeShort(o.created_at)}</span>
           <label>연락처</label>${detailField('orderDetailContact', o.contact)}
           <label>상차</label>${detailField('orderDetailPickup', o.pickup)}
@@ -3028,9 +3027,7 @@
   }
 
   function renderNav() {
-    /* Vue SPA — DOM 렌더링 비활성화, applyPageTheme만 유지 */
     applyPageTheme();
-    return;
     const nav = $('#navMain');
     nav.innerHTML = '';
     NAV.filter(group => canAccessMain(group.id)).forEach(group => {
@@ -3070,9 +3067,7 @@
   }
 
   function renderPage() {
-    /* Vue SPA — DOM 렌더링 비활성화, applyPageTheme만 유지 */
     applyPageTheme();
-    return;
     if (isMapPage()) hideLiveMap();
     const main = $('#mainContent');
     main.innerHTML = '';
@@ -3191,7 +3186,7 @@
               ${tableScrollWrap(`<table>
                 <thead>
                   <tr>
-                    <th>오더번호</th><th>고객</th><th>경로</th><th>시간창</th><th>기사</th><th>상태</th>
+                    <th>오더번호</th><th>고객</th><th>경로</th><th>기사</th><th>상태</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3200,11 +3195,11 @@
                       <td>${orderNoHtml(o, { raw: false })}</td>
                       <td>${o.customer}</td>
                       <td class="route-cell"><strong>${o.pickup}</strong><br>→ ${o.delivery}</td>
-                      <td>${o.window}</td>
+                      
                       <td>${o.driver || '—'}</td>
                       <td>${statusBadge(o.status)}</td>
                     </tr>`).join('') : `
-                    <tr><td colspan="6" style="text-align:center;padding:24px;color:#8b93a7">해당 상태의 오더가 없습니다</td></tr>`}
+                    <tr><td colspan="5" style="text-align:center;padding:24px;color:#8b93a7">해당 상태의 오더가 없습니다</td></tr>`}
                 </tbody>
               </table>`)}
               <div class="dash-orders-ft">
@@ -4093,7 +4088,7 @@
               ${tableScrollWrap(`<table class="bulk-pool-table">
                 <thead><tr>
                   <th><input type="checkbox" id="chkAllBulkPool" ${allPoolSelected ? 'checked' : ''} aria-label="전체 선택"></th>
-                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
+                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>상태</th>
                 </tr></thead>
                 <tbody id="bulkOrderPoolBody">
                   ${pool.length ? dispatchListTableRows(pool, {
@@ -4193,7 +4188,7 @@
               <p class="field-label">미배정 ${res.unassigned.length}건</p>
               ${tableScrollWrap(`<table>
                 <thead><tr>
-                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th><th>사유</th>
+                  <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>상태</th><th>사유</th>
                 </tr></thead>
                 <tbody>
                   ${res.unassigned.map((u, i) => {
@@ -4204,7 +4199,7 @@
                       <td>${n.shipper}</td>
                       ${routeCellHtml(n.pickup, n.delivery)}
                       <td>${n.tons}</td>
-                      <td>${n.window}</td>
+                      
                       <td>${statusBadge(n.status)}</td>
                       <td><span class="badge badge-warn">${u.reason}</span></td>
                     </tr>`;
@@ -4743,7 +4738,7 @@
           ${tableScrollWrap(`<table>
             <thead>
               <tr>
-                <th><input type="checkbox" id="chkAllPending" ${unassigned.length && dispatchPendingSelectedIds.length === unassigned.length ? 'checked' : ''} aria-label="전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
+                <th><input type="checkbox" id="chkAllPending" ${unassigned.length && dispatchPendingSelectedIds.length === unassigned.length ? 'checked' : ''} aria-label="전체 선택"></th><th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>상태</th>
               </tr>
             </thead>
             <tbody id="pendingIntakeBody">
@@ -4802,12 +4797,12 @@
             <thead>
               <tr>
                 <th><input type="checkbox" id="chkAllDispatch" checked aria-label="전체 선택"></th>
-                <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>시간창</th><th>상태</th>
+                <th>오더번호</th><th>혼적</th><th>화주</th><th>경로</th><th>규격</th><th>상태</th>
               </tr>
             </thead>
             <tbody>
               ${dispatchListTableRows(
-                DATA.dispatchOrders.map(o => ({ ...o, order_id: o.id, status: '배차대기', window: o.latestAt })),
+                DATA.dispatchOrders.map(o => ({ ...o, order_id: o.id, status: '수락대기', window: o.latestAt })),
                 { checkbox: true, checkboxClass: 'dispatch-chk', rowClass: 'order-row-clickable' }
               )}
             </tbody>
@@ -6550,13 +6545,13 @@
   }
 
   function renderOrderList(root) {
-    const statuses = ['전체', '접수', '배차대기', '배차', '운행중', '완료', '취소'];
+    const statuses = ['전체', '접수', '수락대기', '배차', '운행중', '완료', '취소'];
     const q = orderSearch.trim().toLowerCase();
     const allRows = DATA.orders.filter(o => {
       if (!orderMatchesFilter(o, orderFilter)) return false;
       if (!q) return true;
       return [
-        displayOrderNo(o), o.customer, o.pickup, o.delivery, o.cargo, o.driver, o.window,
+        displayOrderNo(o), o.customer, o.pickup, o.delivery, o.cargo, o.driver,
       ].some(value => String(value || '').toLowerCase().includes(q));
     });
     const rows = allRows.slice((orderPage - 1) * PAGE_SIZE, orderPage * PAGE_SIZE);
@@ -6585,7 +6580,7 @@
         <div class="card-bd master-list-body">
           ${tableScrollWrap(`<table>
             <thead><tr>
-              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>시간창</th><th>오더번호</th>
+              <th><input type="checkbox" id="chkAllOrdersPage" ${allPageSelected ? 'checked' : ''} aria-label="현재 페이지 전체 선택"></th><th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>오더번호</th>
             </tr></thead>
             <tbody>${rows.length ? rows.map(o => {
               const editable = orderIsEditable(o);
@@ -6606,11 +6601,10 @@
                 <td>${o.cargo || '—'}${o.tons ? ` · ${o.tons}` : ''}</td>
                 <td>${o.customer}</td>
                 <td>${o.driver || '—'}</td>
-                <td>${o.window}</td>
                 <td>${orderNoHtml(o)}</td>
               </tr>`;
             }).join('') : `
-              <tr><td colspan="10" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
+              <tr><td colspan="9" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td></tr>`}
             </tbody>
           </table>`)}
           ${paginationHtml(allRows.length, orderPage, 'orders')}

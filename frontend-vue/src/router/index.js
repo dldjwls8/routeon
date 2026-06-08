@@ -29,4 +29,11 @@ const router = createRouter({
   routes,
 });
 
+/* SPA: Vue는 레이아웃 쉘만 생성, 실제 DOM은 dashboard.js가 통제 */
+router.afterEach((to, from) => {
+  if (to.meta.main && from.name !== to.name && window.RouteOnGotoPage) {
+    window.RouteOnGotoPage(to.meta.main, to.name)
+  }
+})
+
 export default router;
