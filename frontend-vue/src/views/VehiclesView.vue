@@ -86,7 +86,7 @@ onMounted(load)
                   <tr v-if="!rows.length"><td colspan="4" class="empty-hint">차량이 없습니다.</td></tr>
                   <tr v-for="v in rows" :key="v.id" :class="{ selected: selectedVehicleId===v.id }" @click="selectVehicle(v.id)">
                     <td><strong>{{ v.plate_number || v.name || '—' }}</strong></td>
-                    <td>{{ v.type || '—' }}</td>
+                    <td>{{ v.vehicle_type || v.type || '—' }}</td>
                     <td>{{ v.status || '—' }}</td>
                     <td>{{ v.driver_name || '—' }}</td>
                   </tr>
@@ -111,13 +111,13 @@ onMounted(load)
           <div class="inline-detail-bd">
             <div v-if="!vehicleEditMode" class="form-grid" style="max-width:100%">
               <label>차량번호</label><span>{{ selected.plate_number || '—' }}</span>
-              <label>종류</label><span>{{ selected.type || '—' }}</span>
+              <label>종류</label><span>{{ selected.vehicle_type || selected.type || '—' }}</span>
               <label>상태</label><span>{{ selected.status || '—' }}</span>
               <label>기사</label><span>{{ selected.driver_name || '—' }}</span>
             </div>
             <div v-else class="form-grid" style="max-width:100%">
               <label>차량번호</label><span>{{ selected.plate_number || '—' }}</span>
-              <label>종류</label><span>{{ selected.type || '—' }}</span>
+              <label>종류</label><span>{{ selected.vehicle_type || selected.type || '—' }}</span>
               <label>상태</label><span>{{ selected.status || '—' }}</span>
               <label>기사 연결</label>
               <select v-model="editDriverId">
