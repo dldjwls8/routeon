@@ -25,6 +25,7 @@ export const PAGE_SIZE = 20;
 
 export const ORDER_STATUS_MAP = {
   pending: '접수',
+  accepted: '수락대기',
   in_progress: '운행중',
   done: '완료',
   cancelled: '취소',
@@ -44,6 +45,7 @@ export function statusBadgeClass(status) {
     case '완료': return 'badge-ok';
     case '운행중': return 'badge-run';
     case '접수': return 'badge-info';
+    case '수락대기': return 'badge-warn';
     case '배차': return 'badge-warn';
     case '취소': return 'badge-muted';
     default: return 'badge-muted';
@@ -52,6 +54,7 @@ export function statusBadgeClass(status) {
 
 export function deliveryDisplayStatus(order) {
   const s = ORDER_STATUS_MAP[order.status] || order.status;
+  if (s === '수락대기') return '수락대기';
   if (s === '접수' && order.driver_id) return '배차';
   return s;
 }

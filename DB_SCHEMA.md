@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-08 (v1.0.124 기준, `deliveries` 테이블에서 `contact_name`, `recipient_name`, `deadline` 3컬럼 제거 및 관련 코드·문서 정리. v1.0.124는 DB 스키마 변경 없이 프론트 표시값·API 검증·알림 분리만 수정함)
+> 최종 검토: 2026-06-08 (v1.0.125 기준, `deliveries` 테이블에 `assigned_at`, `started_at`, `cancelled_at`, `pickup_time`, `unloading_time` 5컬럼 추가 및 `DeliveryStatus` enum에 `accepted` 값 추가. v1.0.125는 오더목록 정렬·시간 추적·수락대기 상태·배차관리 UI를 보강함)
 
 ---
 
@@ -15,7 +15,7 @@
 | `accountstatus` | `pending`, `approved`, `rejected` |
 | `orgstatus` | `pending_review`, `approved`, `rejected` |
 | `tripstatus` | `scheduled`, `in_progress`, `completed`, `cancelled` |
-| `deliverystatus` | `pending`, `in_progress`, `done`, `done_manual`, `cancelled` |
+| `deliverystatus` | `pending`, `accepted`, `in_progress`, `done`, `done_manual`, `cancelled` |
 | `reststoptype` | `highway_rest`, `drowsy_shelter`, `depot`, `custom`, `truck_yard`, `logistics_park` |
 
 ---
@@ -237,10 +237,15 @@
 | `cargo_weight_ton` | FLOAT | NULLABLE | 하차 화물 중량(톤). 과거 톤수 값 호환용 |
 | `status` | deliverystatus | NOT NULL DEFAULT 'pending' | |
 | `sequence` | INTEGER | | 최적화 후 배송 순서 |
-| `completed_at` | DATETIME | | GPS 50m 자동 완료 또는 수동 완료 시각 |
+| `assigned_at` | DATETIME | NULLABLE | 기사 배정(배차) 시각. `PATCH /deliveries/{id}/assign` 성공 시 기록 |
+| `started_at` | DATETIME | NULLABLE | 기사 수락 또는 `in_progress` 전이 시각. `PATCH /deliveries/{id}/accept` 또는 관리자 상태 변경 시 기록 |
+| `completed_at` | DATETIME | NULLABLE | GPS 50m 자동 완료 또는 수동 완료 시각 |
+| `cancelled_at` | DATETIME | NULLABLE | 취소 시각. 관리자/기사 취소 시 기록 |
+| `pickup_time` | DATETIME | NULLABLE | 상차 시간. 기사 앱에서 상차 이벤트 기록 시 저장 |
+| `unloading_time` | DATETIME | NULLABLE | 하차 시간. 기사 앱에서 하차 이벤트 기록 시 저장 |
 | `created_at` | DATETIME | NOT NULL | |
 
-> 프론트 오더 목록/상세의 `접수시간`은 이 `created_at` 값을 표시한다.
+> 프론트 오더 목록은 `created_at` 기준 내림차순(최신순)으로 정렬한다. 상세 패널에서 `배차 시간`, `운행 시작`, `운행 완료`, `총 운행 시간`, `취소 기간`, `상차 시간`, `하차 시간`을 표시한다.
 > 표시용 오더번호 `order_no`는 DB 컬럼이 아니다. `/deliveries`와 배송 연결 `/trips` waypoint 응답에서 `created_at` + Delivery UUID 기반 `RO-YYMMDD-XXXXXX` 형식으로 계산해 내려준다.
 > 대시보드 첫 화면의 오더 요약 카드는 상태 필터별 최대 5건만 표시하고, 전체 오더는 오더 목록 페이지에서 조회한다.
 > 오더 목록의 체크박스 선택은 프론트 UI 상태이며 별도 DB 컬럼을 만들지 않는다. 선택한 접수 상태 오더는 `오더관리 > 배차관리`로 전달되어 기존 `deliveries.id` 기준으로 `/trips/auto-dispatch` 요청을 구성한다.
@@ -489,14 +494,16 @@ cancelled 처리 시:
 > 기사 마지막 위치는 `/location-logs/{user_id}`가 Redis 실시간값 또는 `locations` 최신 행으로 반환한다. 차량 마지막 위치는 `/vehicles` 응답의 `last_gps`이며, 진행 중 운행 차량만 기사 GPS로 갱신되고 운행 완료/취소 후에는 차량 스냅샷으로 고정된다.
 
 ### deliveries status 매핑
-| DB `status` | 프론트 표시 | 배차 탭 노출 조건 |
-|-------------|------------|----------------|
-| `pending` | `'접수'` | 미배차 건 목록 표시 (`unassignedForDispatch()`) |
-| `in_progress` | `'운행중'` | 미표시 |
-| `done` / `done_manual` | `'완료'` | 미표시 |
-| `cancelled` | `'취소'` | 미표시 (삭제 버튼으로 제거 가능) |
+| DB `status` | 프론트 표시 | 설명 | 허용 전이 |
+|-------------|------------|------|----------|
+| `pending` | `'접수'` | 미배차 건 | `pending` / `accepted` / `in_progress` / `cancelled` |
+| `accepted` | `'수락대기'` | 기사 배정 후 수락 대기 | `accepted` / `in_progress` / `cancelled` |
+| `in_progress` | `'운행중'` | 운행 중 | `in_progress` / `done` / `done_manual` / `cancelled` |
+| `done` / `done_manual` | `'완료'` | 완료 | — |
+| `cancelled` | `'취소'` | 취소 | — (삭제만 가능) |
 
-> v1.0.103 기준 `오더관리 > 배차관리`의 오더·기사 선택과 기사별 배정 묶음은 모두 프론트 임시 상태다. 기사·차량 선택과 배정·실행 영역을 별도 카드로 분리했지만 저장 구조는 바뀌지 않았다. 최종 실행 시 선택된 `deliveries.id`들이 `tasks[].unloadings[].delivery_id`로 변환되고, 기사별 `/trips/auto-dispatch` 성공 후 기존 Trip/Delivery 상태 전이 규칙을 따른다. 하단 결과 컨테이너는 API 결과를 표시하는 UI이며 별도 DB 컬럼을 만들지 않는다.
+> `pending` + `driver_id`가 동시에 존재하는 레거시 건은 `deliveryDisplayStatus()`에서 `'배차'`로 표시하지만, v1.0.125 이후 `assign_delivery()`는 `accepted`를 설정하므로 신규 건에서는 발생하지 않는다.
+> v1.0.125 기준 `오더관리 > 배차관리`에서 기사·차량 선택은 `DispatchManageView.vue` 수정 모드의 `<select>` UI로 처리하며, `availableDrivers` computed가 `driver_status === '운행가능'`인 기사만 필터링한다.
 
 ### 일정·오더 표시 번호와 지도
 일정 캘린더·간트·사후통계의 `TR-YYMMDD-NNN`은 기존 `trips.id`, `created_at`, `started_at`을 기반으로 프론트에서 만드는 읽기용 번호다. `trips` 테이블에 `trip_no` 컬럼을 추가하지 않는다.

@@ -270,3 +270,30 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE deliveries DROP COLUMN IF EXISTS deadline;"
         ))
+
+        # deliveries 시간 추적 컬럼 추가 (v1.0.125)
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS started_at TIMESTAMP;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_time TIMESTAMP;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS unloading_time TIMESTAMP;"
+        ))
+
+        # DeliveryStatus enum에 accepted 추가 (v1.0.125)
+        await conn.execute(text("""
+            DO $$
+            BEGIN
+                ALTER TYPE deliverystatus ADD VALUE IF NOT EXISTS 'accepted';
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $$;
+        """))

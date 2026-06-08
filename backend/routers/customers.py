@@ -69,7 +69,7 @@ async def list_customers(
     _r = await db.execute(
         select(Customer)
         .where(Customer.organization_id == current_user.organization_id)
-        .order_by(Customer.name)
+        .order_by(Customer.created_at.desc())
     )
     return [_schema(c) for c in _r.scalars().all()]
 

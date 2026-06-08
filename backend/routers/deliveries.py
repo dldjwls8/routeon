@@ -240,7 +240,8 @@ async def assign_delivery(
             validate_vehicle_capacity_for_waypoints(vehicle, [waypoint])
 
     delivery.assigned_to = driver.id
-    delivery.status      = DeliveryStatus.in_progress
+    delivery.status      = DeliveryStatus.accepted
+    delivery.assigned_at = datetime.utcnow()
     record_order_event(
         db,
         organization_id=current_user.organization_id,
@@ -283,7 +284,12 @@ async def update_delivery(
         except ValueError:
             raise HTTPException(400, f"올바르지 않은 상태: {req.status}")
         allowed_transitions = {
-            DeliveryStatus.pending: {DeliveryStatus.pending, DeliveryStatus.in_progress, DeliveryStatus.cancelled},
+            DeliveryStatus.pending: {DeliveryStatus.pending, DeliveryStatus.accepted, DeliveryStatus.in_progress, DeliveryStatus.cancelled},
+            DeliveryStatus.accepted: {
+                DeliveryStatus.accepted,
+                DeliveryStatus.in_progress,
+                DeliveryStatus.cancelled,
+            },
             DeliveryStatus.in_progress: {
                 DeliveryStatus.in_progress,
                 DeliveryStatus.done,
@@ -295,6 +301,10 @@ async def update_delivery(
             raise HTTPException(400, f"{delivery.status.value} 상태에서 {next_status.value} 상태로 변경할 수 없습니다.")
         delivery.status = next_status
         cancelled_now = delivery.status == DeliveryStatus.cancelled
+        if delivery.status == DeliveryStatus.in_progress and not delivery.started_at:
+            delivery.started_at = datetime.utcnow()
+        if cancelled_now:
+            delivery.cancelled_at = datetime.utcnow()
     if req.address is not None:
         delivery.address = req.address
     if req.lat is not None:
@@ -419,7 +429,7 @@ async def get_deliveries(
         )
     else:
         stmt = stmt.where(Delivery.organization_id == current_user.organization_id)
-    stmt = stmt.order_by(Delivery.sequence, Delivery.created_at)
+    stmt = stmt.order_by(Delivery.created_at.desc())
     _r = await db.execute(stmt)
     deliveries = _r.scalars().all()
     return [_delivery_schema(d, d.driver) for d in deliveries]
@@ -500,9 +510,50 @@ def _delivery_schema(d: Delivery, driver: User = None) -> dict:
         "assigned_to":      str(d.assigned_to) if d.assigned_to else None,
         "driver_id":        str(d.assigned_to) if d.assigned_to else None,
         "driver_name":      (driver.name or driver.username) if driver else None,
+        "assigned_at":      d.assigned_at.isoformat() if d.assigned_at else None,
+        "started_at":       d.started_at.isoformat() if d.started_at else None,
         "completed_at":     d.completed_at.isoformat() if d.completed_at else None,
+        "cancelled_at":     d.cancelled_at.isoformat() if d.cancelled_at else None,
+        "pickup_time":      d.pickup_time.isoformat() if d.pickup_time else None,
+        "unloading_time":   d.unloading_time.isoformat() if d.unloading_time else None,
         "created_at":       d.created_at.isoformat(),
     }
+
+@router.patch("/deliveries/{delivery_id}/accept")
+async def accept_delivery(
+    delivery_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_driver),
+):
+    """
+    기사: 배정된 배송을 수락합니다.
+    status → in_progress
+    """
+    import uuid as uuid_lib
+    _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
+    delivery = _r.scalar_one_or_none()
+    if not delivery:
+        raise HTTPException(404, "배송을 찾을 수 없습니다.")
+    if delivery.assigned_to != current_user.id:
+        raise HTTPException(403, "본인에게 배정된 배송만 수락할 수 있습니다.")
+    if delivery.status != DeliveryStatus.accepted:
+        raise HTTPException(400, "수락할 수 없는 상태입니다.")
+    delivery.status = DeliveryStatus.in_progress
+    if not delivery.started_at:
+        delivery.started_at = datetime.utcnow()
+    record_order_event(
+        db,
+        organization_id=current_user.organization_id,
+        delivery_id=delivery.id,
+        trip_id=delivery.trip_id,
+        actor=current_user,
+        event_type="order.accepted",
+        summary="기사 수락",
+        details={"started_at": delivery.started_at.isoformat()},
+    )
+    await db.commit()
+    return {"id": delivery_id, "status": delivery.status}
+
 
 @router.patch("/deliveries/{delivery_id}/complete")
 async def manual_complete(

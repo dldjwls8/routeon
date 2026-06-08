@@ -17,7 +17,7 @@ const drivers = ref([])
 const dashOrderTab = ref('전체')
 const loading = ref(true)
 
-const orderTabs = ['전체', '접수', '배차', '운행중', '완료']
+const orderTabs = ['전체', '접수', '수락대기', '배차', '운행중', '완료']
 
 const filteredOrders = computed(() => {
   if (dashOrderTab.value === '전체') return orders.value
@@ -96,7 +96,7 @@ async function load() {
       getDrivers().catch(() => []),
     ])
     stats.value = s
-    orders.value = Array.isArray(o) ? o : (o.items || [])
+    orders.value = (Array.isArray(o) ? o : (o.items || [])).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
     vehicles.value = Array.isArray(v) ? v : (v.items || [])
     drivers.value = Array.isArray(d) ? d : (d.items || [])
   } catch (e) {

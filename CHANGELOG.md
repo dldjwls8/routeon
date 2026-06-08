@@ -6,6 +6,29 @@
 
 ---
 
+## v1.0.125 (2026-06-08)
+### accepted 상태·시간 추적·정렬 최신순·배차관리 UI 보강
+- **배경**: 기존에는 관리자가 배정하면 바로 `in_progress`(운행중)로 전이되어 기사 수락 단계가 없었음. 오더 상세에서는 상하차 시간이 기록·표시되지 않았고, 목록/대시보드 정렬이 오래된 순이었으며, 배차관리 탭에서 기사·차량을 선택하는 UI가 없어 수정이 불편했음
+- **운행 상태 `accepted`(수락대기) 추가**:
+  - DB — `models.py` `DeliveryStatus` enum에 `accepted` 추가. `database.py` `init_db()`에 `ALTER TYPE deliverystatus ADD VALUE IF NOT EXISTS 'accepted'` 추가
+  - API — `deliveries.py` `assign_delivery()`에서 배정 후 `status = DeliveryStatus.accepted`, `assigned_at = datetime.utcnow()` 기록. 새 엔드포인트 `PATCH /deliveries/{id}/accept` 추가 — 기사가 수락하면 `status → in_progress`, `started_at` 기록
+  - 프론트 — `constants.js` `ORDER_STATUS_MAP`에 `accepted: '수락대기'` 추가. `statusBadgeClass()`에 `수락대기` 색상 추가. `OrderListView.vue` 상태 필터에 `'수락대기'` 추가, `statusOptions()`에 `accepted → accepted/in_progress/cancelled` 허용 전이 추가. `DashboardView.vue` 대시보드 탭에도 `'수락대기'` 추가
+- **오더 상세 시간 추적 개선**:
+  - DB — `deliveries` 테이블에 `assigned_at`, `started_at`, `cancelled_at`, `pickup_time`, `unloading_time` 5개 컬럼 추가
+  - API — `deliveries.py` `_delivery_schema()` 응답에 5개 시간 필드 포함. `update_delivery()`에서 취소 시 `cancelled_at` 기록, `in_progress` 전이 시 `started_at` 자동 기록
+  - 프론트 — `OrderListView.vue` 목록에서 `'접수 시간'` 열 제거. 상세 패널 읽기 모드에 `배차 시간`, `운행 시작`, `운행 완료`, `총 운행 시간`, `취소 기간`, `상차 시간`, `하차 시간` 추가. `formatDuration(start, end)` 헬퍼로 총 운행 시간 계산
+- **정렬 순서 최신순 변경**:
+  - 백엔드 — `deliveries.py` `get_deliveries()`에서 `order_by(Delivery.sequence, Delivery.created_at)` → `order_by(Delivery.created_at.desc())`. `customers.py` `list_customers()`에서 `order_by(Customer.name)` → `order_by(Customer.created_at.desc())`
+  - 프론트 — `DashboardView.vue` `load()`에서 `orders.value`를 `created_at` 기준 내림차순으로 `sort()`
+- **배차관리 탭 기사·차량 선택 UI 보강**:
+  - `DispatchManageView.vue`에 수정 모드 추가 — `tripEditMode`일 때 기사 `<select>`와 차량 `<select>` 표시. `<select style="max-width:100%;width:100%">`로 컨테이너 넘어가는 버그 수정
+  - `availableDrivers` computed — `driver_status === '운행가능'`인 기사만 표시하되, 현재 이미 선택된 기사는 유지. 기사 이름 옆에 `(${driver_status})` 표시
+  - `saveTrip()`에서 `reassignTrip()` 호출로 기사/차량 교체, `patchTripStatus()`로 상태 변경. `tripService.js`에 `reassignTrip(id, body)` 추가
+  - `selected.status==='pending'` 버그 → `scheduled`로 수정(운행 상태 Enum에 `pending`은 없음)
+- **검증**: 백엔드 AST 구문 검사 통과, Vue 빌드 성공, `git status`로 변경 파일 8건 확인
+
+---
+
 ## v1.0.124 (2026-06-08)
 ### 오더목록 상태 변경·배차대기 제거·알림 분리·중복 연결 필터링·톤수 검증 보강
 - **배경**: 오더목록에서 상태를 변경할 수 없어 별도 작업이 필요했고, DB에 실제 없는 가짜 "배차대기" 상태가 UI에 남아 있어 혼란을 야기. 배차 취소 요청이 채팅 메시지와 섞여 알림 구분이 어려웠으며, 차량·기사 상세에서 이미 연결된 상대가 목록에 남아 중복 배정 우려가 있었음. 단건 배차(`assign_delivery`)에서는 톤수 초과 검증이 누락되어 일괄 배차와 보호 수준이 달랐음

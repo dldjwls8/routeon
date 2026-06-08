@@ -39,6 +39,7 @@ class OrgStatus(str, enum.Enum):
 
 class DeliveryStatus(str, enum.Enum):
     pending     = "pending"
+    accepted    = "accepted"
     in_progress = "in_progress"
     done        = "done"
     done_manual = "done_manual"
@@ -302,7 +303,12 @@ class Delivery(Base):
     status           = Column(SAEnum(DeliveryStatus),
                                default=DeliveryStatus.pending, nullable=False)
     sequence         = Column(Integer)
-    completed_at     = Column(DateTime)
+    assigned_at      = Column(DateTime, nullable=True)
+    started_at       = Column(DateTime, nullable=True)
+    completed_at     = Column(DateTime, nullable=True)
+    cancelled_at     = Column(DateTime, nullable=True)
+    pickup_time      = Column(DateTime, nullable=True)
+    unloading_time   = Column(DateTime, nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     driver = relationship("User", back_populates="deliveries",

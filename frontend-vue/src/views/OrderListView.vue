@@ -16,7 +16,7 @@ const orderEditMode = ref(false)
 const editForm = ref({})
 const selectedCustomerId = ref(null)
 
-const statuses = ['전체', '접수', '배차', '운행중', '완료', '취소']
+const statuses = ['전체', '접수', '수락대기', '배차', '운행중', '완료', '취소']
 
 const allRows = computed(() => {
   let rows = orders.value
@@ -55,6 +55,17 @@ function formatDateTimeShort(v) {
   return d.toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' })
 }
 
+function formatDuration(start, end) {
+  if (!start || !end) return '—'
+  const s = new Date(start)
+  const e = new Date(end)
+  const ms = e.getTime() - s.getTime()
+  if (Number.isNaN(ms) || ms < 0) return '—'
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  return `${h}시간 ${m}분`
+}
+
 function mixedLoadBadge(mixed) {
   return mixed ? '<span class="badge badge-temp">혼적</span>' : '—'
 }
@@ -64,11 +75,11 @@ function isMixedLoad(o) {
 }
 
 function orderIsEditable(o) {
-  return ['pending','in_progress'].includes(o.status)
+  return ['pending','accepted','in_progress'].includes(o.status)
 }
 
 function orderCanDelete(o) {
-  return ['pending','cancelled'].includes(o.status)
+  return ['pending','accepted','cancelled'].includes(o.status)
 }
 
 function routeCellHtml(o) {
@@ -95,6 +106,12 @@ function statusOptions(status) {
   const map = {
     pending: [
       { value: 'pending', label: '접수' },
+      { value: 'accepted', label: '수락대기' },
+      { value: 'in_progress', label: '운행중' },
+      { value: 'cancelled', label: '취소' },
+    ],
+    accepted: [
+      { value: 'accepted', label: '수락대기' },
       { value: 'in_progress', label: '운행중' },
       { value: 'cancelled', label: '취소' },
     ],
@@ -193,12 +210,12 @@ onMounted(load)
               <table>
                 <thead>
                   <tr>
-                    <th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>오더번호</th>
+                    <th>상태</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>오더번호</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="!rows.length">
-                    <td colspan="8" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td>
+                    <td colspan="7" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td>
                   </tr>
                   <tr v-for="o in rows" :key="o.id" :class="{ selected: selectedOrderId===o.id }" @click="selectOrder(o.id)" class="order-row-clickable"
                   >
@@ -206,7 +223,6 @@ onMounted(load)
                       <span class="badge" :class="statusBadgeClass(deliveryDisplayStatus(o))">{{ deliveryDisplayStatus(o) }}</span>
                       <span v-if="orderIsEditable(o)" class="badge-edit">수정</span>
                     </td>
-                    <td>{{ formatDateTimeShort(o.created_at) }}</td>
                     <td><span v-html="mixedLoadBadge(isMixedLoad(o))"></span></td>
                     <td class="route-cell" v-html="routeCellHtml(o)"></td>
                     <td>{{ o.cargo_type || '—' }}{{ o.cargo_size ? ` · ${o.cargo_size}` : '' }}{{ o.cargo_weight_ton != null ? ` · ${o.cargo_weight_ton}톤` : '' }}</td>
@@ -245,6 +261,14 @@ onMounted(load)
               <label>연락처</label><span>{{ selected.contact_phone || '—' }}</span>
               <label>화주 연락처</label><span>{{ selected.shipper_phone || '—' }}</span>
               <label>혼적</label><span>{{ selected.mixed_load ? '혼적' : '단독' }}</span>
+              <div class="form-grid-divider" style="grid-column:1/-1;border-top:1px solid #e5e7eb;margin:8px 0;"></div>
+              <label>배차 시간</label><span>{{ formatDateTimeShort(selected.assigned_at) }}</span>
+              <label>운행 시작</label><span>{{ formatDateTimeShort(selected.started_at) }}</span>
+              <label>운행 완료</label><span>{{ formatDateTimeShort(selected.completed_at) }}</span>
+              <label>총 운행 시간</label><span>{{ formatDuration(selected.started_at, selected.completed_at) }}</span>
+              <label>취소 기간</label><span>{{ formatDateTimeShort(selected.cancelled_at) }}</span>
+              <label>상차 시간</label><span>{{ formatDateTimeShort(selected.pickup_time) }}</span>
+              <label>하차 시간</label><span>{{ formatDateTimeShort(selected.unloading_time) }}</span>
             </div>
             <div v-else class="form-grid" style="max-width:100%">
               <label>오더번호</label><span>{{ displayOrderNo(selected) }}</span>
