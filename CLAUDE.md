@@ -178,9 +178,9 @@ routeon/
 {
   "name": "강남역", "lat": 37.4979, "lon": 127.0276,
   "type": "loading", "task_group": 0,
-  "shipper_name": "화주명", "contact_name": "담당자명",
+  "shipper_name": "화주명",
   "contact_phone": "010-0000-0000", "shipper_phone": "02-000-0000",
-  "recipient_name": "수신자명", "cargo_type": "식품",
+  "cargo_type": "식품",
   "cargo_size": "5톤", "cargo_weight_ton": 2.0,
   "pickup_cargo_type": "식품", "pickup_cargo_size": "2톤", "pickup_cargo_weight_ton": 2.0,
   "delivery_id": "uuid", "order_no": "RO-260605-A1B2C3"
@@ -189,8 +189,7 @@ routeon/
 - `type`: `"loading"` (상차지) | `"unloading"` (하차지)
 - `task_group`: 같은 그룹의 loading-unloading 쌍을 OR-Tools pickup_deliveries 제약으로 묶음.
   `null`이면 자유 최적화 (긴급 배차 등). 운행 생성 패널과 자동 배차 모두 자동 부여.
-- `shipper_name` / `contact_name` / `contact_phone` / `shipper_phone`: 화주·담당자 연락처. 기사 앱 Trip API 응답에 포함.
-- `recipient_name`: 수신자. unloading 전용. 배차 시 Delivery 원본에서 복사.
+- `shipper_name` / `contact_phone` / `shipper_phone`: 화주·연락처. 기사 앱 Trip API 응답에 포함.
 - `cargo_type` / `cargo_size` / `cargo_weight_ton`: 하차 화물 정보. 관리자 웹 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 드롭다운 기준. `cargo_size`는 `5톤`, `3파레트` 같은 자유 텍스트.
 - `pickup_cargo_type` / `pickup_cargo_size` / `pickup_cargo_weight_ton`: 상차 화물 정보(v1.0.122 추가). 하차 화물과 독립적으로 저장되며, 엑셀 일괄 접수에서 `상차화물`/`상차규격`/`상차중량(톤)` 컬럼으로 입력된다.
 - 배차 생성 시 `cargo_size` 또는 `cargo_weight_ton`에서 톤 단위를 읽을 수 있으면 차량 `weight_kg`와 비교한다. `5톤`, `5t`, `5ton`은 검증 대상이고 `3파레트`처럼 중량 환산이 불가능한 규격은 표시값으로만 유지한다.

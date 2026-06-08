@@ -259,3 +259,14 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_cargo_weight_ton FLOAT;"
         ))
+
+        # deliveries 불필요 컬럼 제거 (v1.0.123)
+        await conn.execute(text(
+            "ALTER TABLE deliveries DROP COLUMN IF EXISTS contact_name;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries DROP COLUMN IF EXISTS recipient_name;"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries DROP COLUMN IF EXISTS deadline;"
+        ))

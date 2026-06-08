@@ -38,9 +38,7 @@ export function rowsFromExcelOrder(rawRow) {
 
   const base = {
     customer: pick('화주명', '화주', 'shippername', 'shipper'),
-    contact_name: pick('담당자', 'manager', '담당자명'),
     contact: pick('연락처', 'contact', 'contactname'),
-    latestAt: excelDateTimeValue(pick('희망도착', '마감일', 'deadline', 'latestat', '희망도착일시')),
     mixed_load: excelBoolValue(pick('혼재', '혼재여부', 'mixedload', '혼재화물')),
   }
 
@@ -50,7 +48,6 @@ export function rowsFromExcelOrder(rawRow) {
   const legacySize = pick('규격', '화물규격', '중량', '톤', '중량톤', 'tons', 'cargosize', 'cargoweightton')
   const legacyWeightRaw = pick('중량(톤)', '중량', '톤수', 'tonnage', 'weightton')
   const legacyWeightNum = legacyWeightRaw ? parseFloat(String(legacyWeightRaw).replace(/[^0-9.]/g, '')) : NaN
-  const legacyRecipient = pick('수취인', '수령인', 'recipientname', 'recipient')
 
   const pickups = []
   const deliveries = []
@@ -70,7 +67,6 @@ export function rowsFromExcelOrder(rawRow) {
       const weightRaw = pick(`하차중량(톤)${i}`, `하차중량${i}`, `deliveryweightton${i}`, `deliveryweight${i}`)
       deliveries.push({
         delivery,
-        recipient: pick(`하차수취인${i}`, `수취인${i}`, `recipient${i}`, `recipientname${i}`),
         cargo_type: pick(`하차화물${i}`, `하차화물종류${i}`, `deliverycargo${i}`, `deliverycargotype${i}`),
         cargo_size: pick(`하차규격${i}`, `하차중량${i}`, `deliverysize${i}`, `deliverycargosize${i}`),
         cargo_weight_ton: weightRaw ? parseFloat(String(weightRaw).replace(/[^0-9.]/g, '')) : NaN,
@@ -89,7 +85,6 @@ export function rowsFromExcelOrder(rawRow) {
   if (!deliveries.length && legacyDelivery) {
     deliveries.push({
       delivery: legacyDelivery,
-      recipient: legacyRecipient,
       cargo_type: legacyCargo,
       cargo_size: legacySize,
       cargo_weight_ton: isNaN(legacyWeightNum) ? null : legacyWeightNum,
@@ -108,7 +103,6 @@ export function rowsFromExcelOrder(rawRow) {
       pickup_cargo_size: pu.cargo_size || '',
       pickup_cargo_weight_ton: isNaN(pu.cargo_weight_ton) ? null : pu.cargo_weight_ton,
       delivery: dl.delivery || '',
-      recipient: dl.recipient || '',
       cargo_type: dl.cargo_type || pu.cargo_type || legacyCargo || '',
       cargo_size: dl.cargo_size || pu.cargo_size || legacySize || '',
       cargo_weight_ton: isNaN(dl.cargo_weight_ton)
@@ -122,25 +116,25 @@ export function generateIntakeTemplate() {
   const today = new Date()
   const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
   const headers = [
-    '화주명', '담당자', '연락처',
+    '화주명', '연락처',
     '상차지1', '상차화물1', '상차규격1', '상차중량(톤)1',
     '상차지2', '상차화물2', '상차규격2', '상차중량(톤)2',
     '상차지3', '상차화물3', '상차규격3', '상차중량(톤)3',
-    '하차지1', '하차수취인1', '하차화물1', '하차규격1', '하차중량(톤)1',
-    '하차지2', '하차수취인2', '하차화물2', '하차규격2', '하차중량(톤)2',
-    '하차지3', '하차수취인3', '하차화물3', '하차규격3', '하차중량(톤)3',
-    '희망도착일시', '혼재여부',
+    '하차지1', '하차화물1', '하차규격1', '하차중량(톤)1',
+    '하차지2', '하차화물2', '하차규격2', '하차중량(톤)2',
+    '하차지3', '하차화물3', '하차규격3', '하차중량(톤)3',
+    '혼재여부',
   ]
   const rows = [
     [
-      '예시화주', '김담당', '010-1234-5678',
+      '예시화주', '010-1234-5678',
       '부산광역시 해운대구 센텀중앙로 90', '식품', '5톤', '5.0',
       '', '', '', '',
       '', '', '', '',
-      '부산광역시 사하구 감천로 203', '김수신', '식품', '2톤', '2.0',
+      '부산광역시 사하구 감천로 203', '식품', '2톤', '2.0',
       '', '', '', '', '',
       '', '', '', '', '',
-      `${todayStr} 14:00`, 'N',
+      'N',
     ],
   ]
   return { headers, rows, filename: `routeon_order_intake_template_${todayStr}.xlsx` }

@@ -681,18 +681,17 @@
           lon: d.lon,
           pickup_lat: d.pickup_lat,
           pickup_lon: d.pickup_lon,
-          window: d.deadline ? d.deadline.slice(0, 16).replace('T', ' ') : '—',
+          window: d.tw ? d.tw.slice(0, 16).replace('T', ' ') : '—',
           driver: DATA.drivers.find(dr => dr.id === d.assigned_to)?.name || null,
-          recipient: d.recipient_name || '',
           cargo: d.cargo_type || '',
           tons: formatCargoSizeFromApi(d),
-          contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
+          contact: d.contact_phone || d.shipper_phone || '',
           mixed_load: !!d.mixed_load,
           created_at: d.created_at || '',
         }));
         // 캘린더에 오더 이벤트 추가
         deliveries.forEach(d => {
-          const eventTime = d.deadline || d.created_at || '';
+          const eventTime = d.tw || d.created_at || '';
           const eventDate = eventTime.split('T')[0];
           if (eventDate) {
             DATA.scheduleEvents.push({
@@ -1093,15 +1092,12 @@
       address: r.delivery || '주소 미입력',
       lat: r.lat ?? null,
       lon: r.lon ?? null,
-      deadline: r.latestAt ? r.latestAt.replace('T', ' ').slice(0, 16) : null,
-      recipient_name: r.recipient || null,
       cargo_type: r.cargo || null,
       cargo_size: r.tons || null,
       pickup_address: r.pickup || null,
       pickup_lat: r.pickup_lat ?? null,
       pickup_lon: r.pickup_lon ?? null,
       shipper_name: r.customer || null,
-      contact_name: r.contact || null,
       contact_phone: normalizePhone(r.contact) || null,
       shipper_phone: normalizePhone(r.contact) || null,
       mixed_load: !!r.mixed_load,
@@ -1129,12 +1125,11 @@
         lon: d.lon,
         pickup_lat: d.pickup_lat,
         pickup_lon: d.pickup_lon,
-        window: d.deadline ? d.deadline.slice(0, 16).replace('T', ' ') : '—',
+        window: d.tw ? d.tw.slice(0, 16).replace('T', ' ') : '—',
         driver: null,
-        recipient: d.recipient_name || '',
         cargo: d.cargo_type || '',
         tons: formatCargoSizeFromApi(d),
-        contact: d.contact_phone || d.shipper_phone || d.contact_name || '',
+        contact: d.contact_phone || d.shipper_phone || '',
         mixed_load: !!d.mixed_load,
         created_at: d.created_at || '',
       });
@@ -1534,10 +1529,10 @@
       '상차지1', '상차화물1', '상차규격1',
       '상차지2', '상차화물2', '상차규격2',
       '상차지3', '상차화물3', '상차규격3',
-      '하차지1', '하차수취인1', '하차화물1', '하차규격1',
-      '하차지2', '하차수취인2', '하차화물2', '하차규격2',
-      '하차지3', '하차수취인3', '하차화물3', '하차규격3',
-      '연락처', '희망도착일시', '혼재여부',
+      '하차지1', '하차화물1', '하차규격1',
+      '하차지2', '하차화물2', '하차규격2',
+      '하차지3', '하차화물3', '하차규격3',
+      '연락처', '혼재여부',
     ];
     const rows = [
       [
@@ -1545,10 +1540,10 @@
         '부산광역시 해운대구 센텀중앙로 90', '식품', '5톤',
         '', '', '',
         '', '', '',
-        '부산광역시 사하구 감천로 203', '김수신', '식품', '2톤',
+        '부산광역시 사하구 감천로 203', '식품', '2톤',
         '', '', '', '',
         '', '', '', '',
-        '010-1234-5678', `${todayStr()} 14:00`, 'N',
+        '010-1234-5678', 'N',
       ],
     ];
 
@@ -1625,14 +1620,12 @@
     const base = {
       customer: pick('화주명', '화주', 'shippername', 'shipper'),
       contact: pick('연락처', 'contact', 'contactname'),
-      latestAt: excelDateTimeValue(pick('희망도착', '마감일', 'deadline', 'latestat', '희망도착일시')),
       mixed_load: excelBoolValue(pick('혼재', '혼재여부', 'mixedload', '혼재화물')),
     };
     const legacyPickup = pick('상차지', '출발지', 'pickup', 'pickupaddress');
     const legacyDelivery = pick('하차지', '도착지', '주소', 'delivery', 'address');
     const legacyCargo = pick('화물종류', '화물', 'cargo', 'cargotype');
     const legacySize = pick('규격', '화물규격', '중량', '톤', '중량톤', 'tons', 'cargosize', 'cargoweightton');
-    const legacyRecipient = pick('수취인', '수령인', 'recipientname', 'recipient');
     const pickups = [];
     const deliveries = [];
     for (let i = 1; i <= 5; i++) {
@@ -1645,13 +1638,12 @@
       const delivery = pick(`하차지${i}`, `하차${i}`, `delivery${i}`, `address${i}`, `deliveryaddress${i}`);
       if (delivery) deliveries.push({
         delivery,
-        recipient: pick(`하차수취인${i}`, `수취인${i}`, `recipient${i}`, `recipientname${i}`),
         cargo: pick(`하차화물${i}`, `하차화물종류${i}`, `deliverycargo${i}`, `deliverycargotype${i}`),
         tons: pick(`하차규격${i}`, `하차중량${i}`, `deliverysize${i}`, `deliverycargosize${i}`),
       });
     }
     if (!pickups.length && legacyPickup) pickups.push({ pickup: legacyPickup, cargo: legacyCargo, tons: legacySize });
-    if (!deliveries.length && legacyDelivery) deliveries.push({ delivery: legacyDelivery, recipient: legacyRecipient, cargo: legacyCargo, tons: legacySize });
+    if (!deliveries.length && legacyDelivery) deliveries.push({ delivery: legacyDelivery, cargo: legacyCargo, tons: legacySize });
     if (!pickups.length && !deliveries.length) return [];
     const count = Math.max(pickups.length, deliveries.length);
     return Array.from({ length: count }, (_, i) => {
@@ -1661,7 +1653,6 @@
         ...base,
         pickup: pu.pickup || '',
         delivery: dl.delivery || '',
-        recipient: dl.recipient || '',
         cargo: dl.cargo || pu.cargo || legacyCargo || '',
         tons: dl.tons || pu.tons || legacySize || '',
       };
@@ -2365,7 +2356,6 @@
         <div class="form-grid" style="max-width:100%">
           <label>오더번호</label><span>${orderNoHtml(o, { raw: false })}</span>
           <label>화주</label>${customerField}
-          <label>수신자</label>${detailField('orderDetailRecipient', o.recipient)}
           <label>화물</label>${detailField('orderDetailCargo', [o.cargo, o.tons].filter(Boolean).join(' · '))}
           <label>시간창</label>${detailField('orderDetailWindow', o.window)}
           <label>접수시간</label><span>${formatDateTimeShort(o.created_at)}</span>
@@ -2452,7 +2442,6 @@
       const pickup = $('#orderDetailPickup', root).value.trim();
       const delivery = $('#orderDetailDelivery', root).value.trim();
       const customer = $('#orderDetailCustomer', root).value.trim();
-      const recipient = $('#orderDetailRecipient', root).value.trim();
       const cargoText = $('#orderDetailCargo', root).value.trim();
       const contact = normalizePhone($('#orderDetailContact', root).value);
       const [cargo, tons = ''] = cargoText.split(' · ');
@@ -2462,7 +2451,6 @@
           pickup_address: pickup,
           address: delivery,
           shipper_name: customer,
-          recipient_name: recipient || null,
           cargo_type: cargo || null,
           cargo_size: tons || null,
           contact_phone: contact || null,
@@ -2473,7 +2461,7 @@
         toast(error.detail || '오더 저장 실패', 'error');
         return;
       }
-      Object.assign(o, { pickup, delivery, customer, recipient, cargo, tons, contact });
+      Object.assign(o, { pickup, delivery, customer, cargo, tons, contact });
       orderEditMode = false;
       toast('오더가 저장되었습니다');
       renderOrderList(root);
@@ -4550,7 +4538,6 @@
         lat: ord.pickup_lat,
         lon: ord.pickup_lon,
         delivery_id: ord.id,
-        recipient_name: ord.recipient || null,
         cargo_type: ord.cargo || null,
         cargo_size: ord.tons || null,
         shipper_name: ord.customer || null,
@@ -4562,7 +4549,6 @@
         lat: ord.lat,
         lon: ord.lon,
         delivery_id: ord.id,
-        recipient_name: ord.recipient || null,
         cargo_type: ord.cargo || null,
         cargo_size: ord.tons || null,
         shipper_name: ord.customer || null,
@@ -5121,16 +5107,11 @@
             ).join('')}</select>
             <label>화물 종류</label><select id="addOrdCargo">${cargoTypeOptionsHtml()}</select>
             <label>규격</label><input id="addOrdSize" placeholder="예: 5톤, 3파레트">
-            <label>희망 도착</label>
-            <div>${desiredArrivalFieldsHtml({ dateName: 'dispatch_latest_at_date', hourName: 'dispatch_latest_at_hour', hint: true })}</div>
           </div>
         </form>`, async () => {
           const pickup = document.getElementById('addOrdPickup')?.value?.trim();
           const delivery = document.getElementById('addOrdDelivery')?.value?.trim();
           if (!pickup || !delivery) { toast('상차지·하차지 주소를 입력하세요'); return false; }
-          const dateEl = document.querySelector('[name="dispatch_latest_at_date"]');
-          const hourEl = document.querySelector('[name="dispatch_latest_at_hour"]');
-          const deadline = (dateEl?.value && hourEl?.value) ? `${dateEl.value} ${hourEl.value}:00` : null;
           try {
             const [coordPu, coordDl] = await Promise.all([
               apiFetch(`/address/coord?query=${encodeURIComponent(pickup)}` ).then(r => r.ok ? r.json() : null),
@@ -5144,7 +5125,6 @@
               shipper_phone: null,
               cargo_type: document.getElementById('addOrdCargo')?.value?.trim() || null,
               cargo_size: document.getElementById('addOrdSize')?.value?.trim() || null,
-              deadline,
             };
             const res = await apiFetch(`/deliveries`, {
               method: 'POST', body: JSON.stringify(body),
@@ -5313,7 +5293,6 @@
       const waypoints = [];
       const orderWaypointMeta = {
         delivery_id: order?.id || null,
-        recipient_name: order?.recipient || null,
         cargo_type: order?.cargo || null,
         cargo_size: order?.tons || null,
         shipper_name: order?.customer || null,
@@ -5915,12 +5894,9 @@
           <label>화주</label><select name="customer">${intakeCustomerSelectOptions(custId)}</select>
           <label>상차지 *</label><input name="pickup" required value="${row.pickup || ''}">
           <label>하차지 *</label><input name="delivery" required value="${row.delivery || ''}">
-          <label>수신자</label><input name="recipient" value="${row.recipient || ''}">
           <label>화물 종류</label>${cargoTypeSelectHtml('cargo', row.cargo || '')}
           <label>규격</label><input name="tons" value="${row.tons || ''}" placeholder="예: 5톤, 3파레트">
           <label>연락처</label><input name="contact" value="${row.contact || ''}">
-          <label>희망 도착</label>
-          <div>${desiredArrivalFieldsHtml({ value: row.latestAt || '', dateName: 'pending_latest_at_date', hourName: 'pending_latest_at_hour', hint: true })}</div>
         </div>
       </form>`, () => {
       const form = $('#pendingEditForm');
@@ -5928,11 +5904,9 @@
       row.customer = customerNameFromIntakeValue(form.querySelector('[name="customer"]').value);
       row.pickup = form.querySelector('[name="pickup"]').value.trim();
       row.delivery = form.querySelector('[name="delivery"]').value.trim();
-      row.recipient = form.querySelector('[name="recipient"]').value.trim();
       row.cargo = form.querySelector('[name="cargo"]').value.trim();
       row.tons = form.querySelector('[name="tons"]').value.trim();
       row.contact = normalizePhone(form.querySelector('[name="contact"]').value);
-      row.latestAt = readDesiredArrival(form, 'pending_latest_at_date', 'pending_latest_at_hour');
       row.mixed_load = false;
       renderPendingIntakePanel(root);
       bindPendingIntakeActions(root);
@@ -5989,12 +5963,9 @@
           <label>화주(고객) *</label><select name="customer" required${ro}>${custOpts}</select>
           <label>상차지 *</label><input name="pickup" required value="${o.pickup || ''}"${ro}>
           <label>하차지 *</label><input name="delivery" required value="${o.delivery || ''}"${ro}>
-          <label>수신자</label><input name="recipient" value="${o.recipient || ''}"${ro}>
           <label>화물 종류</label>${cargoTypeSelectHtml('cargo', o.cargo || '', ro)}
           <label>규격</label><input name="tons" value="${o.tons || ''}" placeholder="예: 5톤, 3파레트"${ro}>
           <label>연락처</label><input name="contact" value="${o.contact || ''}"${ro}>
-          <label>희망 도착</label>
-          <div>${desiredArrivalFieldsHtml({ value: o.window === '—' ? '' : (o.window || ''), dateName: 'order_latest_at_date', hourName: 'order_latest_at_hour', disabled: !!ro, hint: true })}</div>
           <label>상태</label><select name="status"${canSave ? '' : ' disabled'}>${statusOpts}</select>
           <label>기사</label><input value="${o.driver || '—'}" disabled>
         </div>
@@ -6009,12 +5980,10 @@
         if (orderIsEditable(o)) {
           const pickup = form.querySelector('[name="pickup"]').value.trim();
           const delivery = form.querySelector('[name="delivery"]').value.trim();
-          const recipient = form.querySelector('[name="recipient"]').value.trim();
           const cargo = form.querySelector('[name="cargo"]').value.trim();
           const tonsStr = form.querySelector('[name="tons"]').value.trim();
           const contact = normalizePhone(form.querySelector('[name="contact"]').value);
           const customer = form.querySelector('[name="customer"]').value;
-          const latest = readDesiredArrival(form, 'order_latest_at_date', 'order_latest_at_hour');
           // 주소 변경 시 좌표 재조회
           const [coordPu, coordDl] = await Promise.all([
             pickup ? apiFetch(`/address/coord?query=${encodeURIComponent(pickup)}` ).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
@@ -6027,18 +5996,14 @@
             pickup_address: pickup || undefined,
             pickup_lat: coordPu?.lat ?? null,
             pickup_lon: coordPu?.lon ?? null,
-            recipient_name: recipient || undefined,
             cargo_type: cargo || undefined,
             cargo_size: tonsStr || undefined,
-            contact_name: contact || undefined,
             contact_phone: normalizePhone(contact) || undefined,
             shipper_phone: normalizePhone(contact) || undefined,
             shipper_name: customer || undefined,
-            deadline: latest ? latest.replace('T', ' ').slice(0, 16) : undefined,
           });
           o.customer = customer; o.pickup = pickup; o.delivery = delivery;
-          o.recipient = recipient; o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
-          o.window = latest ? formatIntakeWindow(latest) : '—';
+          o.cargo = cargo; o.tons = tonsStr; o.contact = contact;
         }
         const res = await apiFetch(`/deliveries/${o.id}`, {
           method: 'PATCH',
@@ -6122,11 +6087,9 @@
       delivery:    delEl ? delEl.value.trim() : '',
       lat:         delEl?.dataset.lat ? parseFloat(delEl.dataset.lat) : null,
       lon:         delEl?.dataset.lon ? parseFloat(delEl.dataset.lon) : null,
-      recipient:   readIntakeField(form, `recipient_${taskNum}`),
       cargo:       readIntakeField(form, `cargo_${taskNum}`),
       tons:        readIntakeField(form, `tons_${taskNum}`),
       customer:    customerNameFromIntakeValue(custVal),
-      latestAt:    readDesiredArrival(form, `latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`),
       contact:     customerContactFromIntakeValue(custVal),
       mixed_load:  false,
     };
@@ -6136,7 +6099,6 @@
     const custVal = readIntakeField(form, `customer_${taskNum}`);
     const base = {
       customer: customerNameFromIntakeValue(custVal),
-      latestAt: readDesiredArrival(form, `latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`),
       contact: customerContactFromIntakeValue(custVal),
       mixed_load: false,
     };
@@ -6166,7 +6128,6 @@
       delivery:  delMainEl ? delMainEl.value.trim() : '',
       lat:       delMainEl?.dataset.lat ? parseFloat(delMainEl.dataset.lat) : null,
       lon:       delMainEl?.dataset.lon ? parseFloat(delMainEl.dataset.lon) : null,
-      recipient: readIntakeField(form, `recipient_${taskNum}`),
       cargo:     readIntakeField(form, `cargo_${taskNum}`),
       tons:      readIntakeField(form, `tons_${taskNum}`),
     }];
@@ -6177,7 +6138,6 @@
         delivery:  delEl ? delEl.value.trim() : '',
         lat:       delEl?.dataset.lat ? parseFloat(delEl.dataset.lat) : null,
         lon:       delEl?.dataset.lon ? parseFloat(delEl.dataset.lon) : null,
-        recipient: readIntakeField(form, `recipient_${taskNum}_extra_${s}`),
         cargo:     readIntakeField(form, `cargo_${taskNum}_extra_${s}`),
         tons:      readIntakeField(form, `tons_${taskNum}_extra_${s}`),
       });
@@ -6194,7 +6154,6 @@
         delivery:   dl.delivery,
         lat:        dl.lat,
         lon:        dl.lon,
-        recipient:  dl.recipient,
         cargo:      dl.cargo || pu.cargo,
         tons:       dl.tons || pu.tons,
       };
@@ -6202,17 +6161,13 @@
   }
 
   function clearIntakeRow(form, taskNum) {
-    [`pickup_${taskNum}`, `pickup_cargo_${taskNum}`, `pickup_tons_${taskNum}`, `delivery_${taskNum}`, `recipient_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
+    [`pickup_${taskNum}`, `pickup_cargo_${taskNum}`, `pickup_tons_${taskNum}`, `delivery_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
       const el = form.querySelector(`[name="${name}"]`);
       if (el) {
         el.value = '';
         delete el.dataset.lat;
         delete el.dataset.lon;
       }
-    });
-    [`latest_at_date_${taskNum}`, `latest_at_hour_${taskNum}`].forEach(name => {
-      const el = form.querySelector(`[name="${name}"]`);
-      if (el) el.value = '';
     });
   }
 

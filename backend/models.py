@@ -290,11 +290,9 @@ class Delivery(Base):
     pickup_lat       = Column(Float, nullable=True)
     pickup_lon       = Column(Float, nullable=True)
     shipper_name     = Column(String(100), nullable=True)    # 화주명
-    contact_name     = Column(String(100), nullable=True)    # 담당자명
     contact_phone    = Column(String(20), nullable=True)     # 담당자 연락처
     shipper_phone    = Column(String(20), nullable=True)     # 화주 연락처
     mixed_load       = Column(Boolean, default=False, nullable=False)
-    recipient_name   = Column(String(100), nullable=True)    # 수신자(고객사명)
     cargo_type       = Column(String(100), nullable=True)    # 하차 화물 종류
     cargo_size       = Column(String(100), nullable=True)    # 하차 화물 규격(예: 5톤, 3파레트)
     cargo_weight_ton = Column(Float, nullable=True)          # 하차 화물 중량(톤)
@@ -304,7 +302,6 @@ class Delivery(Base):
     status           = Column(SAEnum(DeliveryStatus),
                                default=DeliveryStatus.pending, nullable=False)
     sequence         = Column(Integer)
-    deadline         = Column(DateTime)
     completed_at     = Column(DateTime)
     created_at       = Column(DateTime, default=datetime.utcnow, nullable=False)
 

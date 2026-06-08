@@ -21,12 +21,10 @@ def destination_waypoint(name: str, lat: float, lon: float) -> dict:
         "lon": lon,
         "type": "unloading",
         "task_group": None,
-        "recipient_name": None,
         "cargo_type": None,
         "cargo_size": None,
         "cargo_weight_ton": None,
         "shipper_name": None,
-        "contact_name": None,
         "contact_phone": None,
         "shipper_phone": None,
         "delivery_id": None,
@@ -39,7 +37,6 @@ def apply_delivery_to_waypoint(waypoint: dict, delivery: Delivery) -> None:
         waypoint.get("order_no")
         or f"RO-{stamp}-{str(delivery.id).replace('-', '')[-6:].upper()}"
     )
-    waypoint["recipient_name"] = waypoint.get("recipient_name") or delivery.recipient_name
     waypoint["cargo_type"] = waypoint.get("cargo_type") or delivery.cargo_type
     waypoint["cargo_size"] = waypoint.get("cargo_size") or delivery.cargo_size
     waypoint["cargo_weight_ton"] = (
@@ -48,7 +45,6 @@ def apply_delivery_to_waypoint(waypoint: dict, delivery: Delivery) -> None:
         else delivery.cargo_weight_ton
     )
     waypoint["shipper_name"] = waypoint.get("shipper_name") or delivery.shipper_name
-    waypoint["contact_name"] = waypoint.get("contact_name") or delivery.contact_name
     waypoint["contact_phone"] = waypoint.get("contact_phone") or delivery.contact_phone
     waypoint["shipper_phone"] = (
         waypoint.get("shipper_phone")

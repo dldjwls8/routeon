@@ -6,6 +6,19 @@
 
 ---
 
+## v1.0.123 (2026-06-08)
+### deliveries 테이블 불필요 컬럼 제거 — 담당자·수신자·희망도착
+- **배경**: `contact_name`(담당자), `recipient_name`(수신자/하차수취인), `deadline`(희망도착일시) 필드를 실제 업무 흐름에서 사용하지 않기로 결정. 고객관리의 담당자(`customers.contact`)는 v1.0.116에서 이미 제거되었으며, 배송 단위의 `contact_name`/`recipient_name`/`deadline`도 이번에 일괄 정리
+- **DB — `deliveries` 테이블 3컬럼 제거**: `contact_name`(`VARCHAR(100)`), `recipient_name`(`VARCHAR(100)`), `deadline`(`DATETIME`). `backend/database.py` `init_db()`에 `ALTER TABLE ... DROP COLUMN IF EXISTS` 3건 추가해 기존 DB 자동 정리
+- **백엔드 API**: `DeliveryCreate`·`DeliveryUpdate`에서 `contact_name`/`recipient_name`/`deadline` 필드 제거. `routers/deliveries.py`의 `_DELIVERY_EVENT_FIELDS` 및 `create_delivery`/`create_deliveries_batch`/`update_delivery`/`_delivery_schema` 전부 정리. `_delivery_schema` 응답에서도 동일 필드 제거
+- **백엔드 연동**: `routers/dispatch.py` waypoint dict, `schemas.py` `WaypointSchema`, `serializers/trip.py` `destination_waypoint`/`apply_delivery_to_waypoint`에서 `contact_name`/`recipient_name` 제거
+- **Vue 프론트엔드**: `OrderIntakeView.vue` 단건 폼에서 `recipient_name`/`deadline` 제거, 엑셀 미리보기 테이블에서 `담당자`/`하차수취인`/`희망도착` 컬럼 제거. `src/utils/deliveryBatch.js`에서 `contact_name`/`recipient_name`/`deadline` 제거. `src/utils/excelParser.js`에서 `contact_name`/`recipient`/`latestAt`(희망도착) 파싱 제거 및 `generateIntakeTemplate()` 양식에서 동일 컬럼 제거
+- **레거시 프론트엔드**: `frontend/dashboard.js` 및 `frontend-vue/public/dashboard.js`에서 `contact_name`/`recipient_name`/`deadline` 관련 파싱·매핑·UI·양식 컬럼 전부 제거
+- **문서 정리**: `DB_SCHEMA.md` deliveries 테이블 컬럼 목록 및 waypoints JSONB 설명에서 해당 필드 제거, 엑셀 양식 설명 갱신. `CLAUDE.md` `WaypointSchema` 예시 및 설명에서 해당 필드 제거
+- **검증**: `npm run build`(Vue) 성공, `node --check frontend/dashboard.js` 성공, 백엔드 컨테이너 재시작 및 `/deliveries`·`/deliveries/batch` API smoke 통과
+
+---
+
 ## v1.0.122 (2026-06-08)
 ### 상차·하차 화물 정보 분리 및 Vue 엑셀 일괄 접수 구현
 - **배경**: 기존 `deliveries` 테이블은 상차지·하차지 주소는 분리되어 있었으나, 화물 정보(`cargo_type`, `cargo_size`, `cargo_weight_ton`)는 하차 화물 단일 컬럼만 존재해 엑셀 양식의 `상차화물`/`상차규격`/`상차중량(톤)`과 `하차화물`/`하차규격`/`하차중량(톤)`을 별도 저장할 수 없었음

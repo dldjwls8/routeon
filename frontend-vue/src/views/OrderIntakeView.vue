@@ -23,9 +23,7 @@ const form = ref({
   address: '',
   cargo_type: '',
   cargo_size: '',
-  recipient_name: '',
   contact_phone: '',
-  deadline: '',
   mixed_load: false,
 })
 
@@ -155,9 +153,7 @@ onMounted(load)
               <label>하차지 *</label><input v-model="form.address" placeholder="하차지 주소">
               <label>화물</label><input v-model="form.cargo_type" placeholder="화물 종류">
               <label>화물 크기</label><input v-model="form.cargo_size" placeholder="예: 5톤">
-              <label>수령인</label><input v-model="form.recipient_name" placeholder="수령인">
               <label>연락처</label><input v-model="form.contact_phone" placeholder="연락처">
-              <label>희망 도착</label><input v-model="form.deadline" placeholder="YYYY-MM-DD HH:MM">
               <label>혼적</label>
               <label class="radio-label"><input type="checkbox" v-model="form.mixed_load"> 혼적 허용</label>
             </div>
@@ -175,33 +171,27 @@ onMounted(load)
                   <thead>
                     <tr>
                       <th>화주</th>
-                      <th>담당자</th>
                       <th>상차지</th>
                       <th>상차화물</th>
                       <th>상차규격</th>
                       <th>상차중량(톤)</th>
                       <th>하차지</th>
-                      <th>하차수취인</th>
                       <th>하차화물</th>
                       <th>하차규격</th>
                       <th>하차중량(톤)</th>
-                      <th>희망도착</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="(row, idx) in parsedRows" :key="idx">
                       <td>{{ row.customer }}</td>
-                      <td>{{ row.contact_name }}</td>
                       <td>{{ row.pickup }}</td>
                       <td>{{ row.pickup_cargo_type }}</td>
                       <td>{{ row.pickup_cargo_size }}</td>
                       <td>{{ row.pickup_cargo_weight_ton ?? '-' }}</td>
                       <td>{{ row.delivery }}</td>
-                      <td>{{ row.recipient }}</td>
                       <td>{{ row.cargo_type }}</td>
                       <td>{{ row.cargo_size }}</td>
                       <td>{{ row.cargo_weight_ton ?? '-' }}</td>
-                      <td>{{ row.latestAt }}</td>
                     </tr>
                   </tbody>
                 </table>

@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-08 (v1.0.122 기준, `deliveries` 상차 화물 3컬럼 추가 및 Vue 엑셀 일괄 접수 기능 반영)
+> 최종 검토: 2026-06-08 (v1.0.123 기준, `deliveries` 테이블에서 `contact_name`, `recipient_name`, `deadline` 3컬럼 제거 및 관련 코드·문서 정리)
 
 ---
 
@@ -165,7 +165,7 @@
 | `dest_name` | VARCHAR(200) | | 도착지 이름 (nullable — 기사가 /optimize 시 자동 결정 가능) |
 | `dest_lat` | FLOAT | | 도착지 위도 |
 | `dest_lon` | FLOAT | | 도착지 경도 |
-| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"recipient_name":str\|null,"cargo_type":str\|null,"cargo_size":str\|null,"cargo_weight_ton":float\|null,"shipper_name":str\|null,"contact_name":str\|null,"contact_phone":str\|null,"shipper_phone":str\|null,"delivery_id":uuid\|null,"order_no":str\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]`. `dest_*` 목적지가 별도 입력된 수동 Trip은 신규 생성 시 동일 좌표 중복 없이 `type="unloading"` waypoint로 보강되며, 기존 Trip 조회 응답도 같은 방식으로 보강됨 |
+| `waypoints` | JSONB | | 경유지 배열 `[{"name","lat","lon","type":"loading"\|"unloading","task_group":int\|null,"cargo_type":str\|null,"cargo_size":str\|null,"cargo_weight_ton":float\|null,"shipper_name":str\|null,"contact_phone":str\|null,"shipper_phone":str\|null,"delivery_id":uuid\|null,"order_no":str\|null,"arrived_at":"ISO-8601"\|null,"departed_at":"ISO-8601"\|null}, ...]`. `dest_*` 목적지가 별도 입력된 수동 Trip은 신규 생성 시 동일 좌표 중복 없이 `type="unloading"` waypoint로 보강되며, 기존 Trip 조회 응답도 같은 방식으로 보강됨 |
 | `vehicle_height_m` | FLOAT | | 차량 높이 오버라이드 |
 | `vehicle_weight_kg` | FLOAT | | 총중량 오버라이드 |
 | `vehicle_length_cm` | FLOAT | | 차량 길이 오버라이드 |
@@ -226,11 +226,9 @@
 | `pickup_lat` | FLOAT | NULLABLE | 상차 위도 |
 | `pickup_lon` | FLOAT | NULLABLE | 상차 경도 |
 | `shipper_name` | VARCHAR(100) | NULLABLE | 화주명 |
-| `contact_name` | VARCHAR(100) | NULLABLE | 담당자명 |
 | `contact_phone` | VARCHAR(20) | NULLABLE | 담당자 연락처 |
 | `shipper_phone` | VARCHAR(20) | NULLABLE | 화주 연락처. 미입력 시 API 응답은 `contact_phone`으로 폴백 |
 | `mixed_load` | BOOLEAN | NOT NULL DEFAULT FALSE | 혼적 여부 |
-| `recipient_name` | VARCHAR(100) | NULLABLE | 수신자(고객사명) |
 | `pickup_cargo_type` | VARCHAR(100) | NULLABLE | 상차 화물 종류. 관리자 웹 신규 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 선택지 기준 |
 | `pickup_cargo_size` | VARCHAR(100) | NULLABLE | 상차 화물 규격. 예: `5톤`, `3파레트` |
 | `pickup_cargo_weight_ton` | FLOAT | NULLABLE | 상차 화물 중량(톤) |
@@ -239,7 +237,6 @@
 | `cargo_weight_ton` | FLOAT | NULLABLE | 하차 화물 중량(톤). 과거 톤수 값 호환용 |
 | `status` | deliverystatus | NOT NULL DEFAULT 'pending' | |
 | `sequence` | INTEGER | | 최적화 후 배송 순서 |
-| `deadline` | DATETIME | | 희망 도착 시각 |
 | `completed_at` | DATETIME | | GPS 50m 자동 완료 또는 수동 완료 시각 |
 | `created_at` | DATETIME | NOT NULL | |
 
@@ -512,7 +509,7 @@ footer 링크와 안내 페이지 내용은 DB에 저장하지 않으며, 약관
 
 ### 오더 접수 엑셀 양식과 DB
 `오더관리 > 접수창`의 `양식 다운로드`는 프론트엔드에서 `.xlsx`/`.csv` 템플릿을 생성하는 기능이며 별도 테이블을 추가하지 않는다.
-v1.0.122 기준 템플릿은 `화주명`, `담당자`, `연락처`, `상차지1`, `상차화물1`, `상차규격1`, `상차중량(톤)1`, `하차지1`, `하차수취인1`, `하차화물1`, `하차규격1`, `하차중량(톤)1`, `희망도착일시` 헤더를 사용한다. 기존 단일 `상차지`, `하차지`, `수취인`, `화물종류`, `규격`, `중량(톤)` 헤더도 업로드 호환용으로 계속 읽는다.
+v1.0.123 기준 템플릿은 `화주명`, `연락처`, `상차지1`, `상차화물1`, `상차규격1`, `상차중량(톤)1`, `하차지1`, `하차화물1`, `하차규격1`, `하차중량(톤)1`, `혼재여부` 헤더를 사용한다. 기존 단일 `상차지`, `하차지`, `화물종류`, `규격`, `중량(톤)` 헤더도 업로드 호환용으로 계속 읽는다.
 엑셀 업로드 행은 접수 대기열에서 여러 접수건으로 전개된 뒤 기존 `deliveries` 생성 API로 저장된다. `deliveries` 테이블은 여전히 한 행에 대표 `pickup_address` 1개와 `address` 1개를 저장하는 단건 오더 모델이며, 다중 상·하차용 별도 테이블은 없다.
 다운로드 템플릿의 기본 예시 행은 상차·하차 한 쌍만 포함해 재업로드 시 `deliveries` 1건으로 저장되는 대기열 항목 1개를 만든다. 사용자가 복수 상·하차 쌍을 입력한 경우에는 기존 호환 규칙에 따라 각 쌍이 별도 접수건으로 전개된다.
 엑셀 좌표 변환은 저장 전 프론트에서 `/address/coord`와 Kakao 장소 검색을 사용해 `pickup_lat/pickup_lon`, `lat/lon`에 채운다. 좌표 변환에 실패해도 스키마상 좌표 컬럼은 nullable이므로 저장은 가능하나, 배차 화면은 기존처럼 좌표가 있는 오더만 운행 생성에 사용할 수 있다.

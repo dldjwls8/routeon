@@ -23,8 +23,6 @@ class DeliveryCreate(BaseModel):
     address:          str
     lat:              Optional[float] = None
     lon:              Optional[float] = None
-    deadline:         Optional[str]   = None
-    recipient_name:   Optional[str]   = None
     cargo_type:       Optional[str]   = None
     cargo_size:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
@@ -35,7 +33,6 @@ class DeliveryCreate(BaseModel):
     pickup_cargo_size:       Optional[str]   = None
     pickup_cargo_weight_ton: Optional[float] = None
     shipper_name:     Optional[str]   = None
-    contact_name:     Optional[str]   = None
     contact_phone:    Optional[str]   = None
     shipper_phone:    Optional[str]   = None
     mixed_load:       bool            = False
@@ -51,18 +48,15 @@ class DeliveryUpdate(BaseModel):
     pickup_address:   Optional[str]   = None
     pickup_lat:       Optional[float] = None
     pickup_lon:       Optional[float] = None
-    recipient_name:   Optional[str]   = None
     cargo_type:       Optional[str]   = None
     cargo_size:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
     pickup_cargo_type:       Optional[str]   = None
     pickup_cargo_size:       Optional[str]   = None
     pickup_cargo_weight_ton: Optional[float] = None
-    contact_name:     Optional[str]   = None
     shipper_name:     Optional[str]   = None
     contact_phone:    Optional[str]   = None
     shipper_phone:    Optional[str]   = None
-    deadline:         Optional[str]   = None
 
 
 def _display_order_no(d: Delivery) -> str:
@@ -75,18 +69,15 @@ _DELIVERY_EVENT_FIELDS = {
     "status": "상태",
     "address": "하차지",
     "pickup_address": "상차지",
-    "recipient_name": "수신자",
     "cargo_type": "하차 화물 종류",
     "cargo_size": "하차 규격",
     "cargo_weight_ton": "하차 중량(톤)",
     "pickup_cargo_type": "상차 화물 종류",
     "pickup_cargo_size": "상차 규격",
     "pickup_cargo_weight_ton": "상차 중량(톤)",
-    "contact_name": "담당자",
     "contact_phone": "담당자 연락처",
     "shipper_name": "화주",
     "shipper_phone": "화주 연락처",
-    "deadline": "희망 도착",
     "mixed_load": "혼적",
     "assigned_to": "기사",
     "trip_id": "운행",
@@ -121,14 +112,6 @@ async def create_delivery(
     current_user: User = Depends(require_admin),
 ):
     """관리자: 배송지 단건 등록"""
-    from datetime import datetime
-    deadline = None
-    if req.deadline:
-        try:
-            deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
-        except ValueError:
-            raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
-
     contact_phone = normalize_phone(req.contact_phone)
     shipper_phone = normalize_phone(req.shipper_phone) or contact_phone
     delivery = Delivery(
@@ -136,8 +119,6 @@ async def create_delivery(
         address          = req.address,
         lat              = req.lat,
         lon              = req.lon,
-        deadline         = deadline,
-        recipient_name   = req.recipient_name,
         cargo_type       = req.cargo_type,
         cargo_size       = req.cargo_size,
         cargo_weight_ton = req.cargo_weight_ton,
@@ -148,7 +129,6 @@ async def create_delivery(
         pickup_cargo_size       = req.pickup_cargo_size,
         pickup_cargo_weight_ton = req.pickup_cargo_weight_ton,
         shipper_name     = req.shipper_name,
-        contact_name     = req.contact_name,
         contact_phone    = contact_phone,
         shipper_phone    = shipper_phone,
         mixed_load       = req.mixed_load,
@@ -176,21 +156,14 @@ async def create_deliveries_batch(
     current_user: User = Depends(require_admin),
 ):
     """관리자: 배송지 여러 개 한 번에 등록"""
-    from datetime import datetime
     deliveries = []
     for req in reqs:
-        deadline = None
-        if req.deadline:
-            try:
-                deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
-            except ValueError:
-                raise HTTPException(400, f"deadline 형식 오류: {req.deadline}")
         contact_phone = normalize_phone(req.contact_phone)
         shipper_phone = normalize_phone(req.shipper_phone) or contact_phone
         d = Delivery(
             organization_id=current_user.organization_id,
-            address=req.address, lat=req.lat, lon=req.lon, deadline=deadline,
-            recipient_name=req.recipient_name, cargo_type=req.cargo_type,
+            address=req.address, lat=req.lat, lon=req.lon,
+            cargo_type=req.cargo_type,
             cargo_size=req.cargo_size,
             cargo_weight_ton=req.cargo_weight_ton,
             pickup_address=req.pickup_address, pickup_lat=req.pickup_lat,
@@ -199,7 +172,7 @@ async def create_deliveries_batch(
             pickup_cargo_size=req.pickup_cargo_size,
             pickup_cargo_weight_ton=req.pickup_cargo_weight_ton,
             shipper_name=req.shipper_name,
-            contact_name=req.contact_name, contact_phone=contact_phone,
+            contact_phone=contact_phone,
             shipper_phone=shipper_phone,
             mixed_load=req.mixed_load,
         )
@@ -319,8 +292,6 @@ async def update_delivery(
         delivery.pickup_lat = req.pickup_lat
     if req.pickup_lon is not None:
         delivery.pickup_lon = req.pickup_lon
-    if req.recipient_name is not None:
-        delivery.recipient_name = req.recipient_name
     if req.cargo_type is not None:
         delivery.cargo_type = req.cargo_type
     if req.cargo_size is not None:
@@ -333,19 +304,12 @@ async def update_delivery(
         delivery.pickup_cargo_size = req.pickup_cargo_size
     if req.pickup_cargo_weight_ton is not None:
         delivery.pickup_cargo_weight_ton = req.pickup_cargo_weight_ton
-    if req.contact_name is not None:
-        delivery.contact_name = req.contact_name
     if req.shipper_name is not None:
         delivery.shipper_name = req.shipper_name
     if req.contact_phone is not None:
         delivery.contact_phone = normalize_phone(req.contact_phone)
     if req.shipper_phone is not None:
         delivery.shipper_phone = normalize_phone(req.shipper_phone)
-    if req.deadline is not None:
-        try:
-            delivery.deadline = datetime.strptime(req.deadline, "%Y-%m-%d %H:%M")
-        except ValueError:
-            raise HTTPException(400, "deadline 형식: 'YYYY-MM-DD HH:MM'")
     if cancelled_now and delivery.trip_id:
         active_count = (await db.execute(
             select(func.count(Delivery.id)).where(
@@ -506,11 +470,9 @@ def _delivery_schema(d: Delivery) -> dict:
         "pickup_lat":       d.pickup_lat,
         "pickup_lon":       d.pickup_lon,
         "shipper_name":     d.shipper_name,
-        "contact_name":     d.contact_name,
         "contact_phone":    d.contact_phone,
         "shipper_phone":    d.shipper_phone or d.contact_phone,
         "mixed_load":       d.mixed_load,
-        "recipient_name":   d.recipient_name,
         "cargo_type":       d.cargo_type,
         "cargo_size":       d.cargo_size,
         "cargo_weight_ton": d.cargo_weight_ton,
@@ -521,7 +483,6 @@ def _delivery_schema(d: Delivery) -> dict:
         "sequence":         d.sequence,
         "trip_id":          str(d.trip_id)    if d.trip_id    else None,
         "assigned_to":      str(d.assigned_to) if d.assigned_to else None,
-        "deadline":         d.deadline.isoformat()     if d.deadline     else None,
         "completed_at":     d.completed_at.isoformat() if d.completed_at else None,
         "created_at":       d.created_at.isoformat(),
     }
