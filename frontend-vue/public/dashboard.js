@@ -38,6 +38,7 @@
   const _convDriverMap = {};  // conversation_id → partner_id
   const _driverUnread = {};   // partner_id → unread count
   const _chatPartnerMap = {}; // partner_id → partner summary
+  const _locationAlerts = []; // { tripId, reason, driverName, at }
   let _trajectoryPolyline = null;
   let _miniMapInstance = null;
   let _miniMapMarkers = [];
@@ -668,7 +669,7 @@
       const dvr = await apiFetch(`/deliveries`);
       if (dvr.ok) {
         const deliveries = await dvr.json();
-        const deliveryStatusMap = { pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
+        const deliveryStatusMap = { pending: '접수', accepted: '수락대기', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
         DATA.orders = deliveries.map(d => ({
           id: d.id,
           tripId: d.trip_id || null,
@@ -688,6 +689,12 @@
           contact: d.contact_phone || d.shipper_phone || '',
           mixed_load: !!d.mixed_load,
           created_at: d.created_at || '',
+          assigned_at: d.assigned_at || '',
+          started_at: d.started_at || '',
+          completed_at: d.completed_at || '',
+          cancelled_at: d.cancelled_at || '',
+          pickup_time: d.pickup_time || '',
+          unloading_time: d.unloading_time || '',
         }));
         // 캘린더에 오더 이벤트 추가
         deliveries.forEach(d => {
@@ -975,8 +982,10 @@
   };
 
   function statusBadge(s) {
+    const labelMap = { accepted: '수락대기', pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
+    const label = labelMap[s] || s;
     const map = { '운행가능': 'badge-ok', '운행중': 'badge-run', '휴무': 'badge-muted', '접수': 'badge-muted', '배차': 'badge-info', '수락대기': 'badge-muted', '완료': 'badge-ok', '진행': 'badge-run', '취소': 'badge-muted', '가용': 'badge-ok', '정비': 'badge-muted', '운행중(차량)': 'badge-run' };
-    return `<span class="badge ${map[s] || 'badge-muted'}">${s}</span>`;
+    return `<span class="badge ${map[label] || 'badge-muted'}">${label}</span>`;
   }
 
   function isMixedLoad(item) {
@@ -997,16 +1006,27 @@
   }
 
   function orderCanCancel(o) {
-    return (o.status === '접수' || o.status === '배차') && o.status !== '취소';
+    return (o.status === '접수' || o.status === '수락대기' || o.status === '배차') && o.status !== '취소';
   }
 
   function orderCanDelete(o) {
     return o.status === '접수' || o.status === '취소';
   }
 
+  function deliveryDisplayStatus(o) {
+    if (!o) return '—';
+    const s = o.status;
+    if (s === '수락대기' || s === 'accepted') return '수락대기';
+    if (s === '배차' || s === 'assigned') return '배차';
+    if (s === '접수' || s === 'pending') return (o.driver || o.driver_id || o.assigned_to) ? '배차' : '접수';
+    return s;
+  }
+
   function orderMatchesFilter(o, filter) {
     if (filter === '전체') return true;
-    if (filter === '수락대기') return o.status === '접수' && !o.driver;
+    const display = deliveryDisplayStatus(o);
+    if (filter === '수락대기') return display === '수락대기';
+    if (filter === '배차') return display === '배차';
     return o.status === filter;
   }
 
@@ -1022,6 +1042,16 @@
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value).replace('T', ' ').slice(0, 16);
     return d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDuration(start, end) {
+    if (!start || !end) return '—';
+    const ms = new Date(end) - new Date(start);
+    if (Number.isNaN(ms) || ms < 0) return '—';
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (h > 0) return `${h}시간 ${m}분`;
+    return `${m}분`;
   }
 
   function nextOrderId() {
@@ -1884,6 +1914,7 @@
   function driverDetailBodyHtml(d) {
     const locked = d.status === '운행중' || driverHasActiveTrip(d.id);
     const vehicle = vehicleById(d.vehicleId);
+    const assignedVehicleIds = DATA.drivers.filter(x => x.vehicleId && x.id !== d.id).map(x => x.vehicleId);
     return `
       <div class="tabs detail-tabs">
         <button type="button" class="tab active" data-tab="info">기본</button>
@@ -1905,7 +1936,7 @@
             <label style="font-size:12px;font-weight:600">배정 차량</label>
             <p style="font-size:11px;color:var(--text-muted);margin:4px 0 8px">기사 상태와 별도 — 배차 시 투입 차량 선택</p>
             <select id="driverVehicleAssign" style="width:100%;padding:6px 8px;font-size:12px" ${locked || !driverEditMode ? 'disabled' : ''}>
-              ${vehicleSelectOptions(d.vehicleId, { allowEmpty: true })}
+              ${vehicleSelectOptions(d.vehicleId, { allowEmpty: true, disabledIds: assignedVehicleIds })}
             </select>
             <div class="vehicle-preview" id="driverVehiclePreview">${vehiclePreviewHtml(vehicle)}</div>
           </div>
@@ -2005,6 +2036,7 @@
 
   function vehicleDetailBodyHtml(v) {
     const linked = DATA.drivers.find(d => d.vehicleId === v.id);
+    const assignedDriverIds = DATA.drivers.filter(d => d.vehicleId && d.vehicleId !== v.id).map(d => d.id);
     const tonOpts = ['1톤', '1.4톤', '2.5톤', '3.5톤', '5톤'];
     const typeOpts = ['윙바디', '탑차', '카고'];
     // 표준 목록에 없는 값(과거 데이터 등)도 그대로 표시되도록 현재 값을 옵션에 포함
@@ -2033,8 +2065,7 @@
         </select>
         <label>연결 기사</label>
         <select id="vehDriver" ${assignLocked || !vehicleEditMode ? 'disabled' : ''}>
-          <option value="">— 미연결 —</option>
-          ${DATA.drivers.map(d => `<option value="${d.id}" ${linked && linked.id === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+          ${driverSelectOptions(linked ? linked.id : '', { allowEmpty: true, disabledIds: assignedDriverIds })}
         </select>
       </div>
       <div class="vehicle-preview" id="vehCoordPreview" style="margin-top:16px">
@@ -2281,6 +2312,18 @@
     </div>`;
   }
 
+  function statusOptions(status) {
+    const map = {
+      '접수': ['접수', '수락대기', '운행중', '취소'],
+      '수락대기': ['수락대기', '운행중', '취소'],
+      '운행중': ['운행중', '완료', '취소'],
+      '배차': ['배차', '운행중', '취소'],
+      '완료': ['완료'],
+      '취소': ['취소'],
+    };
+    return map[status] || [status];
+  }
+
   function orderDetailBodyHtml(o, startTab) {
     const tab = startTab || 'info';
     const editable = orderIsEditable(o);
@@ -2292,6 +2335,9 @@
           `<option value="${escapeHtml(c.name)}" ${c.name === o.customer ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
         ).join('')}</select>`
       : `<span>${escapeHtml(o.customer || '—')}</span>`;
+    const statusField = orderEditMode
+      ? `<select id="orderDetailStatus">${statusOptions(o.status).map(s => `<option value="${s}" ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}</select>`
+      : statusBadge(o.status);
     return `
       <div class="customer-detail-summary">
         <span>상태 ${statusBadge(o.status)}${(() => { const tr = tripForOrder(o); return tr ? tripExtraBadgesHtml(tr) : ''; })()}</span>
@@ -2309,9 +2355,17 @@
       <div class="tab-panel ${tab === 'info' ? 'active' : ''}" data-panel="info">
         <div class="form-grid" style="max-width:100%">
           <label>오더번호</label><span>${orderNoHtml(o, { raw: false })}</span>
+          <label>상태</label>${statusField}
           <label>화주</label>${customerField}
           <label>화물</label>${detailField('orderDetailCargo', [o.cargo, o.tons].filter(Boolean).join(' · '))}
           <label>접수시간</label><span>${formatDateTimeShort(o.created_at)}</span>
+          <label>배차 시간</label><span>${formatDateTimeShort(o.assigned_at)}</span>
+          <label>운행 시작</label><span>${formatDateTimeShort(o.started_at)}</span>
+          <label>운행 완료</label><span>${formatDateTimeShort(o.completed_at)}</span>
+          <label>총 운행 시간</label><span>${formatDuration(o.started_at, o.completed_at || o.cancelled_at)}</span>
+          <label>취소 기간</label><span>${formatDateTimeShort(o.cancelled_at)}</span>
+          <label>상차 시간</label><span>${formatDateTimeShort(o.pickup_time)}</span>
+          <label>하차 시간</label><span>${formatDateTimeShort(o.unloading_time)}</span>
           <label>연락처</label>${detailField('orderDetailContact', o.contact)}
           <label>상차</label>${detailField('orderDetailPickup', o.pickup)}
           <label>하차</label>${detailField('orderDetailDelivery', o.delivery)}
@@ -2398,23 +2452,38 @@
       const cargoText = $('#orderDetailCargo', root).value.trim();
       const contact = normalizePhone($('#orderDetailContact', root).value);
       const [cargo, tons = ''] = cargoText.split(' · ');
+      const statusEl = $('#orderDetailStatus', root);
+      const newStatus = statusEl ? statusEl.value : null;
+      const revMap = { '접수': 'pending', '수락대기': 'accepted', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
+      const body = {
+        pickup_address: pickup,
+        address: delivery,
+        shipper_name: customer,
+        cargo_type: cargo || null,
+        cargo_size: tons || null,
+        contact_phone: contact || null,
+      };
+      if (newStatus && newStatus !== o.status) {
+        body.status = revMap[newStatus] || newStatus;
+      }
       const res = await apiFetch(`/deliveries/${o.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          pickup_address: pickup,
-          address: delivery,
-          shipper_name: customer,
-          cargo_type: cargo || null,
-          cargo_size: tons || null,
-          contact_phone: contact || null,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         toast(error.detail || '오더 저장 실패', 'error');
         return;
       }
+      const saved = await res.json().catch(() => ({}));
       Object.assign(o, { pickup, delivery, customer, cargo, tons, contact });
+      if (newStatus && newStatus !== o.status) {
+        o.status = newStatus;
+      }
+      if (saved.assigned_at) o.assigned_at = saved.assigned_at;
+      if (saved.started_at) o.started_at = saved.started_at;
+      if (saved.completed_at) o.completed_at = saved.completed_at;
+      if (saved.cancelled_at) o.cancelled_at = saved.cancelled_at;
       orderEditMode = false;
       toast('오더가 저장되었습니다');
       renderOrderList(root);
@@ -2807,19 +2876,21 @@
 
   function vehicleSelectOptions(selectedId, { allowEmpty = false, disabledIds = [] } = {}) {
     const opts = allowEmpty ? '<option value="">— 차량 선택 —</option>' : '';
-    const dis = new Set((disabledIds || []).map(Number));
+    const dis = new Set(disabledIds);
     return opts + DATA.vehicles.map(v => {
-      const sel = Number(selectedId) === v.id ? ' selected' : '';
+      const sel = String(selectedId) === String(v.id) ? ' selected' : '';
       const disAttr = dis.has(v.id) ? ' disabled' : '';
       return `<option value="${v.id}"${sel}${disAttr}>${vehicleOptionLabel(v)}</option>`;
     }).join('');
   }
 
-  function driverSelectOptions(selectedId, { allowEmpty = false } = {}) {
+  function driverSelectOptions(selectedId, { allowEmpty = false, disabledIds = [] } = {}) {
     const opts = allowEmpty ? '<option value="">— 기사 선택 —</option>' : '';
+    const dis = new Set(disabledIds);
     return opts + DATA.drivers.map(d => {
-      const sel = Number(selectedId) === d.id ? ' selected' : '';
-      return `<option value="${d.id}"${sel}>${d.name} · ${driverVehicleLabel(d)}</option>`;
+      const sel = String(selectedId) === String(d.id) ? ' selected' : '';
+      const disAttr = dis.has(d.id) ? ' disabled' : '';
+      return `<option value="${d.id}"${sel}${disAttr}>${d.name} · ${driverVehicleLabel(d)}</option>`;
     }).join('');
   }
 
@@ -3110,7 +3181,7 @@
     try { quickIds = JSON.parse(localStorage.getItem('dashboardQuickLinks') || '["intake","dispatch"]'); }
     catch { quickIds = ['intake', 'dispatch']; }
     const quickLinks = quickIds.map(id => quickOptions.find(item => item.id === id)).filter(Boolean);
-    const orderTabs = ['전체', '접수', '배차', '운행중', '완료'];
+    const orderTabs = ['전체', '접수', '수락대기', '배차', '운행중', '완료'];
     const filteredOrders = DATA.orders.filter(o => dashOrderTab === '전체' || o.status === dashOrderTab);
     const dashboardOrders = filteredOrders.slice(0, 5);
     const completed = DATA.orders.filter(o => o.status === '완료').length;
@@ -6847,6 +6918,16 @@
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
+        if (msg.type === 'trip.cancel_requested') {
+          _locationAlerts.push({
+            tripId: msg.trip_id,
+            reason: msg.cancel_request_reason || msg.reason || '',
+            driverName: msg.driver_name || (DATA.drivers.find(x => x.id === msg.driver_id)?.name) || '기사',
+            at: new Date().toISOString(),
+          });
+          updateLocationNotifUI();
+          return;
+        }
         if (msg.type === 'location' || msg.type === 'gps') {
           const d = DATA.drivers.find(x => x.id === (msg.driver_id || msg.user_id));
           if (d) {
@@ -6877,26 +6958,33 @@
     ws.onerror = () => ws.close();
   }
 
-  function updateChatNotifUI() {
-    const total = Object.values(_driverUnread).reduce((s, n) => s + n, 0);
+  function updateLocationNotifUI() {
     const dot = document.getElementById('notifBadge');
-    if (dot) dot.style.display = total > 0 ? '' : 'none';
-    const messageBadge = document.getElementById('messageBadge');
-    if (messageBadge) messageBadge.style.display = total > 0 ? '' : 'none';
-
+    if (dot) dot.style.display = _locationAlerts.length > 0 ? '' : 'none';
     const drop = document.getElementById('notifDropdown');
     if (!drop) return;
-    const entries = Object.entries(_driverUnread).filter(([, n]) => n > 0);
-    if (!entries.length) {
+    if (!_locationAlerts.length) {
       drop.innerHTML = '<div class="topbar-dropdown-header">알림</div><div class="topbar-dropdown-empty">새 알림이 없습니다</div>';
       return;
     }
-    const items = entries.map(([partnerId, n]) => {
-      const partner = _chatPartnerMap[partnerId] || DATA.drivers.find(x => x.id === partnerId);
-      const name = partner ? escapeHtml(partner.name || partner.username) : '사용자';
-      return `<button type="button" class="topbar-dropdown-item" onclick="window.open('/chat.html?partner_id=${partnerId}','_blank')">💬 ${name}<span class="badge badge-info" style="margin-left:auto">${n}</span></button>`;
+    const items = _locationAlerts.map((a, i) => {
+      const driver = escapeHtml(a.driverName || '기사');
+      return `<button type="button" class="topbar-dropdown-item" onclick="window._dismissLocationAlert(${i})">⚠️ ${driver} — 배차 취소 요청<span class="badge badge-warn" style="margin-left:auto">${escapeHtml(a.reason || '사유 미기재')}</span></button>`;
     }).join('');
-    drop.innerHTML = `<div class="topbar-dropdown-header">새 메시지</div>${items}`;
+    drop.innerHTML = `<div class="topbar-dropdown-header">배차 취소 요청 ${_locationAlerts.length}건</div>${items}`;
+  }
+
+  window._dismissLocationAlert = (index) => {
+    _locationAlerts.splice(index, 1);
+    updateLocationNotifUI();
+  };
+
+  function updateChatNotifUI() {
+    const total = Object.values(_driverUnread).reduce((s, n) => s + n, 0);
+    const messageBadge = document.getElementById('messageBadge');
+    if (messageBadge) messageBadge.style.display = total > 0 ? '' : 'none';
+
+    // 알림 드롭다운은 updateLocationNotifUI가 담당 — 채팅 메시지와 분리
 
     // 기사 목록 테이블 배지 갱신
     document.querySelectorAll('#driverTable tbody tr[data-id]').forEach(tr => {
