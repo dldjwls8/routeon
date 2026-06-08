@@ -130,8 +130,25 @@ function updateNotifUI() {
   if (nb) nb.style.display = locationAlerts.value.length > 0 ? '' : 'none'
 }
 
+/* ── 페이지별 body 테마 (기존 applyPageTheme()의 Vue 이식) ── */
+watch(() => route.name, (name) => {
+  document.body.classList.remove(
+    'theme-dashboard', 'theme-app',
+    'dispatch-viewport', 'order-list-viewport', 'order-intake-viewport',
+    'page-scroll-body', 'main-with-sub'
+  )
+  document.body.classList.add('page-compact')
+  if (name === 'dashboard') document.body.classList.add('theme-dashboard')
+  else document.body.classList.add('theme-app')
+  if (name === 'dispatch-manage') document.body.classList.add('dispatch-viewport')
+  if (name === 'order-list') document.body.classList.add('order-list-viewport')
+  if (name === 'order-intake') document.body.classList.add('order-intake-viewport')
+  if (['trip-stats', 'schedule-calendar', 'schedule-milestones', 'profile'].includes(name)) {
+    document.body.classList.add('page-scroll-body')
+  }
+}, { immediate: true })
+
 onMounted(async () => {
-  document.body.classList.add('theme-dashboard')
   if (typeof window.RouteOnInit === 'function' && !window._routeOnDashboardInitDone) {
     window._routeOnDashboardInitDone = true
     await window.RouteOnInit()
@@ -148,7 +165,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  document.body.classList.remove('theme-dashboard')
   chat.disconnect()
   disconnectLocationSocket()
 })

@@ -2987,10 +2987,14 @@
 
   /** 대시보드만 theme-dashboard, 접수·오더·배차 등은 theme-app(다크) */
   function syncSubNavLayout() {
+    /* Vue SPA — DashboardLayout.vue가 body 클래스를 직접 관리 */
+    return;
     document.body.classList.remove('main-with-sub');
   }
 
   function applyPageTheme() {
+    /* Vue SPA — DashboardLayout.vue가 body 클래스를 직접 관리 */
+    return;
     document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport', 'order-list-viewport', 'order-intake-viewport', 'page-scroll-body');
     document.body.classList.add('page-compact');
     if (currentPage === 'dashboard') document.body.classList.add('theme-dashboard');
