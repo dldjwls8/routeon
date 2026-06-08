@@ -1015,57 +1015,6 @@
     return d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  function parseDesiredArrival(value) {
-    if (!value || value === '—') return { date: '', hour: '' };
-    const iso = String(value).match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2})(?::(\d{2}))?/);
-    if (iso) {
-      return {
-        date: iso[1],
-        hour: `${String(parseInt(iso[2], 10)).padStart(2, '0')}:${iso[3] || '00'}`,
-      };
-    }
-    const times = [...String(value).matchAll(/\b(\d{1,2}):(\d{2})\b/g)];
-    if (times.length) {
-      const today = new Date().toISOString().slice(0, 10);
-      return { date: today, hour: `${String(parseInt(times[0][1], 10)).padStart(2, '0')}:${times[0][2]}` };
-    }
-    return { date: '', hour: '' };
-  }
-
-  function readDesiredArrival(form, dateName = 'latest_at_date', hourName = 'latest_at_hour') {
-    const date = form.querySelector(`[name="${dateName}"]`)?.value?.trim() || '';
-    const time = form.querySelector(`[name="${hourName}"]`)?.value?.trim() || '';
-    if (!date && !time) return '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return '';
-    return `${date}T${time}:00`;
-  }
-
-  function desiredArrivalFieldsHtml(opts = {}) {
-    const {
-      value = '',
-      dateName = 'latest_at_date',
-      hourName = 'latest_at_hour',
-      tabindexDate,
-      tabindexHour,
-      intakeField = false,
-      disabled = false,
-      hint = false,
-    } = opts;
-    const parsed = parseDesiredArrival(value);
-    const ic = intakeField ? ' intake-field' : '';
-    const dis = disabled ? ' disabled' : '';
-    const tabD = tabindexDate != null ? ` tabindex="${tabindexDate}"` : '';
-    const tabH = tabindexHour != null ? ` tabindex="${tabindexHour}"` : '';
-    const df = intakeField ? ` data-intake-field="${dateName}"` : '';
-    const hf = intakeField ? ` data-intake-field="${hourName}"` : '';
-    return `
-      <div class="desired-arrival-row">
-        <input type="text" inputmode="numeric" class="${ic.trim() || 'input'}" name="${dateName}" value="${parsed.date}" placeholder="YYYY-MM-DD" aria-label="희망 도착 날짜"${tabD}${df}${dis}>
-        <input type="text" inputmode="numeric" class="${ic.trim() || 'input'}" name="${hourName}" value="${parsed.hour}" placeholder="HH:MM" aria-label="희망 도착 시각"${tabH}${hf}${dis}>
-      </div>
-      ${hint ? '<span class="text-muted-hint desired-arrival-hint">예: 2026-06-07 · 14:30</span>' : ''}`;
-  }
-
   function nextOrderId() {
     const d = new Date();
     const stamp = `${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
