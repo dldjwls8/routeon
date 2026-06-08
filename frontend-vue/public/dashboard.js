@@ -1092,11 +1092,15 @@
       address: r.delivery || '주소 미입력',
       lat: r.lat ?? null,
       lon: r.lon ?? null,
-      cargo_type: r.cargo || null,
-      cargo_size: r.tons || null,
+      cargo_type: r.cargo_type || r.cargo || null,
+      cargo_size: r.cargo_size || r.tons || null,
+      cargo_weight_ton: r.cargo_weight_ton ?? r.weight_ton ?? null,
       pickup_address: r.pickup || null,
       pickup_lat: r.pickup_lat ?? null,
       pickup_lon: r.pickup_lon ?? null,
+      pickup_cargo_type: r.pickup_cargo_type || r.pickup_cargo || null,
+      pickup_cargo_size: r.pickup_cargo_size || r.pickup_tons || null,
+      pickup_cargo_weight_ton: r.pickup_cargo_weight_ton ?? r.pickup_weight_ton ?? null,
       shipper_name: r.customer || null,
       contact_phone: normalizePhone(r.contact) || null,
       shipper_phone: normalizePhone(r.contact) || null,
@@ -5896,6 +5900,8 @@
           <label>하차지 *</label><input name="delivery" required value="${row.delivery || ''}">
           <label>화물 종류</label>${cargoTypeSelectHtml('cargo', row.cargo || '')}
           <label>규격</label><input name="tons" value="${row.tons || ''}" placeholder="예: 5톤, 3파레트">
+          <label>하차 중량(톤)</label><input name="weight_ton" value="${row.weight_ton || ''}" placeholder="예: 2.0">
+          <label>상차 중량(톤)</label><input name="pickup_weight_ton" value="${row.pickup_weight_ton || ''}" placeholder="예: 5.0">
           <label>연락처</label><input name="contact" value="${row.contact || ''}">
         </div>
       </form>`, () => {
@@ -5906,6 +5912,8 @@
       row.delivery = form.querySelector('[name="delivery"]').value.trim();
       row.cargo = form.querySelector('[name="cargo"]').value.trim();
       row.tons = form.querySelector('[name="tons"]').value.trim();
+      row.weight_ton = form.querySelector('[name="weight_ton"]').value.trim() || null;
+      row.pickup_weight_ton = form.querySelector('[name="pickup_weight_ton"]').value.trim() || null;
       row.contact = normalizePhone(form.querySelector('[name="contact"]').value);
       row.mixed_load = false;
       renderPendingIntakePanel(root);
@@ -6110,6 +6118,7 @@
       lon:   puMainEl?.dataset.lon ? parseFloat(puMainEl.dataset.lon) : null,
       cargo: readIntakeField(form, `pickup_cargo_${taskNum}`),
       tons:  readIntakeField(form, `pickup_tons_${taskNum}`),
+      weight_ton: readIntakeField(form, `pickup_weight_ton_${taskNum}`),
     }];
     if (card) card.querySelectorAll('[data-extra-pickup]').forEach(row => {
       const el = form.querySelector(`[name="pickup_${taskNum}_extra_${row.dataset.extraPickup}"]`);
@@ -6121,6 +6130,7 @@
         lon: el?.dataset.lon ? parseFloat(el.dataset.lon) : null,
         cargo: readIntakeField(form, `pickup_cargo_${taskNum}_extra_${s}`),
         tons: readIntakeField(form, `pickup_tons_${taskNum}_extra_${s}`),
+        weight_ton: readIntakeField(form, `pickup_weight_ton_${taskNum}_extra_${s}`),
       });
     });
     const delMainEl = form.querySelector(`[name="delivery_${taskNum}"]`);
@@ -6130,6 +6140,7 @@
       lon:       delMainEl?.dataset.lon ? parseFloat(delMainEl.dataset.lon) : null,
       cargo:     readIntakeField(form, `cargo_${taskNum}`),
       tons:      readIntakeField(form, `tons_${taskNum}`),
+      weight_ton: readIntakeField(form, `weight_ton_${taskNum}`),
     }];
     if (card) card.querySelectorAll('[data-extra-delivery]').forEach(row => {
       const s = row.dataset.extraDelivery;
@@ -6140,6 +6151,7 @@
         lon:       delEl?.dataset.lon ? parseFloat(delEl.dataset.lon) : null,
         cargo:     readIntakeField(form, `cargo_${taskNum}_extra_${s}`),
         tons:      readIntakeField(form, `tons_${taskNum}_extra_${s}`),
+        weight_ton: readIntakeField(form, `weight_ton_${taskNum}_extra_${s}`),
       });
     });
     const count = Math.max(pickups.length, deliveries.length);
@@ -6156,12 +6168,14 @@
         lon:        dl.lon,
         cargo:      dl.cargo || pu.cargo,
         tons:       dl.tons || pu.tons,
+        weight_ton: dl.weight_ton || pu.weight_ton || null,
+        pickup_weight_ton: pu.weight_ton || null,
       };
     });
   }
 
   function clearIntakeRow(form, taskNum) {
-    [`pickup_${taskNum}`, `pickup_cargo_${taskNum}`, `pickup_tons_${taskNum}`, `delivery_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`].forEach(name => {
+    [`pickup_${taskNum}`, `pickup_cargo_${taskNum}`, `pickup_tons_${taskNum}`, `pickup_weight_ton_${taskNum}`, `delivery_${taskNum}`, `cargo_${taskNum}`, `tons_${taskNum}`, `weight_ton_${taskNum}`].forEach(name => {
       const el = form.querySelector(`[name="${name}"]`);
       if (el) {
         el.value = '';
@@ -6267,7 +6281,7 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraPickup = seq;
-    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>상차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"></div>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>상차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="${name}" placeholder="상차지 검색…" data-intake-field="${name}"><button type="button" class="place-clear" data-clear="${name}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`pickup_cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="pickup_cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="pickup_tons_${taskNum}_extra_${seq}" placeholder="상차 규격 예: 5톤" data-intake-field="pickup_tons_${taskNum}_extra_${seq}"><input type="text" class="intake-field" name="pickup_weight_ton_${taskNum}_extra_${seq}" placeholder="상차 중량(톤) 예: 5.0" data-intake-field="pickup_weight_ton_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="${name}"]`);
@@ -6291,7 +6305,7 @@
     const row = document.createElement('div');
     row.className = 'extra-stop-row extra-stop-card';
     row.dataset.extraDelivery = seq;
-    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"></div>`;
+    row.innerHTML = `<div class="extra-stop-head"><span class="stop-number">${seq + 1}</span><strong>하차 정보</strong><button type="button" class="remove-extra-stop" tabindex="-1">제거</button></div><div class="place-search-wrap"><input type="text" class="place-search intake-field" name="delivery_${taskNum}_extra_${seq}" placeholder="하차지 검색…" data-intake-field="delivery_${taskNum}_extra_${seq}"><button type="button" class="place-clear" data-clear="delivery_${taskNum}_extra_${seq}" aria-label="지우기" tabindex="-1">&times;</button></div><div class="delivery-fields">${cargoTypeSelectHtml(`cargo_${taskNum}_extra_${seq}`, '', ` class="intake-field" data-intake-field="cargo_${taskNum}_extra_${seq}"`)}<input type="text" class="intake-field" name="tons_${taskNum}_extra_${seq}" placeholder="규격 예: 5톤, 3파레트" data-intake-field="tons_${taskNum}_extra_${seq}"><input type="text" class="intake-field" name="weight_ton_${taskNum}_extra_${seq}" placeholder="하차 중량(톤) 예: 2.0" data-intake-field="weight_ton_${taskNum}_extra_${seq}"></div>`;
     row.querySelector('.remove-extra-stop').addEventListener('click', () => row.remove());
     row.querySelector('.place-clear')?.addEventListener('click', () => {
       const inp = row.querySelector(`[name="delivery_${taskNum}_extra_${seq}"]`);
@@ -6374,6 +6388,7 @@
             <div class="delivery-fields">
               ${cargoTypeSelectHtml(`pickup_cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 2}" data-intake-field="pickup_cargo_${taskNum}"`)}
               <input type="text" class="intake-field" name="pickup_tons_${taskNum}" placeholder="상차 규격 예: 5톤" tabindex="${t + 3}" data-intake-field="pickup_tons_${taskNum}">
+              <input type="text" class="intake-field" name="pickup_weight_ton_${taskNum}" placeholder="상차 중량(톤) 예: 5.0" tabindex="${t + 4}" data-intake-field="pickup_weight_ton_${taskNum}">
             </div>
           </div>
           <button type="button" class="intake-aux-link" data-add-pickup="${taskNum}" tabindex="-1">+ 상차지 추가</button>
@@ -6386,6 +6401,7 @@
             <div class="delivery-fields">
               ${cargoTypeSelectHtml(`cargo_${taskNum}`, '', ` class="intake-field" tabindex="${t + 5}" data-intake-field="cargo_${taskNum}"`)}
               <input type="text" class="intake-field" name="tons_${taskNum}" placeholder="하차 규격 예: 2톤, 3파레트" tabindex="${t + 6}" data-intake-field="tons_${taskNum}">
+              <input type="text" class="intake-field" name="weight_ton_${taskNum}" placeholder="하차 중량(톤) 예: 2.0" tabindex="${t + 7}" data-intake-field="weight_ton_${taskNum}">
             </div>
           </div>
           <button type="button" class="intake-aux-link" data-add-delivery="${taskNum}" tabindex="-1">+ 하차지 추가</button>
@@ -6396,19 +6412,7 @@
           <div class="form-grid intake-order-meta-grid">
             <label>화주(계약 고객) *</label>
             <div class="intake-customer-control">
-              <select class="intake-field" name="customer_${taskNum}" required tabindex="${t + 7}" data-intake-field="customer_${taskNum}">${custOpts}</select>
-            </div>
-            <label>희망 도착</label>
-            <div>
-              ${desiredArrivalFieldsHtml({
-                value: sample?.window && sample.window !== '—' ? sample.window : '',
-                dateName: `latest_at_date_${taskNum}`,
-                hourName: `latest_at_hour_${taskNum}`,
-                tabindexDate: t + 8,
-                tabindexHour: t + 9,
-                intakeField: true,
-                hint: true,
-              })}
+              <select class="intake-field" name="customer_${taskNum}" required tabindex="${t + 8}" data-intake-field="customer_${taskNum}">${custOpts}</select>
             </div>
           </div>
         </div>

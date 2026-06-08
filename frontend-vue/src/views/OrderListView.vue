@@ -28,7 +28,7 @@ const allRows = computed(() => {
     rows = rows.filter(o => {
       const texts = [
         o.order_no, o.shipper_name, o.pickup_address, o.address,
-        o.cargo_type, o.driver_name, o.deadline,
+        o.cargo_type, o.cargo_weight_ton, o.driver_name,
       ].map(v => String(v || '').toLowerCase())
       return texts.some(t => t.includes(q))
     })
@@ -121,12 +121,12 @@ onMounted(load)
               <table>
                 <thead>
                   <tr>
-                    <th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>시간창</th><th>오더번호</th>
+                    <th>상태</th><th>접수 시간</th><th>혼적</th><th>상차지/하차지</th><th>화물</th><th>화주</th><th>기사</th><th>오더번호</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="!rows.length">
-                    <td colspan="9" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td>
+                    <td colspan="8" class="empty-hint" style="padding:20px">해당 상태의 오더가 없습니다.</td>
                   </tr>
                   <tr v-for="o in rows" :key="o.id" :class="{ selected: selectedOrderId===o.id }" @click="selectOrder(o.id)" class="order-row-clickable"
                   >
@@ -137,10 +137,9 @@ onMounted(load)
                     <td>{{ formatDateTimeShort(o.created_at) }}</td>
                     <td><span v-html="mixedLoadBadge(isMixedLoad(o))"></span></td>
                     <td class="route-cell" v-html="routeCellHtml(o)"></td>
-                    <td>{{ o.cargo_type || '—' }}{{ o.cargo_size ? ` · ${o.cargo_size}` : '' }}</td>
+                    <td>{{ o.cargo_type || '—' }}{{ o.cargo_size ? ` · ${o.cargo_size}` : '' }}{{ o.cargo_weight_ton != null ? ` · ${o.cargo_weight_ton}톤` : '' }}</td>
                     <td>{{ o.shipper_name || '—' }}</td>
                     <td>{{ o.driver_name || '—' }}</td>
-                    <td>{{ o.deadline ? o.deadline.slice(0,16).replace('T',' ') : '—' }}</td>
                     <td><strong>{{ displayOrderNo(o) }}</strong></td>
                   </tr>
                 </tbody>
@@ -169,9 +168,8 @@ onMounted(load)
               <label>화주</label><span>{{ selected.shipper_name || '—' }}</span>
               <label>상차지</label><span>{{ selected.pickup_address || '—' }}</span>
               <label>하차지</label><span>{{ selected.address || '—' }}</span>
-              <label>화물</label><span>{{ selected.cargo_type || '—' }} {{ selected.cargo_size ? `· ${selected.cargo_size}` : '' }}</span>
+              <label>화물</label><span>{{ selected.cargo_type || '—' }} {{ selected.cargo_size ? `· ${selected.cargo_size}` : '' }}{{ selected.cargo_weight_ton != null ? ` · ${selected.cargo_weight_ton}톤` : '' }}</span>
               <label>기사</label><span>{{ selected.driver_name || '—' }}</span>
-              <label>시간창</label><span>{{ selected.deadline ? selected.deadline.slice(0,16).replace('T',' ') : '—' }}</span>
               <label>혼적</label><span>{{ selected.mixed_load ? '혼적' : '단독' }}</span>
             </div>
           </div>

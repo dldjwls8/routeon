@@ -168,18 +168,17 @@ onMounted(load)
           <table>
             <thead>
               <tr>
-                <th>오더번호</th><th>고객</th><th>경로</th><th>시간창</th><th>기사</th><th>상태</th>
+                <th>오더번호</th><th>고객</th><th>경로</th><th>기사</th><th>상태</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!dashboardOrders.length">
-                <td colspan="6" style="text-align:center;padding:24px;color:#8b93a7">해당 상태의 오더가 없습니다</td>
+                <td colspan="5" style="text-align:center;padding:24px;color:#8b93a7">해당 상태의 오더가 없습니다</td>
               </tr>
               <tr v-for="o in dashboardOrders" :key="o.id" @click="router.push('/order-list')" style="cursor:pointer">
                 <td><strong>{{ displayOrderNo(o) }}</strong></td>
                 <td>{{ o.shipper_name || '—' }}</td>
                 <td class="route-cell"><strong>{{ routeCell(o).pickup }}</strong><br>→ {{ routeCell(o).delivery }}</td>
-                <td>{{ o.deadline ? o.deadline.slice(0,16).replace('T',' ') : '—' }}</td>
                 <td>{{ o.driver_name || '—' }}</td>
                 <td><span class="badge" :class="statusBadgeClass(ORDER_STATUS_MAP[o.status] || o.status)">{{ ORDER_STATUS_MAP[o.status] || o.status }}</span></td>
               </tr>

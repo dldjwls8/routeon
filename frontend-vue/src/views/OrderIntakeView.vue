@@ -23,6 +23,8 @@ const form = ref({
   address: '',
   cargo_type: '',
   cargo_size: '',
+  cargo_weight_ton: '',
+  pickup_cargo_weight_ton: '',
   contact_phone: '',
   mixed_load: false,
 })
@@ -150,9 +152,11 @@ onMounted(load)
             <div v-if="activeTab==='single'" class="form-grid" style="max-width:100%">
               <label>화주</label><input v-model="form.shipper_name" placeholder="화주명">
               <label>상차지</label><input v-model="form.pickup_address" placeholder="상차지 주소">
+              <label>상차 중량(톤)</label><input v-model="form.pickup_cargo_weight_ton" placeholder="예: 5.0">
               <label>하차지 *</label><input v-model="form.address" placeholder="하차지 주소">
               <label>화물</label><input v-model="form.cargo_type" placeholder="화물 종류">
               <label>화물 크기</label><input v-model="form.cargo_size" placeholder="예: 5톤">
+              <label>하차 중량(톤)</label><input v-model="form.cargo_weight_ton" placeholder="예: 2.0">
               <label>연락처</label><input v-model="form.contact_phone" placeholder="연락처">
               <label>혼적</label>
               <label class="radio-label"><input type="checkbox" v-model="form.mixed_load"> 혼적 허용</label>
