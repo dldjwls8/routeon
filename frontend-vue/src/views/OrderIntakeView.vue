@@ -4,13 +4,18 @@ import PageChrome from '@/components/PageChrome.vue'
 import { getCustomers } from '@/services/customerService.js'
 import { getVehicles } from '@/services/vehicleService.js'
 import { getDrivers } from '@/services/driverService.js'
-import { createDelivery } from '@/services/deliveryService.js'
+import { createDelivery, createDeliveriesBatch } from '@/services/deliveryService.js'
+import { apiFetch } from '@/api/client.js'
+import * as XLSX from 'xlsx'
+import { rowsFromExcelOrder, generateIntakeTemplate } from '@/utils/excelParser.js'
+import { toDeliveryBatchPayload } from '@/utils/deliveryBatch.js'
 
 const customers = ref([])
 const vehicles = ref([])
 const drivers = ref([])
 const loading = ref(false)
 const submitted = ref(false)
+const activeTab = ref('single')
 
 const form = ref({
   shipper_name: '',
@@ -23,6 +28,11 @@ const form = ref({
   deadline: '',
   mixed_load: false,
 })
+
+// 엑셀 일괄 접수 상태
+const excelLoading = ref(false)
+const excelError = ref('')
+const parsedRows = ref([])
 
 async function load() {
   try {
@@ -48,6 +58,80 @@ async function submit() {
   finally { loading.value = false }
 }
 
+function onFileChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  excelError.value = ''
+  parsedRows.value = []
+  const reader = new FileReader()
+  reader.onload = async (evt) => {
+    try {
+      const data = new Uint8Array(evt.target.result)
+      const workbook = XLSX.read(data, { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rawJson = XLSX.utils.sheet_to_json(firstSheet)
+      if (!rawJson.length) {
+        excelError.value = '엑셀에 데이터가 없습니다.'
+        return
+      }
+      let allRows = []
+      rawJson.forEach(rawRow => {
+        const rows = rowsFromExcelOrder(rawRow)
+        allRows.push(...rows)
+      })
+      if (!allRows.length) {
+        excelError.value = '유효한 오더 데이터를 찾을 수 없습니다.'
+        return
+      }
+      for (const row of allRows) {
+        if (row.pickup) {
+          const res = await apiFetch(`/address/coord?query=${encodeURIComponent(row.pickup)}`)
+          if (res.ok) {
+            const coord = await res.json().catch(() => null)
+            if (coord) { row.pickup_lat = coord.lat; row.pickup_lon = coord.lon }
+          }
+        }
+        if (row.delivery) {
+          const res = await apiFetch(`/address/coord?query=${encodeURIComponent(row.delivery)}`)
+          if (res.ok) {
+            const coord = await res.json().catch(() => null)
+            if (coord) { row.lat = coord.lat; row.lon = coord.lon }
+          }
+        }
+      }
+      parsedRows.value = allRows
+    } catch (err) {
+      console.error(err)
+      excelError.value = '엑셀 파싱 오류: ' + (err.message || '')
+    }
+  }
+  reader.readAsArrayBuffer(file)
+}
+
+async function submitExcelBatch() {
+  if (!parsedRows.value.length) return
+  excelLoading.value = true
+  try {
+    const payload = toDeliveryBatchPayload(parsedRows.value)
+    await createDeliveriesBatch(payload)
+    alert(`${payload.length}건 접수 완료`)
+    parsedRows.value = []
+  } catch (e) {
+    alert('일괄 접수 실패: ' + (e.message || ''))
+  } finally {
+    excelLoading.value = false
+  }
+}
+
+function downloadTemplate() {
+  const { headers, rows, filename } = generateIntakeTemplate()
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(14, h.length + 6) }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '오더접수양식')
+  XLSX.writeFile(wb, filename)
+}
+
 onMounted(load)
 </script>
 
@@ -57,9 +141,15 @@ onMounted(load)
     <div class="intake-layout-wrap">
       <div class="intake-main">
         <div class="card">
-          <div class="card-hd"><h2>오더 접수</h2></div>
+          <div class="card-hd">
+            <div class="tab-bar">
+              <button class="tab" :class="{active: activeTab==='single'}" @click="activeTab='single'">단건 접수</button>
+              <button class="tab" :class="{active: activeTab==='excel'}" @click="activeTab='excel'">엑셀 일괄 접수</button>
+            </div>
+          </div>
           <div class="card-bd">
-            <div class="form-grid" style="max-width:100%">
+            <!-- 단건 접수 -->
+            <div v-if="activeTab==='single'" class="form-grid" style="max-width:100%">
               <label>화주</label><input v-model="form.shipper_name" placeholder="화주명">
               <label>상차지</label><input v-model="form.pickup_address" placeholder="상차지 주소">
               <label>하차지 *</label><input v-model="form.address" placeholder="하차지 주소">
@@ -71,10 +161,58 @@ onMounted(load)
               <label>혼적</label>
               <label class="radio-label"><input type="checkbox" v-model="form.mixed_load"> 혼적 허용</label>
             </div>
-            <div class="intake-actions">
-              <button type="button" class="btn btn-primary" :disabled="loading" @click="submit">{{ loading ? '접수 중…' : '오더 접수' }}</button>
+
+            <!-- 엑셀 일괄 접수 -->
+            <div v-else>
+              <div class="excel-actions">
+                <input type="file" accept=".xlsx,.xls,.csv" @change="onFileChange">
+                <button type="button" class="btn btn-secondary btn-sm" @click="downloadTemplate">양식 다운로드</button>
+              </div>
+              <p v-if="excelError" class="error-text">{{ excelError }}</p>
+              <div v-if="parsedRows.length" class="preview-table-wrap">
+                <p class="text-muted">총 {{ parsedRows.length }}건 파싱됨</p>
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>화주</th>
+                      <th>담당자</th>
+                      <th>상차지</th>
+                      <th>상차화물</th>
+                      <th>상차규격</th>
+                      <th>상차중량(톤)</th>
+                      <th>하차지</th>
+                      <th>하차수취인</th>
+                      <th>하차화물</th>
+                      <th>하차규격</th>
+                      <th>하차중량(톤)</th>
+                      <th>희망도착</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in parsedRows" :key="idx">
+                      <td>{{ row.customer }}</td>
+                      <td>{{ row.contact_name }}</td>
+                      <td>{{ row.pickup }}</td>
+                      <td>{{ row.pickup_cargo_type }}</td>
+                      <td>{{ row.pickup_cargo_size }}</td>
+                      <td>{{ row.pickup_cargo_weight_ton ?? '-' }}</td>
+                      <td>{{ row.delivery }}</td>
+                      <td>{{ row.recipient }}</td>
+                      <td>{{ row.cargo_type }}</td>
+                      <td>{{ row.cargo_size }}</td>
+                      <td>{{ row.cargo_weight_ton ?? '-' }}</td>
+                      <td>{{ row.latestAt }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div v-if="submitted" class="info-banner" style="margin-top:12px">오더가 접수되었습니다.</div>
+
+            <div class="intake-actions">
+              <button v-if="activeTab==='single'" type="button" class="btn btn-primary" :disabled="loading" @click="submit">{{ loading ? '접수 중…' : '오더 접수' }}</button>
+              <button v-else type="button" class="btn btn-primary" :disabled="excelLoading || !parsedRows.length" @click="submitExcelBatch">{{ excelLoading ? '접수 중…' : `${parsedRows.length}건 일괄 접수` }}</button>
+            </div>
+            <div v-if="submitted && activeTab==='single'" class="info-banner" style="margin-top:12px">오더가 접수되었습니다.</div>
           </div>
         </div>
       </div>
@@ -85,3 +223,56 @@ onMounted(load)
     </div>
   </div>
 </template>
+
+<style scoped>
+.tab-bar {
+  display: flex;
+  gap: 8px;
+}
+.tab {
+  padding: 6px 14px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.tab.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+.excel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.error-text {
+  color: #dc2626;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.preview-table-wrap {
+  margin-top: 12px;
+}
+.preview-table-wrap .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.preview-table-wrap .data-table th,
+.preview-table-wrap .data-table td {
+  border: 1px solid #e5e7eb;
+  padding: 6px 8px;
+  text-align: left;
+}
+.preview-table-wrap .data-table th {
+  background: #f9fafb;
+}
+.text-muted {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+</style>

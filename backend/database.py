@@ -248,3 +248,14 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE customers DROP COLUMN IF EXISTS contact;"
         ))
+
+        # deliveries 상차 화물 정보 컬럼 추가
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_cargo_type VARCHAR(100);"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_cargo_size VARCHAR(100);"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS pickup_cargo_weight_ton FLOAT;"
+        ))

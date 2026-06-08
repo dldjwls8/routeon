@@ -6,6 +6,29 @@
 
 ---
 
+## v1.0.122 (2026-06-08)
+### 상차·하차 화물 정보 분리 및 Vue 엑셀 일괄 접수 구현
+- **배경**: 기존 `deliveries` 테이블은 상차지·하차지 주소는 분리되어 있었으나, 화물 정보(`cargo_type`, `cargo_size`, `cargo_weight_ton`)는 하차 화물 단일 컬럼만 존재해 엑셀 양식의 `상차화물`/`상차규격`/`상차중량(톤)`과 `하차화물`/`하차규격`/`하차중량(톤)`을 별도 저장할 수 없었음
+- **DB — `deliveries` 테이블 상차 화물 컬럼 3개 추가**: `pickup_cargo_type`(`VARCHAR(100)`), `pickup_cargo_size`(`VARCHAR(100)`), `pickup_cargo_weight_ton`(`FLOAT`). 기존 `cargo_type`/`cargo_size`/`cargo_weight_ton`은 하차 화물 정보로 명확화. `backend/database.py` `init_db()`에 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 3건 추가해 기존 DB 자동 보강
+- **백엔드 API**: `DeliveryCreate`·`DeliveryUpdate`에 `pickup_cargo_type`/`pickup_cargo_size`/`pickup_cargo_weight_ton` 필드 추가. `routers/deliveries.py`의 `_DELIVERY_EVENT_FIELDS` 및 `create_delivery`/`create_deliveries_batch`/`update_delivery`/`_delivery_schema` 전부 신규 필드 반영
+- **Vue 프론트엔드 — 오더접수 엑셀 일괄 업로드 신규 구현**:
+  - `frontend-vue/package.json`에 SheetJS(`xlsx@^0.18.5`) 의존성 추가
+  - `src/utils/phone.js`: 연락처 정규화(`normalizePhone`) 레거시 포팅
+  - `src/utils/excelParser.js`: 엑셀 날짜·불리언 파싱 + `rowsFromExcelOrder(rawRow)`(상차·하차 화물 분리 파싱) + `generateIntakeTemplate()`(양식 생성)
+  - `src/utils/deliveryBatch.js`: `toDeliveryBatchPayload(rows)` — 파싱 결과를 `POST /deliveries/batch` 페이로드로 변환. `pickup_cargo_type`/`pickup_cargo_size`/`pickup_cargo_weight_ton` 포함
+  - `src/services/deliveryService.js`: `createDeliveriesBatch(body)` 추가
+  - `src/views/OrderIntakeView.vue`: 단건 접수 탭 + 엑셀 일괄 접수 탭 구성. 파일 `<input>`에서 SheetJS로 파싱 → `/address/coord` 좌표 변환 → 미리보기 테이블(상차화물/상차규격/상차중량, 하차화물/하차규격/하차중량 컬럼) → `양식 다운로드`·`일괄 저장` 버튼 제공
+- **레거시 프론트엔드 — 엑셀 양식·파싱 개선**:
+  - `downloadIntakeExcelTemplate()`: `담당자` 컬럼 추가, `중량(톤)` 제거하고 `상차중량(톤)N`/`하차중량(톤)N`으로 교체
+  - `rowsFromExcelOrder()`: 상차 화물(`pickup_cargo_type`/`pickup_cargo_size`/`pickup_cargo_weight_ton`)과 하차 화물(`cargo_type`/`cargo_size`/`cargo_weight_ton`)을 별도 파싱. 다중 헤더 에일리어스(`상차중량(톤)1`, `상차중량1`, `pickupweightton1`, `pickupweight1` 등) 지원
+  - `commitPendingRowsToOrders()`: `pickup_cargo_*` 필드를 `POST /deliveries/batch` 페이로드에 포함
+  - `contact_name` 버그 수정: 기존 파싱에서 `contact_name`이 연락처 값을 잘못 매핑하던 문제를 `contact_name`/`contact_phone`을 각각 정확히 분리해 파싱하도록 수정
+- **시연용 데모 데이터**: `backend/seeds/seed_demo.py`(기업 `DEMO001`, 부관리자·기사 10명·차량 10대·고객 10명) 및 `seed_demo_coords.py`(기사/차량 랜덤 GPS 좌표, TimescaleDB `locations` + `vehicles.last_lat/last_lon`) 추가. 모든 계정 비밀번호 `Pass1234!`
+- **시연용 엑셀 파일**: `/tmp/routeon_demo_orders.xlsx` 생성 — 10건의 상차·하차 화물 정보를 각각 다르게 구성(예: 상차 식품/5톤/5.0, 하차 식품/2톤/2.0). `혼재여부` 컬럼 없음(시연 미대상)
+- **검증**: `npm run build`(Vue) 성공, `node --check frontend/dashboard.js` 성공, 백엔드 컨테이너 재시작 및 `/deliveries`·`/deliveries/batch` API smoke 통과, 엑셀 업로드·미리보기·일괄 저장 E2E 확인
+
+---
+
 ## v1.0.121 (2026-06-07)
 ### Vue 대시보드 실시간 메시지·알림 드롭다운 구현
 - **`useChatSocket.js` composable 추가**: 채팅 WebSocket 연결 + 대화 목록 + unread 카운트를 전역 reactive 상태로 관리. `DashboardLayout`과 `ChatView`가 공유

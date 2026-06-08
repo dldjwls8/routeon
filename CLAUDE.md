@@ -78,6 +78,8 @@ routeon/
 │   └── seeds/
 │       ├── seed_rest_stops.py     졸음쉼터 CSV → DB 삽입 (253건)
 │       ├── seed_rest_stops_xls.py XLS 3개(휴게소·공영차고지·물류단지) → geocoding → DB 삽입 (156건)
+│       ├── seed_demo.py           시연용 데모 데이터 — 기업 `DEMO001`, 부관리자·기사 10명·차량 10대·고객 10명
+│       ├── seed_demo_coords.py    시연용 GPS 좌표 — 기사/차량 랜덤 좌표를 TimescaleDB `locations`와 `vehicles.last_lat/last_lon`에 삽입
 │       ├── inspect_files.py       파일 컬럼 확인
 │       ├── 한국도로공사_졸음쉼터_20260225.csv
 │       ├── 휴게소정보_260325.xls
@@ -114,6 +116,10 @@ routeon/
         │   ├── statisticsService.js 통계 API
         │   ├── userService.js       사용자 API
         │   └── staffService.js      담당자 API
+        ├── utils/
+        │   ├── phone.js             연락처 정규화 (`normalizePhone`)
+        │   ├── excelParser.js       SheetJS 기반 엑셀 파싱 — 상차·하차 화물 분리, 양식 생성
+        │   └── deliveryBatch.js     엑셀 파싱 결과 → `POST /deliveries/batch` 페이로드 변환
         ├── composables/
         │   ├── useApi.js            API loading/error 상태 관리
         │   ├── useListPage.js       목록 페이지네이션/검색/필터 상태 관리
@@ -136,7 +142,7 @@ routeon/
             ├── ChatView.vue             내부 채팅
             ├── DashboardView.vue        대시보드 메인
             ├── ControlLiveView.vue      운행관제 (실시간 GPS + 폴리라인)
-            ├── OrderIntakeView.vue      오더접수
+            ├── OrderIntakeView.vue      오더접수 — 단건 입력 + SheetJS 기반 엑셀 일괄 업로드(상차·하차 화물 분리 파싱, 양식 다운로드, 미리보기, `/address/coord` 좌표 변환, `POST /deliveries/batch` 일괄 저장)
             ├── OrderListView.vue        오더목록
             ├── DispatchManageView.vue   배차관리
             ├── CustomerListView.vue     고객관리
@@ -175,8 +181,9 @@ routeon/
   "shipper_name": "화주명", "contact_name": "담당자명",
   "contact_phone": "010-0000-0000", "shipper_phone": "02-000-0000",
   "recipient_name": "수신자명", "cargo_type": "식품",
-  "cargo_size": "5톤", "cargo_weight_ton": 2.0, "delivery_id": "uuid",
-  "order_no": "RO-260605-A1B2C3"
+  "cargo_size": "5톤", "cargo_weight_ton": 2.0,
+  "pickup_cargo_type": "식품", "pickup_cargo_size": "2톤", "pickup_cargo_weight_ton": 2.0,
+  "delivery_id": "uuid", "order_no": "RO-260605-A1B2C3"
 }
 ```
 - `type`: `"loading"` (상차지) | `"unloading"` (하차지)
@@ -184,10 +191,10 @@ routeon/
   `null`이면 자유 최적화 (긴급 배차 등). 운행 생성 패널과 자동 배차 모두 자동 부여.
 - `shipper_name` / `contact_name` / `contact_phone` / `shipper_phone`: 화주·담당자 연락처. 기사 앱 Trip API 응답에 포함.
 - `recipient_name`: 수신자. unloading 전용. 배차 시 Delivery 원본에서 복사.
-- `cargo_type`: 화물 종류. 관리자 웹 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 드롭다운 기준.
-- `cargo_size`: 화물 규격. `5톤`, `3파레트` 같은 자유 텍스트이며 신규 오더·배차·기사 앱 표시는 이 값을 기준으로 한다.
+- `cargo_type` / `cargo_size` / `cargo_weight_ton`: 하차 화물 정보. 관리자 웹 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 드롭다운 기준. `cargo_size`는 `5톤`, `3파레트` 같은 자유 텍스트.
+- `pickup_cargo_type` / `pickup_cargo_size` / `pickup_cargo_weight_ton`: 상차 화물 정보(v1.0.122 추가). 하차 화물과 독립적으로 저장되며, 엑셀 일괄 접수에서 `상차화물`/`상차규격`/`상차중량(톤)` 컬럼으로 입력된다.
 - 배차 생성 시 `cargo_size` 또는 `cargo_weight_ton`에서 톤 단위를 읽을 수 있으면 차량 `weight_kg`와 비교한다. `5톤`, `5t`, `5ton`은 검증 대상이고 `3파레트`처럼 중량 환산이 불가능한 규격은 표시값으로만 유지한다.
-- `cargo_weight_ton`: 과거 톤수 값 호환용. 신규 프론트 입력은 숫자 파싱 없이 `cargo_size`로 전달한다.
+- `cargo_weight_ton` / `pickup_cargo_weight_ton`: 과거 톤수 값 호환용. 신규 프론트 입력은 숫자 파싱 없이 `cargo_size`/`pickup_cargo_size`로 전달한다.
 - `delivery_id`: Delivery UUID — auto-dispatch 시 Trip·Delivery 연결용.
 - `order_no`: 표시용 오더번호. DB 컬럼이 아니라 `/deliveries`/`/trips` 응답에서 `created_at`과 Delivery UUID 기반으로 계산되는 `RO-YYMMDD-XXXXXX` 형식.
 - `WaypointSchema` 입력 DTO는 `backend/schemas.py`에 있다.

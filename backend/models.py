@@ -295,9 +295,12 @@ class Delivery(Base):
     shipper_phone    = Column(String(20), nullable=True)     # 화주 연락처
     mixed_load       = Column(Boolean, default=False, nullable=False)
     recipient_name   = Column(String(100), nullable=True)    # 수신자(고객사명)
-    cargo_type       = Column(String(100), nullable=True)    # 화물 종류
-    cargo_size       = Column(String(100), nullable=True)    # 화물 규격(예: 5톤, 3파레트)
-    cargo_weight_ton = Column(Float, nullable=True)          # 과거 톤수 값(호환용)
+    cargo_type       = Column(String(100), nullable=True)    # 하차 화물 종류
+    cargo_size       = Column(String(100), nullable=True)    # 하차 화물 규격(예: 5톤, 3파레트)
+    cargo_weight_ton = Column(Float, nullable=True)          # 하차 화물 중량(톤)
+    pickup_cargo_type       = Column(String(100), nullable=True)    # 상차 화물 종류
+    pickup_cargo_size       = Column(String(100), nullable=True)    # 상차 화물 규격
+    pickup_cargo_weight_ton = Column(Float, nullable=True)          # 상차 화물 중량(톤)
     status           = Column(SAEnum(DeliveryStatus),
                                default=DeliveryStatus.pending, nullable=False)
     sequence         = Column(Integer)

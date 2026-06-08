@@ -8,6 +8,10 @@ export function createDelivery(body) {
   return apiPost('/deliveries', body)
 }
 
+export function createDeliveriesBatch(body) {
+  return apiPost('/deliveries/batch', body)
+}
+
 export function patchDelivery(id, body) {
   return apiPatch(`/deliveries/${id}`, body)
 }

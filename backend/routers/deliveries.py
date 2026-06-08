@@ -31,6 +31,9 @@ class DeliveryCreate(BaseModel):
     pickup_address:   Optional[str]   = None
     pickup_lat:       Optional[float] = None
     pickup_lon:       Optional[float] = None
+    pickup_cargo_type:       Optional[str]   = None
+    pickup_cargo_size:       Optional[str]   = None
+    pickup_cargo_weight_ton: Optional[float] = None
     shipper_name:     Optional[str]   = None
     contact_name:     Optional[str]   = None
     contact_phone:    Optional[str]   = None
@@ -52,6 +55,9 @@ class DeliveryUpdate(BaseModel):
     cargo_type:       Optional[str]   = None
     cargo_size:       Optional[str]   = None
     cargo_weight_ton: Optional[float] = None
+    pickup_cargo_type:       Optional[str]   = None
+    pickup_cargo_size:       Optional[str]   = None
+    pickup_cargo_weight_ton: Optional[float] = None
     contact_name:     Optional[str]   = None
     shipper_name:     Optional[str]   = None
     contact_phone:    Optional[str]   = None
@@ -70,8 +76,12 @@ _DELIVERY_EVENT_FIELDS = {
     "address": "하차지",
     "pickup_address": "상차지",
     "recipient_name": "수신자",
-    "cargo_type": "화물 종류",
-    "cargo_size": "규격",
+    "cargo_type": "하차 화물 종류",
+    "cargo_size": "하차 규격",
+    "cargo_weight_ton": "하차 중량(톤)",
+    "pickup_cargo_type": "상차 화물 종류",
+    "pickup_cargo_size": "상차 규격",
+    "pickup_cargo_weight_ton": "상차 중량(톤)",
     "contact_name": "담당자",
     "contact_phone": "담당자 연락처",
     "shipper_name": "화주",
@@ -134,6 +144,9 @@ async def create_delivery(
         pickup_address   = req.pickup_address,
         pickup_lat       = req.pickup_lat,
         pickup_lon       = req.pickup_lon,
+        pickup_cargo_type       = req.pickup_cargo_type,
+        pickup_cargo_size       = req.pickup_cargo_size,
+        pickup_cargo_weight_ton = req.pickup_cargo_weight_ton,
         shipper_name     = req.shipper_name,
         contact_name     = req.contact_name,
         contact_phone    = contact_phone,
@@ -181,7 +194,11 @@ async def create_deliveries_batch(
             cargo_size=req.cargo_size,
             cargo_weight_ton=req.cargo_weight_ton,
             pickup_address=req.pickup_address, pickup_lat=req.pickup_lat,
-            pickup_lon=req.pickup_lon, shipper_name=req.shipper_name,
+            pickup_lon=req.pickup_lon,
+            pickup_cargo_type=req.pickup_cargo_type,
+            pickup_cargo_size=req.pickup_cargo_size,
+            pickup_cargo_weight_ton=req.pickup_cargo_weight_ton,
+            shipper_name=req.shipper_name,
             contact_name=req.contact_name, contact_phone=contact_phone,
             shipper_phone=shipper_phone,
             mixed_load=req.mixed_load,
@@ -310,6 +327,12 @@ async def update_delivery(
         delivery.cargo_size = req.cargo_size
     if req.cargo_weight_ton is not None:
         delivery.cargo_weight_ton = req.cargo_weight_ton
+    if req.pickup_cargo_type is not None:
+        delivery.pickup_cargo_type = req.pickup_cargo_type
+    if req.pickup_cargo_size is not None:
+        delivery.pickup_cargo_size = req.pickup_cargo_size
+    if req.pickup_cargo_weight_ton is not None:
+        delivery.pickup_cargo_weight_ton = req.pickup_cargo_weight_ton
     if req.contact_name is not None:
         delivery.contact_name = req.contact_name
     if req.shipper_name is not None:
@@ -491,6 +514,9 @@ def _delivery_schema(d: Delivery) -> dict:
         "cargo_type":       d.cargo_type,
         "cargo_size":       d.cargo_size,
         "cargo_weight_ton": d.cargo_weight_ton,
+        "pickup_cargo_type":       d.pickup_cargo_type,
+        "pickup_cargo_size":       d.pickup_cargo_size,
+        "pickup_cargo_weight_ton": d.pickup_cargo_weight_ton,
         "status":           d.status,
         "sequence":         d.sequence,
         "trip_id":          str(d.trip_id)    if d.trip_id    else None,

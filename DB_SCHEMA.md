@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-07 (v1.0.121 기준, Vue 대시보드 실시간 메시지·알림 드롭다운 구현의 DB 구조 영향 없음 확인)
+> 최종 검토: 2026-06-08 (v1.0.122 기준, `deliveries` 상차 화물 3컬럼 추가 및 Vue 엑셀 일괄 접수 기능 반영)
 
 ---
 
@@ -231,9 +231,12 @@
 | `shipper_phone` | VARCHAR(20) | NULLABLE | 화주 연락처. 미입력 시 API 응답은 `contact_phone`으로 폴백 |
 | `mixed_load` | BOOLEAN | NOT NULL DEFAULT FALSE | 혼적 여부 |
 | `recipient_name` | VARCHAR(100) | NULLABLE | 수신자(고객사명) |
-| `cargo_type` | VARCHAR(100) | NULLABLE | 화물 종류. 관리자 웹 신규 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 선택지 기준 |
-| `cargo_size` | VARCHAR(100) | NULLABLE | 화물 규격. 예: `5톤`, `3파레트` |
-| `cargo_weight_ton` | FLOAT | NULLABLE | 과거 화물 톤수 값. 신규 프론트 입력은 `cargo_size` 사용, 이 컬럼은 호환용 |
+| `pickup_cargo_type` | VARCHAR(100) | NULLABLE | 상차 화물 종류. 관리자 웹 신규 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 선택지 기준 |
+| `pickup_cargo_size` | VARCHAR(100) | NULLABLE | 상차 화물 규격. 예: `5톤`, `3파레트` |
+| `pickup_cargo_weight_ton` | FLOAT | NULLABLE | 상차 화물 중량(톤) |
+| `cargo_type` | VARCHAR(100) | NULLABLE | 하차 화물 종류. 관리자 웹 신규 입력은 `식품`, `원자재/에너지`, `화학/소재`, `잡화`, `기계/전자`, `기타` 선택지 기준 |
+| `cargo_size` | VARCHAR(100) | NULLABLE | 하차 화물 규격. 예: `5톤`, `3파레트` |
+| `cargo_weight_ton` | FLOAT | NULLABLE | 하차 화물 중량(톤). 과거 톤수 값 호환용 |
 | `status` | deliverystatus | NOT NULL DEFAULT 'pending' | |
 | `sequence` | INTEGER | | 최적화 후 배송 순서 |
 | `deadline` | DATETIME | | 희망 도착 시각 |
@@ -509,12 +512,13 @@ footer 링크와 안내 페이지 내용은 DB에 저장하지 않으며, 약관
 
 ### 오더 접수 엑셀 양식과 DB
 `오더관리 > 접수창`의 `양식 다운로드`는 프론트엔드에서 `.xlsx`/`.csv` 템플릿을 생성하는 기능이며 별도 테이블을 추가하지 않는다.
-v1.0.93 기준 템플릿은 `상차지1~3/상차화물/상차규격`, `하차지1~3/하차수취인/하차화물/하차규격` 헤더를 사용한다. 기존 단일 `상차지`, `하차지`, `수취인`, `화물종류`, `규격` 헤더도 업로드 호환용으로 계속 읽는다.
+v1.0.122 기준 템플릿은 `화주명`, `담당자`, `연락처`, `상차지1`, `상차화물1`, `상차규격1`, `상차중량(톤)1`, `하차지1`, `하차수취인1`, `하차화물1`, `하차규격1`, `하차중량(톤)1`, `희망도착일시` 헤더를 사용한다. 기존 단일 `상차지`, `하차지`, `수취인`, `화물종류`, `규격`, `중량(톤)` 헤더도 업로드 호환용으로 계속 읽는다.
 엑셀 업로드 행은 접수 대기열에서 여러 접수건으로 전개된 뒤 기존 `deliveries` 생성 API로 저장된다. `deliveries` 테이블은 여전히 한 행에 대표 `pickup_address` 1개와 `address` 1개를 저장하는 단건 오더 모델이며, 다중 상·하차용 별도 테이블은 없다.
 다운로드 템플릿의 기본 예시 행은 상차·하차 한 쌍만 포함해 재업로드 시 `deliveries` 1건으로 저장되는 대기열 항목 1개를 만든다. 사용자가 복수 상·하차 쌍을 입력한 경우에는 기존 호환 규칙에 따라 각 쌍이 별도 접수건으로 전개된다.
 엑셀 좌표 변환은 저장 전 프론트에서 `/address/coord`와 Kakao 장소 검색을 사용해 `pickup_lat/pickup_lon`, `lat/lon`에 채운다. 좌표 변환에 실패해도 스키마상 좌표 컬럼은 nullable이므로 저장은 가능하나, 배차 화면은 기존처럼 좌표가 있는 오더만 운행 생성에 사용할 수 있다.
-상차 블록의 화물 종류/규격은 하차 화물/규격이 비어 있을 때 `deliveries.cargo_type`/`deliveries.cargo_size`의 fallback으로 사용한다. Trip 생성 시 loading waypoint에도 같은 화물 메타데이터를 포함하지만 DB 컬럼 추가는 없다.
-`+ 임시 화주 추가`는 기존 `customers.temporary`, `customers.valid_date` 컬럼을 사용하는 흐름이며 v1.0.93에서 스키마 변경은 없다.
+엑셀 파싱 시 상차 화물(`pickup_cargo_type`/`pickup_cargo_size`/`pickup_cargo_weight_ton`)과 하차 화물(`cargo_type`/`cargo_size`/`cargo_weight_ton`)을 별도로 읽어 저장한다. 하차 화물이 비어 있을 때 상차 화물을 하차로 fallback하는 과거 규칙은 더 이상 사용하지 않으며, 상차·하차는 항상 독립적으로 입력·저장된다.
+`+ 임시 화주 추가`는 기존 `customers.temporary`, `customers.valid_date` 컬럼을 사용하는 흐름이며 스키마 변경은 없다.
+Vue 프론트엔드(`frontend-vue/`)의 `OrderIntakeView.vue`에서도 동일한 엑셀 업로드·미리보기·양식 다운로드 기능을 제공하며, 파싱 결과는 `src/utils/deliveryBatch.js`의 `toDeliveryBatchPayload()`를 통해 `POST /deliveries/batch`로 전송된다.
 
 ### 고객관리 주소 자동완성과 DB
 `고객관리 > 고객 관리`의 주소 자동완성은 선택 주소 문자열을 `customers.address`, 좌표를 `customers.lat`/`customers.lon`에 저장한다.
