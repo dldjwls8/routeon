@@ -783,8 +783,7 @@
         }
       }
 
-      // 페이지 재렌더링 — Vue SPA에서는 dashboard.js가 직접 렌더링하지 않음
-      /*
+      // 페이지 재렌더링 — Vue SPA: DOM 조작 없이 applyPageTheme만 실행
       if (!canAccessMain(currentMain)) {
         const firstAllowed = NAV.find(group => canAccessMain(group.id)) || NAV[0];
         currentMain = firstAllowed.id;
@@ -794,7 +793,6 @@
       renderPage();
       restoreScrollState(scrollState);
       if (isMapPage()) showLiveMap();
-      */
 
     } catch (e) {
       console.error('데이터 로드 오류:', e);
@@ -931,9 +929,9 @@
     currentMain = main;
     const group = NAV.find(g => g.id === main);
     currentPage = page || (group ? group.pages[0].id : NAV[0].pages[0].id);
-    /* Vue SPA — dashboard.js 직접 렌더링 비활성화 */
-    /* renderNav(); */
-    /* renderPage(); */
+    /* Vue SPA — DOM 조작 없이 applyPageTheme만 실행 */
+    renderNav();
+    renderPage();
     const targetPage = currentPage;
     if (isMapPage(targetPage)) setTimeout(() => showLiveMap(targetPage), 50);
     if (typeof window._onRouteOnGotoPage === 'function') {
@@ -2987,14 +2985,10 @@
 
   /** 대시보드만 theme-dashboard, 접수·오더·배차 등은 theme-app(다크) */
   function syncSubNavLayout() {
-    /* Vue SPA — DashboardLayout.vue가 body 클래스를 직접 관리 */
-    return;
     document.body.classList.remove('main-with-sub');
   }
 
   function applyPageTheme() {
-    /* Vue SPA — DashboardLayout.vue가 body 클래스를 직접 관리 */
-    return;
     document.body.classList.remove('theme-dashboard', 'theme-app', 'dispatch-viewport', 'order-list-viewport', 'order-intake-viewport', 'page-scroll-body');
     document.body.classList.add('page-compact');
     if (currentPage === 'dashboard') document.body.classList.add('theme-dashboard');
@@ -3034,7 +3028,8 @@
   }
 
   function renderNav() {
-    /* Vue SPA — dashboard.js 직접 렌더링 비활성화 */
+    /* Vue SPA — DOM 렌더링 비활성화, applyPageTheme만 유지 */
+    applyPageTheme();
     return;
     const nav = $('#navMain');
     nav.innerHTML = '';
@@ -3072,11 +3067,11 @@
       }
       nav.appendChild(item);
     });
-    applyPageTheme();
   }
 
   function renderPage() {
-    /* Vue SPA — dashboard.js 직접 렌더링 비활성화 */
+    /* Vue SPA — DOM 렌더링 비활성화, applyPageTheme만 유지 */
+    applyPageTheme();
     return;
     if (isMapPage()) hideLiveMap();
     const main = $('#mainContent');
