@@ -8,8 +8,9 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 from database import init_db
 from routers import misc, vehicles, trips, optimize, dispatch, organizations, chat, deliveries, location, stats, customers, entity_events
@@ -64,3 +65,14 @@ app.include_router(entity_events.router)
 
 os.makedirs("/app/uploads/profiles", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="/app/uploads"), name="uploads")
+
+
+@app.get("/templates/orders")
+async def download_order_template():
+    """오더접수 양식 엑셀 다운로드 (demo_orders.xlsx)"""
+    file_path = Path(__file__).parent / "demo_orders.xlsx"
+    return FileResponse(
+        file_path,
+        filename="demo_orders.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

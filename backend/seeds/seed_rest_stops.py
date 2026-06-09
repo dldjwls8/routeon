@@ -57,7 +57,7 @@ async def seed() -> None:
                         """
                         INSERT INTO rest_stops
                             (name, type, latitude, longitude, direction, is_active, note, created_at)
-                        VALUES ($1, 'drowsy_shelter', $2, $3, $4, true, $5, NOW())
+                        VALUES ($1, 'highway_rest', $2, $3, $4, true, $5, NOW())
                         ON CONFLICT DO NOTHING
                         """,
                         name, lat, lon, direction,

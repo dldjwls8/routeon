@@ -16,6 +16,7 @@ RouteOn — 시연용 데모 데이터 시드 스크립트
 
 import asyncio
 import csv
+import json
 import uuid
 import sys
 from datetime import datetime
@@ -279,8 +280,8 @@ async def seed():
             await db.refresh(customer)
             print(f"[CREATE] 고객 '{customer.name}' — id={customer.id}")
 
-        # 7) 휴식지(졸음쉼터) 삽입
-        await seed_rest_stops()
+        # 7) 고속도로 휴게소 삽입
+        await seed_highway_rest()
 
         print("\n✅ 시연용 데모 데이터 구성 완료")
         print(f"   기업: {org.name} ({org.org_code})")
@@ -291,53 +292,109 @@ async def seed():
         print(f"   고객: {len(CUSTOMERS)}명")
 
 
-async def seed_rest_stops():
-    """졸음쉼터 CSV를 읽어 rest_stops 테이블에 삽입 (중복 무시)"""
-    csv_path = Path(__file__).parent / "한국도로공사_졸음쉼터_20260225.csv"
-    if not csv_path.exists():
-        print(f"[SKIP] 휴식지 CSV 없음: {csv_path}")
+async def seed_highway_rest():
+    """고속도로 휴게소 삽입. JSON 캐시 있으면 바로 사용, 없으면 엑셀+카카오 API로 생성."""
+    json_path = Path(__file__).parent / "highway_rest_coords.json"
+    xls_path  = Path(__file__).parent / "휴게소정보_260325.xls"
+
+    # ── 1) JSON 캐시 사용 ──
+    if json_path.exists():
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        inserted = 0
+        async with engine.begin() as conn:
+            for name, addr, lat, lon in data:
+                await conn.execute(
+                    text("""
+                        INSERT INTO rest_stops
+                            (name, type, latitude, longitude, is_active, note, created_at)
+                        VALUES (:name, 'highway_rest', :lat, :lon, true, :note, NOW())
+                        ON CONFLICT DO NOTHING
+                    """),
+                    {"name": name, "lat": lat, "lon": lon, "note": addr},
+                )
+                inserted += 1
+        print(f"[REST_STOP] 고속도로 휴게소 삽입 완료: {inserted}건 (JSON 캐시)")
         return
 
+    # ── 2) JSON 없으면 엑셀 + 카카오 API ──
+    if not xls_path.exists():
+        print(f"[SKIP] 휴게소 엑셀 없음: {xls_path}")
+        return
+
+    import asyncio, aiohttp, xlrd, os
+
+    KAKAO_KEY = os.getenv("KAKAO_REST_API_KEY", "")
+    if not KAKAO_KEY:
+        print("[SKIP] KAKAO_REST_API_KEY 없음 — 휴게소 좌표 변환 불가")
+        return
+
+    headers = {"Authorization": f"KakaoAK {KAKAO_KEY}"}
+
+    async def _geocode(session, address):
+        url = "https://dapi.kakao.com/v2/local/search/address.json"
+        try:
+            async with session.get(url, params={"query": address}, headers=headers) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                docs = data.get("documents", [])
+                if docs:
+                    return float(docs[0]["y"]), float(docs[0]["x"])
+                # 키워드 폴백
+                url2 = "https://dapi.kakao.com/v2/local/search/keyword.json"
+                async with session.get(url2, params={"query": address}, headers=headers) as resp2:
+                    if resp2.status != 200:
+                        return None
+                    data2 = await resp2.json()
+                    docs2 = data2.get("documents", [])
+                    if docs2:
+                        return float(docs2[0]["y"]), float(docs2[0]["x"])
+        except Exception:
+            pass
+        return None
+
+    wb = xlrd.open_workbook(str(xls_path))
+    ws = wb.sheet_by_index(0)
+    hdr = ws.row_values(0)
+    addr_idx = hdr.index("주소")
+    name_idx = hdr.index("휴게소명")
+    status_idx = hdr.index("구분")
+
+    rests = []
+    for r in range(1, ws.nrows):
+        row = ws.row_values(r)
+        if row[status_idx] == "운영중" and row[addr_idx]:
+            rests.append((row[name_idx], row[addr_idx]))
+
+    results = []
     inserted = 0
-    skipped = 0
-
-    with open(csv_path, encoding="euc-kr", newline="") as f:
-        reader = csv.DictReader(f)
-        async with engine.begin() as conn:
-            for row in reader:
-                try:
-                    lat = float(row.get("위도") or 0)
-                    lon = float(row.get("경도") or 0)
-                    name = row.get("졸음쉼터명") or "졸음쉼터"
-                    direction = row.get("도로노선방향") or None
-                    if direction:
-                        direction = direction[:10]
-
-                    if lat == 0 or lon == 0:
-                        skipped += 1
-                        continue
-
+    failed = 0
+    async with aiohttp.ClientSession() as session:
+        for name, addr in rests:
+            coords = await _geocode(session, addr)
+            if coords:
+                results.append([name, addr, coords[0], coords[1]])
+                async with engine.begin() as conn:
                     await conn.execute(
                         text("""
                             INSERT INTO rest_stops
-                                (name, type, latitude, longitude, direction, is_active, note, created_at)
-                            VALUES (:name, 'drowsy_shelter', :lat, :lon, :direction, true, :note, NOW())
+                                (name, type, latitude, longitude, is_active, note, created_at)
+                            VALUES (:name, 'highway_rest', :lat, :lon, true, :note, NOW())
                             ON CONFLICT DO NOTHING
                         """),
-                        {
-                            "name": name,
-                            "lat": lat,
-                            "lon": lon,
-                            "direction": direction,
-                            "note": row.get("소재지지번주소") or None,
-                        },
+                        {"name": name, "lat": coords[0], "lon": coords[1], "note": addr},
                     )
-                    inserted += 1
-                except (ValueError, KeyError):
-                    skipped += 1
-                    continue
+                inserted += 1
+            else:
+                failed += 1
+            await asyncio.sleep(0.05)
 
-    print(f"[REST_STOP] 졸음쉼터 삽입 완료: {inserted}건 / 스킵: {skipped}건")
+    # 캐시 저장
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+    print(f"[REST_STOP] 고속도로 휴게소 삽입 완료: {inserted}건 / 실패: {failed}건 (API → JSON 캐시 생성)")
 
 
 async def _create_user(db, data, org_id):

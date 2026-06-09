@@ -137,13 +137,21 @@ async function submitExcelBatch() {
   }
 }
 
-function downloadTemplate() {
-  const { headers, rows, filename } = generateIntakeTemplate()
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-  ws['!cols'] = headers.map(h => ({ wch: Math.max(14, h.length + 6) }))
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '오더접수양식')
-  XLSX.writeFile(wb, filename)
+async function downloadTemplate() {
+  const res = await fetch('/api/templates/orders')
+  if (!res.ok) {
+    alert('양식 다운로드에 실패했습니다.')
+    return
+  }
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'demo_orders.xlsx'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(url)
 }
 
 onMounted(load)

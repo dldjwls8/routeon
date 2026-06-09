@@ -1507,42 +1507,18 @@
     URL.revokeObjectURL(url);
   }
 
-  function downloadIntakeExcelTemplate() {
-    const headers = [
-      '화주명',
-      '상차지1', '상차화물1', '상차규격1',
-      '상차지2', '상차화물2', '상차규격2',
-      '상차지3', '상차화물3', '상차규격3',
-      '하차지1', '하차화물1', '하차규격1',
-      '하차지2', '하차화물2', '하차규격2',
-      '하차지3', '하차화물3', '하차규격3',
-      '연락처', '혼재여부',
-    ];
-    const rows = [
-      [
-        '예시화주',
-        '부산광역시 해운대구 센텀중앙로 90', '식품', '5톤',
-        '', '', '',
-        '', '', '',
-        '부산광역시 사하구 감천로 203', '식품', '2톤',
-        '', '', '', '',
-        '', '', '', '',
-        '010-1234-5678', 'N',
-      ],
-    ];
-
-    if (window.XLSX) {
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      ws['!cols'] = headers.map(h => ({ wch: Math.max(14, h.length + 6) }));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '오더접수양식');
-      XLSX.writeFile(wb, `routeon_order_intake_template_${todayStr()}.xlsx`);
-      return;
-    }
-
-    const esc = v => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = '\uFEFF' + [headers, ...rows].map(row => row.map(esc).join(',')).join('\n');
-    downloadBlob(`routeon_order_intake_template_${todayStr()}.csv`, 'text/csv;charset=utf-8', csv);
+  async function downloadIntakeExcelTemplate() {
+    const res = await fetch('/api/templates/orders');
+    if (!res.ok) { toast('양식 다운로드에 실패했습니다', 'error'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'demo_orders.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   function downloadTripStatsExcel() {
