@@ -6,6 +6,18 @@
 
 ---
 
+## v1.0.128 (2026-06-08)
+### 휴게소 미휴식 자동 감시 및 안전 이슈 기록
+- **`POST /location-logs`에 휴게소 체류 감시 로직 추가** (`services/location_service.py`):
+  - 기사 위치 수신 시 현재 진행 중 Trip의 `optimized_route` 내 휴게소(`type == "rest_stop"`)들을 지오펜싱으로 감시
+  - 휴게소 반경 **200m** 진입 시 Redis `rest_enter:{trip_id}:{idx}`에 진입 시각 기록, 이탈 시 체류 시간 계산
+  - **15분(900초) 미만 체류** 시 `Trip.safety_issue = True` 플래그 설정 및 `order_events` 테이블에 `event_type="safety_rest_violation"` 자동 기록
+  - 이벤트 상세(`details`)에 휴게소 이름·좌표, 실제 체류 초, 임계값(900초), 반경(200m) 포함
+  - 동일 휴게소 중복 기록 방지를 위해 Redis `rest_checked` 플래그 사용 (12시간 TTL)
+- **설정 상수 추가** (`core/config.py`): `REST_STOP_RADIUS_M = 200`, `REST_STOP_MIN_DWELL_SEC = 900`
+
+---
+
 ## v1.0.127 (2026-06-08)
 ### 배차 미배정 버그 수정 + 데모 회원가입 임시 변경 + CSS 버그 수정
 - **수동 배차 시 배송이 Trip에 연결되지 않아 미배정으로 표시되는 버그 수정**:

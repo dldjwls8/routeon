@@ -3,7 +3,7 @@
 > DB: PostgreSQL 16 + TimescaleDB  
 > ORM: SQLAlchemy 2.x (비동기, AsyncSession)  
 > 좌표 필드명: `lat`(위도), `lon`(경도) — `lng` 사용 금지  
-> 최종 검토: 2026-06-08 (v1.0.127 기준, `deliveries` 테이블에 `assigned_at`, `started_at`, `cancelled_at`, `pickup_time`, `unloading_time` 5컬럼 추가 및 `DeliveryStatus` enum에 `accepted` 값 추가. v1.0.126은 Vue·레거시 dashboard.js 아키텍처를 복원하고 v1.0.124-125 누락 기능을 dashboard.js에 포팅함. v1.0.127은 수동 배차 시 기사 미배정/수락대기 상태의 배송이 Trip에 연결되지 않는 버그를 수정함)
+> 최종 검토: 2026-06-08 (v1.0.128 기준, `deliveries` 테이블에 `assigned_at`, `started_at`, `cancelled_at`, `pickup_time`, `unloading_time` 5컬럼 추가 및 `DeliveryStatus` enum에 `accepted` 값 추가. v1.0.126은 Vue·레거시 dashboard.js 아키텍처를 복원하고 v1.0.124-125 누락 기능을 dashboard.js에 포팅함. v1.0.127은 수동 배차 시 기사 미배정/수락대기 상태의 배송이 Trip에 연결되지 않는 버그를 수정함. v1.0.128은 기사 위치 수신 시 휴게소 반경 200m 진입/이탈 감지로 15분 미휴식 시 안전 이슈 자동 기록)
 
 ---
 
