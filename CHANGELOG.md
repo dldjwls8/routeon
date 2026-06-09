@@ -6,6 +6,23 @@
 
 ---
 
+## v1.0.127 (2026-06-08)
+### 배차 미배정 버그 수정 + 데모 회원가입 임시 변경 + CSS 버그 수정
+- **수동 배차 시 배송이 Trip에 연결되지 않아 미배정으로 표시되는 버그 수정**:
+  - `services/trip_service.py` `create_trip_record()`의 좌표 매칭에서 `Delivery.assigned_to == driver_uuid`만 매칭하던 조건을, 기사 미배정(`assigned_to IS NULL`) 상태도 포함하도록 `or_(...)`로 변경
+  - `Delivery.status` 필터에 `accepted`(수락대기)를 추가하여, 수락대기 상태의 배송도 Trip 생성 시 매칭되도록 확장
+  - 원인: 배차(Trip)는 생성되었으나 `delivery_ids`가 비어 `Delivery.trip_id`가 `NULL`로 남아, 통계와 일정통계에서 "미배정"으로 잘못 집계됨
+- **데모용 기업 등록 파일 제출 임시 선택 변경**:
+  - `backend/routers/organizations.py` 기업 등록 API의 `doc_file: UploadFile = File(...)` → `File(None)`으로 선택 입력으로 변경. 파일 미제공 시 `doc_filename`/`doc_path` 미설정
+  - 프론트엔드 3곳(`RegisterView.vue`, `frontend/register.html`, `frontend-vue/public/register.html`)에서 `<input type="file" required>` 제거, JS `.required = false`, 클라이언트 검증 제거, `formData.append('doc_file', ...)`을 조건부로 변경
+  - 데모 종료 후 커밋 `3a42af9` revert로 원상복구 가능
+- **대량배차·배차관리 목록 스크롤 영역 CSS 버그 수정**:
+  - `dashboard.js` 대량배차 기사·오더 목록에 `flex container` 명시적으로 지정
+  - 배차관리 기사·오더 목록 스크롤 영역 CSS `flex chain` 완성
+- **캐시 버스팅 v3 → v4**: `frontend-vue/index.html`에서 `dashboard.js`/`api-client.js` 로드 URL 쿼리 파라미터를 `v=4`로 갱신
+
+---
+
 ## v1.0.126 (2026-06-08)
 ### Vue·레거시 아키텍처 복원 및 v1.0.124-125 누락 기능 포팅
 - **배경**: v1.0.124-125에서 Vue 컴포넌트(`OrderListView.vue`, `DispatchManageView.vue`, `DashboardView.vue` 등)에만 구현된 기능(수락대기 상태, 시간 추적, 상태 변경 드롭다운, 배차관리 기사·차량 선택 UI, 중복 연결 필터링 등)이 실제 운영 화면에 반영되지 않았음. 원인은 Vue 마운트 DOM과 레거시 `dashboard.js`가 동시에 `mainContent`를 조작하여 충돌이 발생하고, Vue `<slot>`이 `dashboard.js`에 의해 가려져 실제로 표시되지 않았기 때문. 이에 Vue는 레이아웃 쉘(topbar·nav·footer)과 라우팅만 담당하고, 모든 페이지 DOM 렌더링은 레거시 `dashboard.js`가 통제하는 아키텍처로 복원
