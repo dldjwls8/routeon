@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -214,9 +214,9 @@ async def create_trip_record(
         matched_delivery = (await db.execute(
             select(Delivery).where(
                 Delivery.organization_id == current_user.organization_id,
-                Delivery.assigned_to == driver_uuid,
+                or_(Delivery.assigned_to == driver_uuid, Delivery.assigned_to == None),
                 Delivery.trip_id == None,
-                Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+                Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.accepted, DeliveryStatus.in_progress]),
                 Delivery.lat.between(float(waypoint["lat"]) - 0.0001, float(waypoint["lat"]) + 0.0001),
                 Delivery.lon.between(float(waypoint["lon"]) - 0.0001, float(waypoint["lon"]) + 0.0001),
             ).order_by(Delivery.created_at.desc()).limit(1)
