@@ -533,7 +533,7 @@ async def accept_delivery(
 ):
     """
     기사: 배정된 배송을 수락합니다.
-    status → in_progress
+    status → dispatched
     """
     import uuid as uuid_lib
     _r = await db.execute(select(Delivery).where(Delivery.id == uuid_lib.UUID(delivery_id)))
@@ -553,7 +553,7 @@ async def accept_delivery(
         actor=current_user,
         event_type="order.accepted",
         summary="기사 수락",
-        details={"started_at": delivery.started_at.isoformat()},
+        details={"started_at": delivery.started_at.isoformat() if delivery.started_at else None},
     )
     await db.commit()
     return {"id": delivery_id, "status": delivery.status}

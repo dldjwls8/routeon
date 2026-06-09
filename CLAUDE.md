@@ -426,6 +426,17 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `completed` | 운행 완료 | PATCH /trips/{id}/status?status=completed |
 | `cancelled` | 취소 | PATCH /trips/{id}/status?status=cancelled |
 
+### DeliveryStatus 값
+| 값 | 의미 | 변경 시점 |
+|----|------|----------|
+| `pending` | 접수 | 오더 등록 시 기본값 |
+| `accepted` | 수락대기 | 기사 배정 후 (`PATCH /deliveries/{id}/assign` 또는 auto-dispatch) |
+| `dispatched` | 배차 | 기사가 수락한 상태 (`PATCH /deliveries/{id}/accept`) |
+| `in_progress` | 운행중 | 기사가 경로 최적화 실행 (`POST /optimize`) |
+| `done` | 완료 | 자동 도착 완료 |
+| `done_manual` | 완료(수동) | 기사/관리자 수동 완료 |
+| `cancelled` | 취소 | 배송 취소 |
+
 ### Trip current_phase 값
 `Trip.status`는 앱 호환을 위해 4단계로 유지하고, 상차/하차 상세 진행은 `trips.current_phase`로 기록한다.
 
@@ -544,7 +555,7 @@ drawAllRunningPolylines(): loadDrivers() 호출마다 실행
 | `POST /deliveries` | 관리자 | 같은 조직 배송지 단건 등록 (`organization_id` 자동 지정) |
 | `POST /deliveries/batch` | 관리자 | 같은 조직 배송지 일괄 등록 |
 | `PATCH /deliveries/{id}/assign` | 관리자 | 같은 조직 기사 배정. 배정 후 `status → accepted`, `assigned_at` 기록 |
-| `PATCH /deliveries/{id}/accept` | 기사 | 본인 배정 배송 수락. `status → in_progress`, `started_at` 기록 |
+| `PATCH /deliveries/{id}/accept` | 기사 | 본인 배정 배송 수락. `status → dispatched` |
 | `PATCH /deliveries/{id}` | 관리자 | 배송지 수정·상태 변경. 상태 역행(`in_progress → pending`)은 거부하고, 마지막 진행 배송 취소 시 연결 Trip도 cancelled 처리 |
 | `DELETE /deliveries/{id}` | 관리자 | 같은 조직 배송 취소 |
 | `GET /deliveries` | 로그인 | 관리자: 같은 조직 배송 목록(최신순) / 기사: 본인 배정 배송 목록. 응답에 표시용 `order_no` 포함 |
@@ -680,7 +691,7 @@ dashboard.html 오더·배차 UI:
 - 접수창 화주 선택은 고객 마스터가 비어 있어도 `등록된 화주 없음` placeholder를 표시하며, 임시 화주 추가는 select의 `+ 임시 화주 추가` 옵션 하나로만 제공한다(별도 버튼 없음). 임시 화주 생성 모달의 연락처 입력은 `bindPhoneAutoFormat`으로 입력 중 자동으로 `010-0000-0000` 형식의 `-`를 채워 넣는다.
 - `오더관리 > 오더목록`은 오더번호·화주·상하차지·화물 통합 검색을 제공한다. 행 클릭을 상세 조회, 행 체크박스와 헤더 전체 체크박스를 다중 선택으로 사용하며 별도 `현재 페이지 선택/해제`, `선택 해제` 버튼은 두지 않는다. 선택한 `접수` 상태 오더만 `오더관리 > 배차관리`로 전달한다.
 - 오더목록에는 `+ 접수 창` 버튼을 두지 않는다. 접수는 상단 하위 메뉴의 `오더접수`로 이동한다.
-- 오더목록 행에는 별도 수정 버튼을 두지 않는다. 행을 선택한 뒤 우측 상세 하단 `수정` 버튼으로 인라인 편집을 시작한다. 수정 모드에서 상태는 `<select>` 드롭다운으로 변경할 수 있으며, 허용 전이는 `statusOptions(status)`로 관리한다 — `pending` → `pending/accepted/in_progress/cancelled`, `accepted` → `accepted/in_progress/cancelled`, `in_progress` → `in_progress/done/done_manual/cancelled`. `done`/`done_manual`/`cancelled`는 수정 불가. 저장 시 `status`가 변경된 경우에만 서버에 전송한다.
+- 오더목록 행에는 별도 수정 버튼을 두지 않는다. 행을 선택한 뒤 우측 상세 하단 `수정` 버튼으로 인라인 편집을 시작한다. 수정 모드에서 상태는 `<select>` 드롭다운으로 변경할 수 있으며, 허용 전이는 `statusOptions(status)`로 관리한다 — `pending` → `pending/accepted/dispatched/in_progress/cancelled`, `accepted` → `accepted/dispatched/in_progress/cancelled`, `dispatched` → `dispatched/in_progress/cancelled`, `in_progress` → `in_progress/done/done_manual/cancelled`. `done`/`done_manual`/`cancelled`는 수정 불가. 저장 시 `status`가 변경된 경우에만 서버에 전송한다.
 - 오더 목록 컬럼 순서는 `상태`, `혼적`, `상차지/하차지`, `화물`, `화주`, `기사`, `오더번호` 순서를 기본으로 한다. 목록의 `접수 시간` 열은 제거되고, 상세 패널에 `배차 시간`, `운행 시작`, `운행 완료`, `총 운행 시간`, `취소 기간`, `상차 시간`, `하차 시간`이 추가된다. 목록과 상세는 `RO-YYMMDD-XXXXXX` 표시 형식만 사용하고 긴 원본 UUID는 노출하지 않는다.
 - 오더 상세의 `상·하차` 탭은 `cargo_id` 원본 필드명 대신 `화물 ID`를 사용하고 `RO-...-화물N` 형식으로 표시한다. `지도` 탭은 등록된 모든 상차·하차 좌표를 상차/하차 색상이 다른 핀(`order-stop-pin`, 라벨+드롭핀 모양)으로 표시하며, 탭 전환 직후 컨테이너 크기가 확정되기 전 흰 화면이 보이지 않도록 지도 생성 후 `relayout()`으로 강제 재렌더링한다.
 - 오더 상세 지도(`.order-detail-map`)와 고객·기사·차량 상세의 위치 지도(`.entity-detail-map`)는 같은 반응형 높이 규칙(`height: min(58vh, 520px); min-height: 360px`)을 공유한다 — 고정 픽셀(예: 260~330px)로 두면 상세 컨테이너에 비해 상하 길이가 짧아 보이는 문제가 있어 뷰포트 비율 기반으로 통일했다.

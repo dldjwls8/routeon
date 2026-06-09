@@ -539,7 +539,7 @@ async def reassign_trip_record(
                     .values(
                         trip_id=new_trip.id,
                         assigned_to=new_driver_uuid,
-                        status=DeliveryStatus.dispatched,
+                        status=DeliveryStatus.accepted,
                     )
                 )
                 for delivery_id in delivery_ids:

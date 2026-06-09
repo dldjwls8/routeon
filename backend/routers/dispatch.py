@@ -304,7 +304,7 @@ async def auto_dispatch_trips(
                 .values(
                     trip_id=t.id,
                     assigned_to=driver.id,
-                    status=DeliveryStatus.dispatched,
+                    status=DeliveryStatus.accepted,
                 )
             )
 
