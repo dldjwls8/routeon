@@ -40,6 +40,7 @@ class OrgStatus(str, enum.Enum):
 class DeliveryStatus(str, enum.Enum):
     pending     = "pending"
     accepted    = "accepted"
+    dispatched  = "dispatched"
     in_progress = "in_progress"
     done        = "done"
     done_manual = "done_manual"

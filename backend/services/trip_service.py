@@ -100,7 +100,7 @@ async def cancel_trip_and_deliveries(
     affected_deliveries = (await db.execute(
         select(Delivery).where(
             Delivery.trip_id == t.id,
-            Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+            Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.accepted, DeliveryStatus.dispatched, DeliveryStatus.in_progress]),
         )
     )).scalars().all()
 
@@ -108,7 +108,7 @@ async def cancel_trip_and_deliveries(
         update(Delivery)
         .where(
             Delivery.trip_id == t.id,
-            Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.in_progress]),
+            Delivery.status.in_([DeliveryStatus.pending, DeliveryStatus.accepted, DeliveryStatus.dispatched, DeliveryStatus.in_progress]),
         )
         .values(status=DeliveryStatus.cancelled)
     )
@@ -243,6 +243,8 @@ async def create_trip_record(
     await db.flush()
 
     if delivery_ids:
+        # 배차 시 기사가 수락(accept)할 수 있도록 pending → accepted로 변경.
+        # 이미 accepted 상태면 그대로 유지. 기사가 accept하면 in_progress로 전환.
         await db.execute(
             update(Delivery)
             .where(
@@ -252,8 +254,17 @@ async def create_trip_record(
             .values(
                 trip_id=trip.id,
                 assigned_to=driver_uuid,
-                status=DeliveryStatus.in_progress,
             )
+        )
+        # 좌표 매칭 등으로 pending 상태였던 배송은 accepted로 승격
+        await db.execute(
+            update(Delivery)
+            .where(
+                Delivery.id.in_(delivery_ids),
+                Delivery.status == DeliveryStatus.pending,
+                Delivery.organization_id == current_user.organization_id,
+            )
+            .values(status=DeliveryStatus.accepted)
         )
         for delivery_id in delivery_ids:
             record_order_event(
@@ -301,7 +312,7 @@ async def change_trip_status(
         deliveries = (await db.execute(
             select(Delivery).where(
                 Delivery.trip_id == trip.id,
-                Delivery.status == DeliveryStatus.in_progress,
+                Delivery.status.in_([DeliveryStatus.dispatched, DeliveryStatus.in_progress]),
             )
         )).scalars().all()
         for delivery in deliveries:
@@ -528,7 +539,7 @@ async def reassign_trip_record(
                     .values(
                         trip_id=new_trip.id,
                         assigned_to=new_driver_uuid,
-                        status=DeliveryStatus.in_progress,
+                        status=DeliveryStatus.dispatched,
                     )
                 )
                 for delivery_id in delivery_ids:

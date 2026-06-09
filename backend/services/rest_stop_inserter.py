@@ -139,7 +139,7 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _haversine_sec(
     lat1: float, lon1: float,
     lat2: float, lon2: float,
-    avg_speed_kmh: float = 80.0,
+    avg_speed_kmh: float = 70.0,
 ) -> int:
     """Haversine 거리를 속도 기반 시간(초)으로 환산. 후보 필터용 거칠 추정."""
     return int(_haversine_m(lat1, lon1, lat2, lon2) / 1000 / avg_speed_kmh * 3600)

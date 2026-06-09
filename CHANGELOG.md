@@ -6,6 +6,34 @@
 
 ---
 
+## v1.0.129 (2026-06-08)
+### DeliveryStatus 5단계 상태 흐름 구현 (`dispatched` 추가)
+- **`DeliveryStatus` enum에 `dispatched` 추가** (`models.py`):
+  - 기존 4단계(`pending`→`accepted`→`in_progress`→`done`)를 5단계(`pending`→`accepted`→`dispatched`→`in_progress`→`done`)로 확장
+  - `접수`→`수락대기`→`배차`→`운행중`→`완료` 흐름 명확화
+- **기사 수락 API** (`routers/deliveries.py` `PATCH /deliveries/{id}/accept`):
+  - `accepted`→`in_progress` 직접 점프를 `accepted`→`dispatched`로 변경
+  - 기사가 수락하면 `배차` 상태, 이후 `optimize` 호출 시 `운행중`으로 승격
+- **기사 배송 목록** (`GET /deliveries`):
+  - 기사 필터에 `dispatched` 추가 — `accepted`, `dispatched`, `in_progress` 모두 반환
+- **경로 최적화** (`routers/optimize.py` `POST /optimize`):
+  - waypoint 매칭된 Delivery가 `dispatched`일 때만 `in_progress`로 승격
+  - `accepted` 상태(수락 전)는 optimize로 변경되지 않음
+- **자동 배차** (`routers/dispatch.py`):
+  - 생성된 Delivery 상태를 `in_progress`에서 `dispatched`로 변경
+  - 기사가 수락한 것으로 간주하고 최적화 대기 상태로 설정
+- **운행 취소/완료/재배차** (`services/trip_service.py`):
+  - 취소: `pending`, `accepted`, `dispatched`, `in_progress` 모두 취소 처리
+  - 완료: `dispatched`도 포함하여 `done_manual`로 일괄 완료
+  - 재배차(transfer_remaining): 새 Trip의 Delivery를 `dispatched`로 설정
+- **관리자 상태 수정** (`routers/deliveries.py` `PATCH /deliveries/{id}`):
+  - 상태 전이 규칙에 `dispatched` 추가: `pending`→`accepted`→`dispatched`→`in_progress`→`done`
+- **프론트엔드** (`dashboard.js`, `constants.js`, `OrderListView.vue`):
+  - `deliveryStatusMap`, `labelMap`, `revMap`, `statusOptions` 등에 `dispatched: '배차'` 추가
+  - 상태 뱃지, 필터, 드롭다운, 편집 가능 상태 모두 `배차` 포함
+
+---
+
 ## v1.0.128 (2026-06-08)
 ### 휴게소 미휴식 자동 감시 및 안전 이슈 기록
 - **`POST /location-logs`에 휴게소 체류 감시 로직 추가** (`services/location_service.py`):

@@ -26,6 +26,7 @@ export const PAGE_SIZE = 20;
 export const ORDER_STATUS_MAP = {
   pending: '접수',
   accepted: '수락대기',
+  dispatched: '배차',
   in_progress: '운행중',
   done: '완료',
   cancelled: '취소',

@@ -75,7 +75,7 @@ function isMixedLoad(o) {
 }
 
 function orderIsEditable(o) {
-  return ['pending','accepted','in_progress'].includes(o.status)
+  return ['pending','accepted','dispatched','in_progress'].includes(o.status)
 }
 
 function orderCanDelete(o) {
@@ -107,11 +107,18 @@ function statusOptions(status) {
     pending: [
       { value: 'pending', label: '접수' },
       { value: 'accepted', label: '수락대기' },
+      { value: 'dispatched', label: '배차' },
       { value: 'in_progress', label: '운행중' },
       { value: 'cancelled', label: '취소' },
     ],
     accepted: [
       { value: 'accepted', label: '수락대기' },
+      { value: 'dispatched', label: '배차' },
+      { value: 'in_progress', label: '운행중' },
+      { value: 'cancelled', label: '취소' },
+    ],
+    dispatched: [
+      { value: 'dispatched', label: '배차' },
       { value: 'in_progress', label: '운행중' },
       { value: 'cancelled', label: '취소' },
     ],

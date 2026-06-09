@@ -268,7 +268,8 @@ async def optimize(req: OptimizeRequest, db: AsyncSession = Depends(get_db),
             )
             for d in _r2.scalars().all():
                 d.sequence = i
-                d.status   = DeliveryStatus.in_progress
+                if d.status == DeliveryStatus.dispatched:
+                    d.status = DeliveryStatus.in_progress
     await db.commit()
     if current_user.organization_id:
         await manager.broadcast_to_org(current_user.organization_id, {

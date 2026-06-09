@@ -284,9 +284,15 @@ async def update_delivery(
         except ValueError:
             raise HTTPException(400, f"올바르지 않은 상태: {req.status}")
         allowed_transitions = {
-            DeliveryStatus.pending: {DeliveryStatus.pending, DeliveryStatus.accepted, DeliveryStatus.in_progress, DeliveryStatus.cancelled},
+            DeliveryStatus.pending: {DeliveryStatus.pending, DeliveryStatus.accepted, DeliveryStatus.dispatched, DeliveryStatus.in_progress, DeliveryStatus.cancelled},
             DeliveryStatus.accepted: {
                 DeliveryStatus.accepted,
+                DeliveryStatus.dispatched,
+                DeliveryStatus.in_progress,
+                DeliveryStatus.cancelled,
+            },
+            DeliveryStatus.dispatched: {
+                DeliveryStatus.dispatched,
                 DeliveryStatus.in_progress,
                 DeliveryStatus.cancelled,
             },
@@ -395,8 +401,8 @@ async def delete_delivery(
     delivery = _r.scalar_one_or_none()
     if not delivery:
         raise HTTPException(404, "배송을 찾을 수 없습니다.")
-    if delivery.status == DeliveryStatus.done:
-        raise HTTPException(400, "완료된 배송은 삭제할 수 없습니다.")
+    if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual, DeliveryStatus.dispatched, DeliveryStatus.in_progress):
+        raise HTTPException(400, "완료·배차·운행중 상태의 배송은 삭제할 수 없습니다.")
     record_order_event(
         db,
         organization_id=current_user.organization_id,
@@ -425,7 +431,7 @@ async def get_deliveries(
     if current_user.role == UserRole.driver:
         stmt = stmt.where(
             Delivery.assigned_to == current_user.id,
-            Delivery.status == DeliveryStatus.in_progress,
+            Delivery.status.in_([DeliveryStatus.accepted, DeliveryStatus.dispatched, DeliveryStatus.in_progress]),
         )
     else:
         stmt = stmt.where(Delivery.organization_id == current_user.organization_id)
@@ -538,9 +544,7 @@ async def accept_delivery(
         raise HTTPException(403, "본인에게 배정된 배송만 수락할 수 있습니다.")
     if delivery.status != DeliveryStatus.accepted:
         raise HTTPException(400, "수락할 수 없는 상태입니다.")
-    delivery.status = DeliveryStatus.in_progress
-    if not delivery.started_at:
-        delivery.started_at = datetime.utcnow()
+    delivery.status = DeliveryStatus.dispatched
     record_order_event(
         db,
         organization_id=current_user.organization_id,
@@ -577,6 +581,8 @@ async def manual_complete(
         raise HTTPException(403, "본인에게 배정된 배송만 완료할 수 있습니다.")
     if delivery.status in (DeliveryStatus.done, DeliveryStatus.done_manual):
         raise HTTPException(400, "이미 완료된 배송입니다.")
+    if delivery.status == DeliveryStatus.dispatched:
+        raise HTTPException(400, "운행 시작 전 배송은 완료할 수 없습니다.")
 
     delivery.status       = DeliveryStatus.done_manual
     delivery.completed_at = datetime.utcnow()

@@ -6,8 +6,8 @@ RouteOn — 시연용 데모 데이터 시드 스크립트
 - 기업 대표(owner) 1명  (role=admin, is_org_owner=true)
 - 부관리자(sub-admin) 1명 (role=admin, is_org_owner=false)
 - 기사(Driver) 10명
-- 차량(Vehicle) 10대 (기사 1:1 매핑)
-- 고객(Customer) 10명
+- 차량(Vehicle) 11대 (기사 1:1 매핑 + 1대 예비)
+- 고객(Customer) 20명
 
 사용법:
     docker exec -it routeon-api python seeds/seed_demo.py
@@ -21,9 +21,10 @@ from datetime import datetime
 sys.path.insert(0, "/app")
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import delete
 
-from database import AsyncSessionLocal, engine, Base
+from core.managers import redis
+from database import AsyncSessionLocal
 from models import (
     Organization,
     OrgStatus,
@@ -38,18 +39,16 @@ from auth import hash_password
 # ────────────────────────────────────────────────
 # 설정
 # ────────────────────────────────────────────────
-DEMO_PASSWORD = hash_password("Pass1234!")
-
 ORG = {
     "name": "데모물류",
-    "org_code": "RT-UK61HX",
+    "org_code": "RT-DEMO01",
     "status": OrgStatus.approved,
     "auto_approve_drivers": True,
     "auto_approve_admins": True,
 }
 
 OWNER = {
-    "username": "demo_owner",
+    "username": "admin1",
     "name": "김대표",
     "email": "owner@demo.com",
     "phone": "010-1000-0001",
@@ -59,7 +58,7 @@ OWNER = {
 }
 
 SUB_ADMIN = {
-    "username": "demo_admin",
+    "username": "admin2",
     "name": "이부관리자",
     "email": "admin@demo.com",
     "phone": "010-1000-0002",
@@ -69,22 +68,22 @@ SUB_ADMIN = {
 }
 
 DRIVERS = [
-    {"username": f"demo_driver{i:02d}", "name": f"기사{i:02d}", "phone": f"010-2000-{i:04d}"}
+    {"username": f"driver{i}", "name": f"기사{i:02d}", "phone": f"010-2000-{i:04d}"}
     for i in range(1, 11)
 ]
 
 VEHICLES = [
-    {"plate_number": "123가4567", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210},
-    {"plate_number": "234나5678", "vehicle_type": "윙바디",   "height_m": 2.8, "weight_kg": 5000, "length_cm": 750, "width_cm": 230},
-    {"plate_number": "345다6789", "vehicle_type": "탑차",     "height_m": 2.2, "weight_kg": 2500, "length_cm": 550, "width_cm": 200},
-    {"plate_number": "456라7890", "vehicle_type": "냉동",     "height_m": 2.6, "weight_kg": 4000, "length_cm": 650, "width_cm": 215},
-    {"plate_number": "567마8901", "vehicle_type": "플랫폼",   "height_m": 1.8, "weight_kg": 1500, "length_cm": 450, "width_cm": 180},
-    {"plate_number": "678바9012", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210},
-    {"plate_number": "789사0123", "vehicle_type": "윙바디",   "height_m": 2.8, "weight_kg": 5000, "length_cm": 750, "width_cm": 230},
-    {"plate_number": "890아1234", "vehicle_type": "탑차",     "height_m": 2.2, "weight_kg": 2500, "length_cm": 550, "width_cm": 200},
-    {"plate_number": "901자2345", "vehicle_type": "냉동",     "height_m": 2.6, "weight_kg": 4000, "length_cm": 650, "width_cm": 215},
-    {"plate_number": "012차3456", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210},
-    {"plate_number": "345하6789", "vehicle_type": "리프트",   "height_m": 2.4, "weight_kg": 4000, "length_cm": 700, "width_cm": 220},
+    {"plate_number": "123가4567", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210, "last_lat": 37.5665, "last_lon": 126.9780},
+    {"plate_number": "234나5678", "vehicle_type": "윙바디",   "height_m": 2.8, "weight_kg": 5000, "length_cm": 750, "width_cm": 230, "last_lat": 37.2571, "last_lon": 127.0536},
+    {"plate_number": "345다6789", "vehicle_type": "탑차",     "height_m": 2.2, "weight_kg": 2500, "length_cm": 550, "width_cm": 200, "last_lat": 37.5585, "last_lon": 126.8291},
+    {"plate_number": "456라7890", "vehicle_type": "냉동",     "height_m": 2.6, "weight_kg": 4000, "length_cm": 650, "width_cm": 215, "last_lat": 37.2484, "last_lon": 127.4235},
+    {"plate_number": "567마8901", "vehicle_type": "플랫폼",   "height_m": 1.8, "weight_kg": 1500, "length_cm": 450, "width_cm": 180, "last_lat": 36.9100, "last_lon": 126.6430},
+    {"plate_number": "678바9012", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210, "last_lat": 36.0190, "last_lon": 129.3435},
+    {"plate_number": "789사0123", "vehicle_type": "윙바디",   "height_m": 2.8, "weight_kg": 5000, "length_cm": 750, "width_cm": 230, "last_lat": 36.1060, "last_lon": 127.4883},
+    {"plate_number": "890아1234", "vehicle_type": "탑차",     "height_m": 2.2, "weight_kg": 2500, "length_cm": 550, "width_cm": 200, "last_lat": 35.1608, "last_lon": 126.8820},
+    {"plate_number": "901자2345", "vehicle_type": "냉동",     "height_m": 2.6, "weight_kg": 4000, "length_cm": 650, "width_cm": 215, "last_lat": 37.3228, "last_lon": 127.0971},
+    {"plate_number": "012차3456", "vehicle_type": "카고",     "height_m": 2.5, "weight_kg": 3500, "length_cm": 620, "width_cm": 210, "last_lat": 37.3595, "last_lon": 127.1054},
+    {"plate_number": "345하6789", "vehicle_type": "리프트",   "height_m": 2.4, "weight_kg": 4000, "length_cm": 700, "width_cm": 220, "last_lat": 37.3943, "last_lon": 127.1101},
 ]
 
 CUSTOMERS = [
@@ -156,7 +155,7 @@ async def seed():
             )
             drivers.append(user)
 
-        # 5) Vehicles (기사 1:1)
+        # 5) Vehicles (기사 1:1 + 1대 예비)
         vehicles = []
         for idx, vdata in enumerate(VEHICLES):
             result = await db.execute(
@@ -183,12 +182,17 @@ async def seed():
                     db.add(driver)
                     await db.commit()
                     print(f"[LINK] 기사 {driver.name} → 차량 {vehicle.plate_number}")
+                # 기사 위치를 Redis에도 저장 (관제 실시간 조회용)
+                lat = vdata.get("last_lat")
+                lon = vdata.get("last_lon")
+                if lat is not None and lon is not None:
+                    redis.setex(f"location:{str(driver.id)}", 300, f"{lat},{lon}")
+                    print(f"[REDIS] 기사 {driver.name} 위치 ({lat}, {lon}) 저장")
             else:
                 print(f"[STANDBY] 차량 {vehicle.plate_number} (예비)")
             vehicles.append(vehicle)
 
-        # 6) Customers — 완전 교체: 기존 고객 전체 삭제 후 엑셀 기준 20개 신규 등록
-        from sqlalchemy import delete
+        # 6) Customers — 완전 교체: 기존 고객 전체 삭제 후 20개 신규 등록
         del_result = await db.execute(
             delete(Customer).where(Customer.organization_id == org_id)
         )
@@ -204,10 +208,10 @@ async def seed():
 
         print("\n✅ 시연용 데모 데이터 구성 완료")
         print(f"   기업: {org.name} ({org.org_code})")
-        print(f"   대표: {owner.username} / Pass1234!")
-        print(f"   부관리자: {sub_admin.username} / Pass1234!")
-        print(f"   기사: {len(drivers)}명 (demo_driver01~10)")
-        print(f"   차량: {len(vehicles)}대")
+        print(f"   대표: {owner.username} / 비밀번호: {owner.username}")
+        print(f"   부관리자: {sub_admin.username} / 비밀번호: {sub_admin.username}")
+        print(f"   기사: {len(drivers)}명 (driver1~10, 비밀번호=아이디와 동일)")
+        print(f"   차량: {len(vehicles)}대 (좌표 포함)")
         print(f"   고객: {len(CUSTOMERS)}명")
 
 
@@ -221,7 +225,7 @@ async def _get_or_create_user(db, data, org_id):
     user = User(
         id=uuid.uuid4(),
         organization_id=org_id,
-        password_hash=DEMO_PASSWORD,
+        password_hash=hash_password(data["username"]),
         **data,
     )
     db.add(user)

@@ -669,7 +669,7 @@
       const dvr = await apiFetch(`/deliveries`);
       if (dvr.ok) {
         const deliveries = await dvr.json();
-        const deliveryStatusMap = { pending: '접수', accepted: '수락대기', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
+        const deliveryStatusMap = { pending: '접수', accepted: '수락대기', dispatched: '배차', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
         DATA.orders = deliveries.map(d => ({
           id: d.id,
           tripId: d.trip_id || null,
@@ -982,7 +982,7 @@
   };
 
   function statusBadge(s) {
-    const labelMap = { accepted: '수락대기', pending: '접수', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
+    const labelMap = { accepted: '수락대기', pending: '접수', dispatched: '배차', in_progress: '운행중', done: '완료', done_manual: '완료', cancelled: '취소' };
     const label = labelMap[s] || s;
     const map = { '운행가능': 'badge-ok', '운행중': 'badge-run', '휴무': 'badge-muted', '접수': 'badge-muted', '배차': 'badge-info', '수락대기': 'badge-muted', '완료': 'badge-ok', '진행': 'badge-run', '취소': 'badge-muted', '가용': 'badge-ok', '정비': 'badge-muted', '운행중(차량)': 'badge-run' };
     return `<span class="badge ${map[label] || 'badge-muted'}">${label}</span>`;
@@ -2314,10 +2314,10 @@
 
   function statusOptions(status) {
     const map = {
-      '접수': ['접수', '수락대기', '운행중', '취소'],
-      '수락대기': ['수락대기', '운행중', '취소'],
-      '운행중': ['운행중', '완료', '취소'],
+      '접수': ['접수', '수락대기', '배차', '운행중', '취소'],
+      '수락대기': ['수락대기', '배차', '운행중', '취소'],
       '배차': ['배차', '운행중', '취소'],
+      '운행중': ['운행중', '완료', '취소'],
       '완료': ['완료'],
       '취소': ['취소'],
     };
@@ -2454,7 +2454,7 @@
       const [cargo, tons = ''] = cargoText.split(' · ');
       const statusEl = $('#orderDetailStatus', root);
       const newStatus = statusEl ? statusEl.value : null;
-      const revMap = { '접수': 'pending', '수락대기': 'accepted', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
+      const revMap = { '접수': 'pending', '수락대기': 'accepted', '배차': 'dispatched', '운행중': 'in_progress', '완료': 'done', '취소': 'cancelled' };
       const body = {
         pickup_address: pickup,
         address: delivery,
@@ -5975,7 +5975,9 @@
       `<option value="${c.name}" ${c.name === o.customer ? 'selected' : ''}>${c.name}</option>`
     ).join('');
     const editableStatusByCurrent = {
-      '접수': ['접수', '운행중', '취소'],
+      '접수': ['접수', '수락대기', '배차', '운행중', '취소'],
+      '수락대기': ['수락대기', '배차', '운행중', '취소'],
+      '배차': ['배차', '운행중', '취소'],
       '운행중': ['운행중', '완료', '취소'],
     };
     const statusChoices = editableStatusByCurrent[o.status] || [o.status];
